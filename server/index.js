@@ -69,8 +69,26 @@ app.use(cookieParser());
 app.use(express.static('public'));
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+// Database setup - apply full schema from schema.sql
+const schemaPath = path.join(__dirname, '..', 'schema.sql');
+if (fs.existsSync(schemaPath)) {
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+  // Split by semicolons and run each statement
+  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+  db.serialize(() => {
+    statements.forEach(stmt => {
+      db.run(stmt + ';', err => {
+        if (err && !err.message.includes('already exists')) {
+          console.error('Schema error:', err.message, '\nStatement:', stmt.substring(0, 80));
+        }
+      });
+    });
+  });
+}
+
 // Database setup
-db.serialize(() => {
+db.serialize(() =>{
+
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
