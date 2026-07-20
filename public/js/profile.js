@@ -95,7 +95,7 @@ function renderMyProfile(user) {
           <span class="lvl-badge">LVL ${user.level}</span>
           <div class="status-dot-indicator" style="background:${userStatusColor}; width:12px; height:12px; border-radius:50%; cursor:pointer;" onclick="openStatusSelector()"></div>
         </div>
-        <div onclick="openProfileSettings()" style="cursor:pointer; padding:4px;">
+        <div onclick="openProfileSettings()" style="cursor:pointer; padding:8px; color:#fff; display:flex; align-items:center; justify-content:center; z-index:10;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
         </div>
       </div>
@@ -749,11 +749,11 @@ function openProfileSettings() {
   const modal = document.getElementById('profileSettingsModal');
   if (!modal) return;
 
-  const user = currentUser;
+  const user = currentUser || {};
 
   const avatarContainer = document.getElementById('settingsAvatarContainer');
-  if (avatarContainer) {
-    avatarContainer.innerHTML = typeof renderAvatar === 'function' ? renderAvatar(user, 'avatar avatar-xl') : '';
+  if (avatarContainer && typeof renderAvatar === 'function') {
+    avatarContainer.innerHTML = renderAvatar(user, 'avatar avatar-xl');
   }
 
   const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
@@ -776,6 +776,10 @@ function openProfileSettings() {
   if (settingsOldPassword) settingsOldPassword.value = '';
   const settingsNewPassword = document.getElementById('settingsNewPassword');
   if (settingsNewPassword) settingsNewPassword.value = '';
+
+  if (typeof populateMicDeviceList === 'function') {
+    populateMicDeviceList();
+  }
 
   modal.style.display = 'flex';
 }

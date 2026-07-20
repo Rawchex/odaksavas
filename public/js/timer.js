@@ -1080,22 +1080,40 @@ function renderPartyDuel(members) {
     const pct = isActive ? Math.min(100, (elapsed / maxSecs) * 100) : 0;
 
     return `
-      <div class="party-focus-member ${isMe ? 'is-me' : ''}">
-        ${renderAvatar(m, 'avatar avatar-sm')}
-        <div class="party-focus-member-info">
-          <span class="party-focus-member-name" style="cursor:${isMe ? 'default':'pointer'}" ${isMe ? '' : `onclick="openUserPage('${esc(m.username)}')"`}>
-            ${esc(m.username)} ${isMe ? '<span style="font-size:8px; color:#000; background:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; font-weight:900; vertical-align:middle;">SEN</span>' : ''}
-          </span>
+      <div class="party-focus-member ${isMe ? 'is-me' : ''}" id="member-card-${m.username}">
+        <div style="position:relative; display:flex;">
+          ${renderAvatar(m, 'avatar avatar-sm')}
+        </div>
+        <div class="party-focus-member-info" style="flex:1;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <span class="party-focus-member-name" style="cursor:${isMe ? 'default':'pointer'}" ${isMe ? '' : `onclick="openUserPage('${esc(m.username)}')"`}>
+              ${esc(m.username)}
+            </span>
+            ${isMe ? '<span style="font-size:8px; color:#000; background:#fff; padding:2px 5px; border-radius:4px; font-weight:900; vertical-align:middle; line-height:1;">SEN</span>' : ''}
+            <!-- Voice status badge container -->
+            <div id="voice-badge-${m.username}" style="display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"></div>
+          </div>
           <div class="party-focus-member-bar-wrap">
             <div class="party-focus-member-bar ${isMe ? 'is-me' : (isActive ? 'live' : '')}" style="width:${pct}%"></div>
           </div>
         </div>
+        
+        <!-- Voice settings button for other users -->
+        ${isMe ? '' : `
+          <button class="member-voice-settings-btn" onclick="openUserVoiceModal('${esc(m.username)}')" title="Ses Ayarları" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:6px; display:flex; align-items:center; justify-content:center; transition:all 0.2s; margin-right:8px; border-radius:50%;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+        `}
         <span class="party-focus-member-time ${isMe ? 'is-me' : ''}">${isActive ? fmtTimeClock(elapsed) : '—'}</span>
       </div>
     `;
   }).join('');
 
   overlay.style.display = 'block';
+
+  if (typeof updateLobbyVoiceBadges === 'function') {
+    updateLobbyVoiceBadges();
+  }
 }
 
 // ============================================================
@@ -1158,6 +1176,9 @@ function setActiveParty(partyId) {
   
   // Start polling lobi
   startPartyPoll(partyId);
+  if (typeof initVoiceChat === 'function') {
+    initVoiceChat(partyId);
+  }
 }
 
 function clearActiveParty() {
@@ -1165,6 +1186,9 @@ function clearActiveParty() {
   _duelMode = false;
   clearInterval(_partyPollInterval);
   _partyPollInterval = null;
+  if (typeof stopVoiceChat === 'function') {
+    stopVoiceChat();
+  }
   const info = document.getElementById('activePartyInfo');
   const btn  = document.getElementById('timerPartyBtn');
   const chatBtn = document.getElementById('timerChatBtn');

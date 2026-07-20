@@ -37,6 +37,10 @@ app.set('trust proxy', 1); // Railway runs behind a proxy
 const DB_PATH = process.env.DB_PATH || 'odaksavas.db';
 const db = new sqlite3.Database(DB_PATH);
 
+global.partyVoiceStates = {};
+global.partySignals = {};
+
+
 // Multer security configuration
 const upload = multer({ 
   dest: 'public/uploads/',
@@ -1230,6 +1234,79 @@ app.post('/api/parties/:id/leave', auth, (req, res) => {
       });
     }
   });
+});
+
+
+// --- PARTY VOICE CHAT SIGNALING & STATE ENDPOINTS ---
+
+app.post('/api/parties/:id/voice-state', auth, (req, res) => {
+  const partyId = req.params.id;
+  const { micMuted, deafened, pingMs } = req.body;
+  const userId = req.user.id;
+  const username = req.user.username;
+
+  if (!global.partyVoiceStates[partyId]) {
+    global.partyVoiceStates[partyId] = {};
+  }
+
+  // Update current user state
+  global.partyVoiceStates[partyId][userId] = {
+    username,
+    micMuted: !!micMuted,
+    deafened: !!deafened,
+    pingMs: parseInt(pingMs) || 0,
+    lastSeen: Date.now()
+  };
+
+  // Cleanup users that haven't sent state in 15 seconds
+  const now = Date.now();
+  Object.keys(global.partyVoiceStates[partyId]).forEach(uid => {
+    if (now - global.partyVoiceStates[partyId][uid].lastSeen > 15000) {
+      delete global.partyVoiceStates[partyId][uid];
+    }
+  });
+
+  res.json({ members: global.partyVoiceStates[partyId] });
+});
+
+app.post('/api/parties/:id/voice-signal', auth, (req, res) => {
+  const partyId = req.params.id;
+  const { toUsername, signal } = req.body;
+  const fromUsername = req.user.username;
+
+  if (!global.partySignals[partyId]) {
+    global.partySignals[partyId] = [];
+  }
+
+  global.partySignals[partyId].push({
+    fromUsername,
+    toUsername,
+    signal,
+    timestamp: Date.now()
+  });
+
+  // Keep signal array clean - limit to last 200 items or delete signals older than 1 minute
+  const now = Date.now();
+  global.partySignals[partyId] = global.partySignals[partyId].filter(sig => now - sig.timestamp < 60000);
+
+  res.json({ success: true });
+});
+
+app.get('/api/parties/:id/voice-signals', auth, (req, res) => {
+  const partyId = req.params.id;
+  const username = req.user.username;
+
+  if (!global.partySignals[partyId]) {
+    return res.json([]);
+  }
+
+  // Find signals addressed to current user
+  const mySignals = global.partySignals[partyId].filter(sig => sig.toUsername === username);
+
+  // Remove my signals from the main queue
+  global.partySignals[partyId] = global.partySignals[partyId].filter(sig => sig.toUsername !== username);
+
+  res.json(mySignals);
 });
 
 // (duplicate route removed - session start with partyId is handled above)

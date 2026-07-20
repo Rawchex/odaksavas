@@ -389,9 +389,16 @@
 
       <!-- Party Focus Overlay (shown during active session with party) -->
       <div class="party-focus-overlay" id="partyFocusOverlay" style="display:none">
-        <div class="party-focus-header">
-          <span class="party-focus-label" id="partyFocusLabel">Odak Odası</span>
-          <span class="party-focus-timer-small" id="partyFocusTime">00:00</span>
+        <div class="party-focus-header" style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="party-focus-label" id="partyFocusLabel">Odak Odası</span>
+            <span class="party-focus-timer-small" id="partyFocusTime">00:00</span>
+          </div>
+          <!-- Voice control buttons inside lobby -->
+          <div class="voice-lobby-controls" style="display:flex; align-items:center; gap:8px;">
+            <button id="voiceMicToggleBtn" class="voice-ctrl-btn" onclick="setMicMuteState(!window._micMuted)" title="Mikrofonu Kapat/Aç"></button>
+            <button id="voiceDeafToggleBtn" class="voice-ctrl-btn" onclick="setDeafState(!window._deafened)" title="Kulaklığı Kapat/Aç"></button>
+          </div>
         </div>
         <div class="party-focus-members" id="partyFocusMembers"></div>
       </div>
@@ -900,6 +907,11 @@
         <textarea class="profile-edit-textarea" id="settingsCv" placeholder="Eğitim, kariyer veya diğer detaylar..." rows="4" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; resize:none; box-sizing:border-box;"></textarea>
       </div>
 
+      <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
+        <label class="profile-settings-label" style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Ses Giriş Aygıtı (Mikrofon)</label>
+        <select id="settingsMicDeviceSelect" onchange="handleMicDeviceChange(this.value)" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box; cursor:pointer; font-size:13px;"></select>
+      </div>
+
       <button class="mono-btn-primary" onclick="saveSettings()" id="settingsSaveBtn" style="margin:8px 0 0; padding:14px; font-size:13px; font-weight:700; border-radius:12px;">AYARLARI KAYDET</button>
     </div>
 
@@ -926,6 +938,31 @@
   </div>
 </div>
 
+<!-- ── USER VOICE SETTINGS MODAL ── -->
+<div class="modal-overlay" id="userVoiceSettingsModal" style="z-index:999999;">
+  <div class="modal-sheet" style="max-width:340px; text-align:center; padding:24px 20px; background:rgba(10, 10, 10, 0.95); border:1px solid rgba(255,255,255,0.06); border-radius:24px; backdrop-filter:blur(20px); box-shadow:0 24px 64px rgba(0,0,0,0.8); position:relative; box-sizing:border-box; width:calc(100% - 32px);">
+    <span class="modal-close" onclick="closeUserVoiceModal()" style="position:absolute; top:20px; right:20px; font-size:18px; color:var(--text-3); cursor:pointer;">✕</span>
+    
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; width:100%; text-align:left;">
+      <div id="uvAvatarContainer" style="display:flex;"></div>
+      <div id="uvLatency" style="font-size:11px; font-weight:900; color:#4ade80; background:rgba(74,222,128,0.1); padding:4px 8px; border-radius:8px; font-family:monospace; letter-spacing:0.5px;">MS: --</div>
+    </div>
+
+    <div style="text-align:left; margin-bottom:20px;">
+      <div id="uvUsername" style="font-size:18px; font-weight:900; color:#fff; margin-bottom:4px;">Kullanıcı</div>
+      <div style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; font-weight:700;">Ses Ayarları</div>
+    </div>
+
+    <div style="text-align:left; margin-bottom:24px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:16px; border-radius:16px; box-sizing:border-box;">
+      <label style="display:block; font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">Ses Düzeyi</label>
+      <input type="range" id="uvVolumeSlider" min="0" max="100" value="100" oninput="handleUvVolumeChange(this.value)" style="width:100%; accent-color:#fff; cursor:pointer; height:6px; border-radius:3px; background:rgba(255,255,255,0.1);">
+    </div>
+
+    <button class="mono-btn-primary" id="uvMuteToggleBtn" onclick="handleUvMuteToggle()" style="margin:0; padding:14px; font-size:13px; font-weight:700; width:100%; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur
+    </button>
+  </div>
+</div>
 
 <script src="/js/app.js?v=2.1.6"></script>
 <script src="/js/timer.js?v=2.1.6"></script>
@@ -933,5 +970,6 @@
 <script src="/js/profile.js?v=2.1.6"></script>
 <script src="/js/party.js?v=2.1.6"></script>
 <script src="/js/messages.js?v=2.1.6"></script>
+<script src="/js/voice.js?v=2.1.6"></script>
 </body>
 </html>

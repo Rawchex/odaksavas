@@ -5074,4 +5074,125 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
+/* Active Speaker Speaking Outline Indicator */
+.avatar.is-speaking {
+  box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255,255,255,0.6) !important;
+  border-color: #fff !important;
+  transition: box-shadow 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+/* Focus Summary Modal Centering & Transition Duxeltmesi */
+#focusSummaryModal {
+  z-index: 1000000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(0, 0, 0, 0.85) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#focusSummaryModal .modal-sheet {
+  transform: scale(0.9) translateY(20px);
+  opacity: 0;
+  border-radius: 24px !important;
+  margin: auto !important;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease !important;
+}
+#focusSummaryModal.open .modal-sheet {
+  transform: scale(1) translateY(0) !important;
+  opacity: 1 !important;
+}
+
+/* Voice Control Button Styling */
+.voice-ctrl-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+}
+.voice-ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+.voice-ctrl-btn:active {
+  transform: scale(0.95);
+}
+.voice-ctrl-btn.muted {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+.voice-ctrl-btn.muted:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.voice-ctrl-btn.deafened {
+  background: rgba(156, 163, 175, 0.15);
+  border-color: rgba(156, 163, 175, 0.3);
+  color: #9ca3af;
+}
+.voice-ctrl-btn.deafened:hover {
+  background: rgba(156, 163, 175, 0.25);
+  border-color: rgba(156, 163, 175, 0.4);
+}
+
+/* Voice Badge Indicator styles on Lobby Cards */
+.voice-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  padding: 3px;
+  box-sizing: border-box;
+}
+.voice-badge-icon.local-mute {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.voice-badge-icon.muted {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+.voice-badge-icon.deafened {
+  background: rgba(156, 163, 175, 0.1);
+  border: 1px solid rgba(156, 163, 175, 0.2);
+}
+
+/* User Voice Settings Modal Premium Centering */
+#userVoiceSettingsModal {
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+#userVoiceSettingsModal .modal-sheet {
+  transform: scale(0.9) translateY(20px);
+  opacity: 0;
+  border-radius: 24px !important;
+  margin: auto !important;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease !important;
+}
+#userVoiceSettingsModal.open .modal-sheet {
+  transform: scale(1) translateY(0) !important;
+  opacity: 1 !important;
+}
+
+/* Lobby Card Settings button hover */
+.member-voice-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+}
+
 
