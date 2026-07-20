@@ -71,6 +71,24 @@ app.use(cookieParser());
 app.use(express.static('public'));
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+app.get('/api/debug-files', (req, res) => {
+  const getFiles = (dir) => {
+    try {
+      return fs.readdirSync(path.join(__dirname, '..', dir)).map(f => {
+        const stat = fs.statSync(path.join(__dirname, '..', dir, f));
+        return { name: f, isDir: stat.isDirectory(), size: stat.size };
+      });
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  res.json({
+    public: getFiles('public'),
+    uploads: getFiles('public/uploads')
+  });
+});
+
+
 // Database setup - apply full schema from schema.sql
 const schemaPath = path.join(__dirname, '..', 'schema.sql');
 if (fs.existsSync(schemaPath)) {
