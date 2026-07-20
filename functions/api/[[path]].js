@@ -82,7 +82,7 @@ app.post('/login', async (c) => {
       .bind(username.toLowerCase().trim())
       .first();
 
-    if (!user) return c.json({ error: 'Kullanıcı bulunamadı', notFound: true }, 404);
+    if (!user) return c.json({ error: 'Kullanıcı bulunamadı', notFound: true }, 400);
 
     if (user.password_hash) {
       if (!password) return c.json({ error: 'Şifre gerekli', needPassword: true }, 401);

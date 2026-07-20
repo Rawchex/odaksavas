@@ -382,8 +382,8 @@ app.post('/api/login', authLimiter, (req, res) => {
   const { username, password } = req.body;
   if (!username) return res.status(400).json({ error: 'Kullanıcı adı gerekli' });
 
-  db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-    if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı', notFound: true });
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
+      if (!user) return res.status(400).json({ error: 'Kullanıcı bulunamadı', notFound: true });
 
     // Şifresi olan kullanıcı
     if (user.password_hash) {
