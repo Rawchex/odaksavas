@@ -1,0 +1,11 @@
+name = "odaksavas1-2"
+compatibility_date = "2024-03-01"
+pages_build_output_dir = "./public"
+
+[vars]
+JWT_SECRET = "odaksavasi_super_secret_jwt_key_2026"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "odaksavas_db"
+database_id = "723cdecb-1682-4156-9483-507f0be5720d"

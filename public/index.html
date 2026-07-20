@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="Odak Savaşı — Rekabetçi odak zamanlayıcı. Arkadaşlarınla çalış, öne geç.">
+  <title>Odak Savaşı</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- VIOLATION BANNER & CRACK                              -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="violation-banner" id="violationBanner">EKRANDAN UZAKLAŞTIN — ODAK BOZULDU</div>
+<div class="crack-overlay"    id="crackOverlay"></div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- SESSION LOADING OVERLAY                               -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="session-loading-overlay" id="sessionLoadingOverlay">
+  <div class="session-loading-spinner"></div>
+  <div class="session-loading-msg" id="sessionLoadingMsg">hazırlanıyor...</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- TOAST                                                 -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="toast" id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- IMAGE FULLSCREEN                                      -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="img-fullscreen-overlay" id="imgFullscreen" onclick="this.classList.remove('open')">
+  <img id="imgFullscreenImg" src="" alt="">
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- POST MODAL (new post)                                 -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="post-modal-overlay" id="postModalOverlay">
+  <div class="post-modal">
+    <div class="post-modal-header">
+      <div class="post-modal-author-wrap" id="postModalAuthor">
+        <!-- Rendered dynamically -->
+      </div>
+      <span class="post-modal-close" onclick="closePostModal()">✕</span>
+    </div>
+    
+    <div style="position:relative; width:100%;">
+      <textarea class="post-textarea" id="postTextarea" placeholder="Ne düşünüyorsun?" maxlength="280"></textarea>
+      <div class="post-char-counter" id="postCharCounter">280</div>
+    </div>
+    
+    <!-- 1x1 Crop Viewport Area -->
+    <div id="postCropContainer" style="display:none; flex-direction:column; align-items:center; width:100%; margin-top:12px;">
+      <div class="crop-viewport" id="postCropViewport">
+        <img id="postCropImg" class="crop-image" alt="Kırpılacak Görsel" draggable="false">
+        <div class="crop-grid-overlay"></div>
+        <button class="post-preview-remove-btn" onclick="clearPostImage()" aria-label="Fotoğrafı Kaldır">✕</button>
+      </div>
+      <div style="width:100%; display:flex; align-items:center; gap:8px; margin-top:8px; padding:0 12px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="color:var(--text-3)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="range" id="postCropZoom" min="1" max="3" step="0.01" value="1" style="flex:1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:#fff"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+    </div>
+
+    <!-- Live Post Preview Card -->
+    <div id="postLivePreviewContainer" style="width:100%; margin-top:16px; border-top:1px solid rgba(255,255,255,0.06); padding-top:16px;">
+      <div style="font-size:9px; font-weight:800; color:var(--text-3); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">Canlı Önizleme</div>
+      <div id="postLivePreviewCard" class="post-card" style="margin:0; border:1px solid rgba(255,255,255,0.06); border-radius:12px; background:#020202; pointer-events:none;">
+        <!-- Live feed card preview goes here -->
+      </div>
+    </div>
+
+    <div class="post-modal-actions" style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.06); padding-top:12px;">
+      <label class="post-image-label" for="postImageInput">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        FOTOĞRAF
+      </label>
+      <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="onPostImageSelected(this)">
+      <button class="post-submit-btn" onclick="submitPost()" id="postSubmitBtn" disabled>PAYLAŞ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PARTY MODAL                                           -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="partyModal">
+  <div class="modal-sheet" id="partyModalSheet" style="max-height:88dvh">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header">
+      <span style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase">Odak Odası</span>
+      <span class="modal-close" onclick="closePartyModal()">&#x2715;</span>
+    </div>
+    <div style="padding:0 20px 20px" id="partyModalContent"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PARTY CHAT MODAL (fullscreen)                         -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="partyChatModal">
+  <div class="party-chat-fullscreen">
+    <div class="party-chat-header">
+      <button class="up-back-btn" onclick="togglePartyChatModal(false)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span style="font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">Parti Sohbeti</span>
+      <div style="width:40px"></div>
+    </div>
+    <div style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+      <div id="partyChatMessages" style="flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px;"></div>
+      <div style="padding:12px 20px; background:#000; border-top:1px solid var(--border-soft);">
+        <div style="display:flex; border:1px solid var(--border-soft); border-radius:24px; background:#111; padding:4px 6px; align-items:center;">
+          <input type="text" id="partyChatInput" autocomplete="off" class="mono-input" style="flex:1; border:none; height:40px; padding:0 16px; font-size:13px; background:transparent; color:#fff;" placeholder="Partiye mesaj gönder..." onkeydown="if(event.key==='Enter')sendPartyChatMessage()">
+          <button class="mono-btn-primary" style="height:36px; padding:0 18px; margin:0; border-radius:18px; font-size:11px; width:auto" onclick="sendPartyChatMessage()">GÖNDER</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- FRIEND LIST MODAL                                     -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="friendListModal">
+  <div class="modal-sheet" style="max-height:80dvh">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header">
+      <span id="friendListTitle" style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase">Arkadaşlar</span>
+      <span class="modal-close" onclick="closeFriendListModal()">✕</span>
+    </div>
+    <div id="friendListContent" style="padding:0 0 20px"></div>
+  </div>
+</div>
+
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- CREATE GROUP MODAL                                    -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="createGroupModal" style="z-index:99999;">
+  <div class="modal-sheet share-sheet" style="max-height:85dvh;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
+      <span style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">Yeni Grup Kur</span>
+      <span class="modal-close" onclick="closeCreateGroupModal()">✕</span>
+    </div>
+    <div class="share-modal-body">
+      <!-- Group Name Input -->
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+        <input type="text" id="createGroupName" autocomplete="off" placeholder="Grup Adı Girin..." style="flex:1; background:#000; border:1px solid #222; color:#fff; padding:12px; border-radius:10px; font-size:12.5px; font-weight:700;">
+      </div>
+
+      <!-- Selected users pills summary -->
+      <div id="selectedGroupUsersPills" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:0"></div>
+
+      <!-- Search input -->
+      <div class="share-search-box" style="margin-top:12px;">
+        <input type="text" id="createGroupSearch" autocomplete="off" placeholder="Arkadaş veya kullanıcı ara..." oninput="handleGroupSearchInput(this.value)">
+        <svg class="share-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+      
+      <!-- Friends and Search Results container -->
+      <div id="createGroupFriendsList" class="share-grid">
+        <div id="createGroupFriendsItems" style="display:contents;"></div>
+        <div id="createGroupOtherResults" style="display:contents;"></div>
+      </div>
+      
+      <!-- Footer: Button -->
+      <div class="share-bottom-bar" style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06);">
+        <button id="createGroupSubmitBtn" class="share-send-btn" style="width:100%; border-radius:10px;" onclick="submitCreateGroup()">GRUBU KUR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PROFILE POST SLIDER (Instagram style feed)            -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="profilePostSliderOverlay" style="background:#000; z-index: 10001;">
+  <div class="slider-header" style="position:absolute; top:0; left:0; right:0; height:50px; display:flex; align-items:center; padding:0 20px; z-index:10; background:linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);">
+    <span class="modal-close" style="font-size:24px; color:#fff; cursor:pointer;" onclick="closeProfilePostSlider()">✕</span>
+    <span style="flex:1; text-align:center; font-size:14px; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Gönderiler</span>
+    <span style="width:24px"></span>
+  </div>
+  <div id="profilePostSliderContainer" style="width:100%; height:100%; overflow-y:auto; scroll-snap-type:y mandatory; background:#000;">
+    <!-- Posts will be rendered here dynamically -->
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- APP ROOT                                              -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- ────── LOGIN ────── -->
+  <div id="loginScreen" class="screen" style="display:none;align-items:center;justify-content:center;min-height:100dvh">
+    <div class="login-inner">
+      <div class="login-brand">
+        <div class="login-brand-title">ODAK SAVAŞI</div>
+        <div class="login-brand-sub">Odak. Rekabet. Zafer.</div>
+      </div>
+      <div class="login-form">
+        <input
+          type="text"
+          id="usernameInput"
+          class="input-field"
+          placeholder="Kullanıcı adın"
+          maxlength="20"
+          autocomplete="off"
+          autocapitalize="none"
+        >
+        <input
+          type="password"
+          id="passwordInput"
+          class="input-field"
+          placeholder="Şifren (en az 6 karakter)"
+          autocomplete="off"
+        >
+        <div style="display:flex;gap:8px;margin-top:6px;width:100%">
+          <button class="btn-primary" style="flex:1" onclick="login()" id="loginBtn">GİRİŞ YAP</button>
+          <button class="btn-secondary" style="flex:1" onclick="register()" id="registerBtn">KAYIT OL</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-3);text-align:center;line-height:1.6;letter-spacing:0.3px">
+        İlk kez giriyorsan kullanıcı adın ve şifrenle kayıt olmalısın.
+      </div>
+    </div>
+  </div>
+
+  <!-- ────── MAIN APP ────── -->
+  <div id="mainApp" style="display:none">
+
+    <!-- ── BOTTOM NAV ── -->
+    <nav class="bottom-nav">
+      <button class="nav-btn" id="nav-timer" onclick="showPage('timer')">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+        </div>
+        <span class="nav-label">Saat</span>
+      </button>
+      <button class="nav-btn" id="nav-feed" onclick="showPage('feed')">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </div>
+        <span class="nav-label">Feed</span>
+      </button>
+      <button class="nav-btn" id="nav-leaderboard" onclick="showPage('leaderboard')">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24"><polyline points="18 20 18 10"/><polyline points="12 20 12 4"/><polyline points="6 20 6 14"/></svg>
+        </div>
+        <span class="nav-label">Sıra</span>
+      </button>
+      <button class="nav-btn" id="nav-notifications" onclick="showPage('notifications')">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <span class="nav-label">Bildirim</span>
+        <div class="nav-notif-dot" id="notifDot"></div>
+      </button>
+      <button class="nav-btn" id="nav-messages" onclick="showPage('messages')">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <span class="nav-label">Mesaj</span>
+        <div class="nav-notif-dot" id="messageNotifDot"></div>
+      </button>
+      <button class="nav-btn" id="nav-profile" onclick="showPage('profile')">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <span class="nav-label">Profil</span>
+      </button>
+    </nav>
+
+    <!-- ── TIMER PAGE ── -->
+    <div class="page" id="timerPage">
+
+      <!-- Top: level + xp (compact) -->
+      <div class="timer-top-meta" id="timerTopMeta">
+        <div class="timer-level-chip">
+          <span id="statLevel">1</span>
+          <div class="timer-xp-rail">
+            <div class="timer-xp-fill" id="xpBarFill" style="width:0%"></div>
+          </div>
+          <span id="xpText" class="timer-xp-txt">0 XP</span>
+        </div>
+        <div class="timer-total-chip">
+          <span id="statTotal" class="timer-total-val">—</span>
+          <span class="timer-total-lbl">toplam odak</span>
+        </div>
+      </div>
+
+      <!-- Unrated Session Banner Prompt -->
+      <div id="unratedSessionBanner" class="unrated-session-banner" style="display:none;">
+        <span class="unrated-banner-text">Eksik detayları olan bir odaklanma seansınız var. Profilinizi güncellemek ister misiniz?</span>
+        <button class="unrated-banner-btn" onclick="openUnratedSessionRating()">DOLDUR</button>
+      </div>
+
+      <!-- Timer duel area (flex grow) -->
+      <div class="timer-duel" id="timerDuelArea">
+        <!-- Solo mode (default) -->
+        <div class="timer-solo" id="timerSolo">
+          <div class="timer-status-chip" id="timerStatusChip" onclick="openStatusSelector()">
+            <div class="status-chip-avatar" id="statusChipAvatar"></div>
+            <span class="status-chip-username" id="statusChipUsername"></span>
+            <span class="status-chip-text" id="statusText">ÇEVRİMİÇİ</span>
+            <div class="timer-status-dot" id="statusDot"></div>
+          </div>
+          
+          <!-- Status Popover -->
+          <div id="statusPopoverOverlay" onclick="closeStatusSelector()"></div>
+          <div class="spm" id="statusPopoverMenu" role="menu">
+            <!-- Header: current user info -->
+            <div class="spm-header">
+              <div class="spm-avatar" id="spmAvatar"></div>
+              <div class="spm-header-text">
+                <span class="spm-display-name" id="spmDisplayName">Kullanıcı</span>
+                <span class="spm-handle" id="spmHandle">@kullanici</span>
+              </div>
+            </div>
+            <div class="spm-divider"></div>
+            <!-- Status options -->
+            <div class="spm-section-label">Durum</div>
+            <div class="spm-item" id="spmOnline"  data-status="online"  onclick="setUserStatus('online')"  role="menuitem">
+              <div class="spm-dot" style="--c:#4ade80"></div>
+              <div class="spm-item-body">
+                <span class="spm-item-label">Çevrimiçi</span>
+                <span class="spm-item-sub">Aktif — bildirimler açık</span>
+              </div>
+              <div class="spm-check" aria-hidden="true">✓</div>
+            </div>
+            <div class="spm-item" id="spmAway"    data-status="away"    onclick="setUserStatus('away')"    role="menuitem">
+              <div class="spm-dot" style="--c:#fbbf24"></div>
+              <div class="spm-item-body">
+                <span class="spm-item-label">Uzakta</span>
+                <span class="spm-item-sub">Meşgul görün</span>
+              </div>
+              <div class="spm-check" aria-hidden="true">✓</div>
+            </div>
+            <div class="spm-item" id="spmDnd"     data-status="dnd"     onclick="setUserStatus('dnd')"     role="menuitem">
+              <div class="spm-dot" style="--c:#ef4444"></div>
+              <div class="spm-item-body">
+                <span class="spm-item-label">Rahatsız Etme</span>
+                <span class="spm-item-sub">Bildirimler sessiz</span>
+              </div>
+              <div class="spm-check" aria-hidden="true">✓</div>
+            </div>
+            <div class="spm-item" id="spmInvis"   data-status="invisible" onclick="setUserStatus('invisible')" role="menuitem">
+              <div class="spm-dot" style="--c:#6b7280"></div>
+              <div class="spm-item-body">
+                <span class="spm-item-label">Görünmez</span>
+                <span class="spm-item-sub">Çevrimdışı görün</span>
+              </div>
+              <div class="spm-check" aria-hidden="true">✓</div>
+            </div>
+          </div>
+          <div class="timer-display-solo" id="timerDisplaySolo">00:00</div>
+          <div class="timer-status-text" id="timerStatusText">odaklanmaya başlamak için dokun</div>
+          <div id="timerBonusIndicator" style="font-size: 9px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; display: none;"></div>
+        </div>
+        <!-- Duel mode (party) — hidden by default -->
+        <div class="timer-duel-inner" id="timerDuelInner" style="display:none">
+          <div class="duel-side is-me" id="duelSideMe">
+            <div class="duel-name" id="duelNameMe">SEN</div>
+            <div class="duel-timer" id="duelTimerMe">00:00</div>
+            <div class="duel-lead" id="duelLeadMe">ÖNDE</div>
+          </div>
+          <div class="duel-divider"></div>
+          <div class="duel-side" id="duelSideOther">
+            <div class="duel-name" id="duelNameOther">—</div>
+            <div class="duel-timer duel-timer frozen" id="duelTimerOther">00:00</div>
+            <div class="duel-lead" id="duelLeadOther">ÖNDE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Party members rows (when in party, >2 members) -->
+      <div class="party-duel-grid" id="partyDuelGrid"></div>
+
+      <!-- Party Focus Overlay (shown during active session with party) -->
+      <div class="party-focus-overlay" id="partyFocusOverlay" style="display:none">
+        <div class="party-focus-header">
+          <span class="party-focus-label" id="partyFocusLabel">Odak Odası</span>
+          <span class="party-focus-timer-small" id="partyFocusTime">00:00</span>
+        </div>
+        <div class="party-focus-members" id="partyFocusMembers"></div>
+      </div>
+
+      <!-- Controls -->
+      <div class="timer-controls" id="timerControlsBar">
+        <button class="timer-start-btn" id="timerStartBtn" onclick="startFocusSession()">
+          Odaklan
+        </button>
+        <button class="timer-stop-btn" id="timerStopBtn" onclick="stopFocusSession()" style="display:none">
+          Bitir
+        </button>
+
+        <div class="timer-secondary-row">
+          <button class="timer-room-btn" id="timerPartyBtn" onclick="openPartyModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Odak Odası
+          </button>
+          <button class="timer-chat-btn" id="timerChatBtn" onclick="togglePartyChatModal(true)" style="display:none; position:relative;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Sohbet
+            <div id="partyChatUnreadBadge" style="display:none;">0</div>
+          </button>
+          <button class="timer-leave-btn" id="timerLeavePartyBtn" onclick="leavePartyFromTimer()" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Ayrıl
+          </button>
+        </div>
+        <div id="activePartyInfo" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ── FEED PAGE ── -->
+    <div class="page" id="feedPage">
+      <!-- Sticky header + tabs -->
+      <div class="topbar">
+        <span class="topbar-brand">ODAK SAVAŞI</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <!-- Search Toggle Button -->
+          <button id="btnToggleFeedSearch" onclick="toggleFeedSearch()" style="background:none; border:none; color:#888; cursor:pointer; padding:6px; display:flex; align-items:center; justify-content:center; transition:color 0.2s;">
+            <svg viewBox="0 0 24 24" style="width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
+          <button onclick="openPostModal()" style="background:none; border:1px solid #333; color:#fff; font-size:10px; font-weight:800; letter-spacing:1.5px; padding:6px 12px; border-radius:14px; text-transform:uppercase; cursor:pointer; transition:all 0.2s;">PAYLAŞ</button>
+        </div>
+      </div>
+
+      <div class="feed-search-container" style="display:none; padding:10px 16px; border-bottom:1px solid var(--border-soft); position:relative; z-index:110;">
+        <input type="text" id="feedSearchInput" class="input-field" placeholder="Kullanıcı ara..." autocomplete="off" style="background:#111; border:1px solid #333; height:36px; font-size:13px; border-radius:18px; padding-left:16px;">
+        <div id="feedSearchResults" style="display:none; position:absolute; top:50px; left:16px; right:16px; background:#111; border:1px solid #333; border-radius:12px; padding:8px; box-shadow:0 10px 20px rgba(0,0,0,0.8); max-height:300px; overflow-y:auto; z-index:999;"></div>
+      </div>
+
+      <div class="feed-tabs" id="feedTabsRow">
+        <button class="feed-tab active" data-tab="discover" onclick="switchFeedTab('discover')">Keşfet</button>
+        <button class="feed-tab" data-tab="following"  onclick="switchFeedTab('following')">Takip</button>
+        <button class="feed-tab" data-tab="trending"   onclick="switchFeedTab('trending')">Trend</button>
+      </div>
+
+      <div id="feedList"></div>
+    </div>
+
+    <!-- ── LEADERBOARD PAGE ── -->
+    <div class="page" id="leaderboardPage">
+      <div class="topbar">
+        <span class="topbar-title">Sıralama</span>
+      </div>
+      <div id="myRankHero"></div>
+      <div id="leaderboardList"></div>
+    </div>
+
+    <!-- ── NOTIFICATIONS PAGE ── -->
+    <div class="page" id="notificationsPage">
+      <div class="topbar">
+        <span class="topbar-title">Bildirimler</span>
+        <span style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-3);cursor:pointer" onclick="markAllRead()">Tümünü okundu işaretle</span>
+      </div>
+      <div id="notificationsList"></div>
+    </div>
+
+    <!-- ── MESSAGES PAGE ── -->
+    <div class="page" id="messagesPage">
+      <div class="topbar">
+        <span class="topbar-title">Mesajlar</span>
+        <button onclick="openCreateGroupModal()" style="background:none; border:1px solid #333; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:6px 12px; border-radius:14px; text-transform:uppercase; cursor:pointer; height:28px; line-height:1; display:flex; align-items:center; justify-content:center; margin:0;">+ GRUP</button>
+      </div>
+      <div class="messages-container" style="display:flex;height:calc(100dvh - 120px);background:#000">
+        <!-- Inbox list (sol panel) -->
+        <div class="inbox-list" id="inboxList" style="flex:1;overflow-y:auto;border-right:1px solid var(--border-soft);display:flex;flex-direction:column;gap:8px;padding:12px"></div>
+        
+        <!-- Chat area (sağ panel) -->
+        <div class="chat-area" id="chatArea" style="flex:2;display:none;flex-direction:column;height:100%">
+          <div class="chat-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border-soft);background:#050505">
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="mono-btn-secondary" style="width:auto;padding:6px 12px;font-size:10px" onclick="closeChatArea()">← GERİ</button>
+              <span id="chatHeaderUser" style="font-weight:800;color:#fff;font-size:14px"></span>
+            </div>
+            <div id="chatDeviceBadge" class="chat-device-badge" onclick="showDevicePopup()" style="display:none;"></div>
+          </div>
+          <div class="chat-messages" id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px"></div>
+          <div class="chat-input-bar" style="display:flex;padding:12px 16px;border-top:1px solid var(--border-soft);gap:8px;background:#000">
+            <input type="text" id="chatInput" autocomplete="off" class="mono-input" style="flex:1" placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter')sendChatMessage()">
+            <button class="mono-btn-primary" style="width:auto;padding:0 20px" onclick="sendChatMessage()">GÖNDER</button>
+          </div>
+        </div>
+
+        <!-- Chat placeholder -->
+        <div class="chat-placeholder" id="chatPlaceholder" style="flex:2;display:flex;align-items:center;justify-content:center;color:#444;font-weight:800;font-size:11px">
+          SOHBET ETMEK İÇİN BİR ARKADAŞINI SEÇİN VEYA PROFİLİNDEN MESAJ ATIN.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PROFILE PAGE ── -->
+    <div class="page" id="profilePage">
+      <div class="topbar">
+        <span class="topbar-title">Profil</span>
+      </div>
+      <div id="myProfileContent"></div>
+      <input type="file" id="photoUpload" accept="image/*" style="display:none" onchange="uploadProfilePhoto(this)">
+    </div>
+
+    <!-- ── USER PROFILE PAGE (full-screen, Instagram-style) ── -->
+    <div class="page" id="userProfilePage" style="display:none">
+      <div class="topbar" style="position:sticky;top:0;z-index:20;background:#000">
+        <button class="up-back-btn" onclick="closeUserPage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span id="userPageTitle" class="topbar-title"></span>
+        <div style="width:40px"></div>
+      </div>
+      <div id="userPageContent"></div>
+    </div>
+
+  </div><!-- #mainApp -->
+
+</div><!-- #app -->
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- CUSTOM CONFIRM / PROMPT UI                            -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="customConfirmModal" style="z-index:99999;">
+  <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:300px; background:#1a1a1a; border-radius:14px; padding:24px 20px; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.8); border:1px solid #333;">
+    <div id="customConfirmMessage" style="font-size:15px; font-weight:600; line-height:1.4; color:#fff; margin-bottom:24px;">Emin misiniz?</div>
+    <div style="display:flex; gap:10px;">
+      <button class="mono-btn-secondary" style="flex:1; padding:12px; font-size:13px; font-weight:700;" onclick="window._resolveConfirm(false)">İPTAL</button>
+      <button class="mono-btn-danger" style="flex:1; padding:12px; font-size:13px; font-weight:700;" onclick="window._resolveConfirm(true)">EVET</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="customPromptModal" style="z-index:99999;">
+  <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:300px; background:#1a1a1a; border-radius:14px; padding:24px 20px; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.8); border:1px solid #333;">
+    <div id="customPromptMessage" style="font-size:15px; font-weight:600; line-height:1.4; color:#fff; margin-bottom:16px;">Bir değer girin:</div>
+    <input type="text" id="customPromptInput" autocomplete="off" class="input-field" style="margin-bottom:20px; background:#000; border:1px solid #333; color:#fff;" placeholder="...">
+    <div style="display:flex; gap:10px;">
+      <button class="mono-btn-secondary" style="flex:1; padding:12px; font-size:13px; font-weight:700;" onclick="window._resolvePrompt(null)">İPTAL</button>
+      <button class="mono-btn-primary" style="flex:1; padding:12px; font-size:13px; font-weight:700;" onclick="window._resolvePrompt(document.getElementById('customPromptInput').value)">TAMAM</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MESSAGE ACTIONS MODAL (Floating Popover) ── -->
+<div id="messageActionsModal" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.4);" onclick="closeMessageActionsModal()">
+  <div id="messageActionsPopover" class="msg-action-popover" onclick="event.stopPropagation()">
+    <!-- Quick Reactions Grid -->
+    <div class="msg-reaction-row">
+      <span onclick="reactToMessage('❤️')" class="react-emoji">❤️</span>
+      <span onclick="reactToMessage('👍')" class="react-emoji">👍</span>
+      <span onclick="reactToMessage('😂')" class="react-emoji">😂</span>
+      <span onclick="reactToMessage('😮')" class="react-emoji">😮</span>
+      <span onclick="reactToMessage('😢')" class="react-emoji">😢</span>
+      <span onclick="reactToMessage('🙏')" class="react-emoji">🙏</span>
+    </div>
+    <div class="msg-popover-divider"></div>
+    <!-- Actions List -->
+    <div class="msg-action-list">
+      <button class="msg-action-btn" onclick="actionReply()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+        <span>Yanıtla</span>
+      </button>
+      <button class="msg-action-btn" onclick="actionCopy()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Metni Kopyala</span>
+      </button>
+      <button class="msg-action-btn" onclick="actionForward()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        <span>Yönlendir</span>
+      </button>
+      <button class="msg-action-btn danger" id="actionDeleteBtn" onclick="actionDelete()" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        <span>Mesajı Sil</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── GROUP DETAILS MODAL ── -->
+<div class="modal-overlay" id="groupDetailsModal" style="z-index:99999;">
+  <div class="modal-sheet" style="max-height:85dvh;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header">
+      <span style="font-size:12px;font-weight:800;letter-spacing:2px;">GRUP DETAYLARI</span>
+      <span class="modal-close" onclick="closeGroupDetailsModal()">✕</span>
+    </div>
+    <div style="padding:0 20px 40px; display:flex; flex-direction:column; gap:20px; overflow-y:auto; max-height:calc(85dvh - 80px);">
+      
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:10px; font-weight:800; color:#555; letter-spacing:1px;">GRUP ADI</label>
+        <div style="display:flex; gap:10px;">
+          <input type="text" id="groupDetailsNameInput" autocomplete="off" class="input-field" style="margin:0; background:#000; border:1px solid #333; color:#fff;">
+          <button class="mono-btn-primary" onclick="saveGroupName()" style="width:auto; padding:0 16px; font-size:11px; font-weight:800;">KAYDET</button>
+        </div>
+      </div>
+
+      <div style="background:#0a0a0a; border:1px solid #111; border-radius:10px; padding:14px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:9px; font-weight:800; color:#555; letter-spacing:1px; text-transform:uppercase;">Toplam Odak Süresi</div>
+          <div id="groupDetailsTotalFocus" style="font-size:18px; font-weight:900; color:#fff; font-family:monospace; margin-top:2px;">00:00:00</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:9px; font-weight:800; color:#555; letter-spacing:1px; text-transform:uppercase;">Üye Sayısı</div>
+          <div id="groupDetailsMemberCount" style="font-size:18px; font-weight:900; color:#fff; font-family:monospace; margin-top:2px;">0</div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <label style="font-size:10px; font-weight:800; color:#555; letter-spacing:1px;">ÜYELER VE LİDERLİK TABLOSU</label>
+        <div id="groupDetailsMembersList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+
+      <div id="groupDetailsAddMemberSection" style="display:none; flex-direction:column; gap:8px; border-top:1px solid #111; padding-top:16px;">
+        <label style="font-size:10px; font-weight:800; color:#555; letter-spacing:1px;">YENİ ÜYE EKLE</label>
+        <div style="display:flex; gap:10px; position:relative;">
+          <input type="text" id="groupDetailsAddMemberInput" autocomplete="off" class="input-field" style="margin:0; background:#000; border:1px solid #333; color:#fff;" placeholder="Arkadaş ara..." oninput="searchFriendsToAddToGroup(this.value)">
+          <div id="groupDetailsAddMemberResults" style="position:absolute; top:42px; left:0; right:0; background:#050505; border:1px solid #222; border-radius:4px; max-height:180px; overflow-y:auto; z-index:100; display:none;"></div>
+        </div>
+      </div>
+
+      <button class="mono-btn-danger" onclick="leaveActiveGroup()" style="margin-top:20px; font-size:12px; font-weight:800; padding:12px;">GRUPTAN AYRIL</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FORWARD MESSAGE MODAL ── -->
+<div class="modal-overlay" id="forwardMessageModal" style="z-index:99999;">
+  <div class="modal-sheet" style="max-height:75dvh;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header">
+      <span style="font-size:12px;font-weight:800;letter-spacing:2px;">MESAJI YÖNLENDİR</span>
+      <span class="modal-close" onclick="closeForwardModal()">✕</span>
+    </div>
+    <div style="padding:0 20px 30px; display:flex; flex-direction:column; gap:14px;">
+      <input type="text" id="forwardSearchInput" autocomplete="off" class="input-field" style="margin:0; background:#000; border:1px solid #333; color:#fff;" placeholder="Sohbet veya grup ara..." oninput="filterForwardTargets(this.value)">
+      <div id="forwardTargetsList" style="display:flex; flex-direction:column; gap:8px; max-height:40dvh; overflow-y:auto; padding:4px 0;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SHARE POST MODAL (Instagram Style) ── -->
+<div class="modal-overlay" id="sharePostModal" style="z-index:99999;">
+  <div class="modal-sheet share-sheet" style="max-height:85dvh;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
+      <span style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">Gönderiyi Paylaş</span>
+      <span class="modal-close" onclick="closeSharePostModal()">✕</span>
+    </div>
+    <div class="share-modal-body">
+      <div class="share-search-box" style="margin-top:12px;">
+        <input type="text" id="sharePostSearchInput" autocomplete="off" placeholder="Arkadaş veya grup ara..." oninput="filterShareTargets(this.value)">
+        <svg class="share-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+
+      <!-- Targets Grid -->
+      <div id="sharePostTargetsList" class="share-grid"></div>
+
+      <!-- Footer: Message input + Send button -->
+      <div class="share-bottom-bar">
+        <input type="text" id="sharePostMessageInput" autocomplete="off" placeholder="Mesaj yaz... (isteğe bağlı)">
+        <button id="shareSubmitBtn" class="share-send-btn" disabled onclick="submitMultiSharePost()">GÖNDER</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── REACTION DETAILS MODAL ── -->
+<div class="modal-overlay" id="reactionDetailsModal" style="z-index:99999;">
+  <div class="modal-sheet" style="max-height:70dvh;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header">
+      <span style="font-size:12px;font-weight:800;letter-spacing:2px;">TEPKİ VERENLER</span>
+      <span class="modal-close" onclick="closeReactionDetailsModal()">✕</span>
+    </div>
+    <div style="padding:0 20px 30px; display:flex; flex-direction:column; gap:12px; max-height:50dvh; overflow-y:auto;" id="reactionDetailsList"></div>
+</div>
+
+<!-- ── CHAT POST VIEW MODAL ── -->
+<div class="modal-overlay" id="chatPostViewModal" style="z-index:99999;">
+  <div class="modal-sheet" style="max-height:85dvh; max-width:480px; margin:auto;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header" style="border-bottom:1px solid var(--border-soft); padding-bottom:10px;">
+      <span style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">Gönderi</span>
+      <span class="modal-close" onclick="closeChatPostViewModal()">✕</span>
+    </div>
+    <div style="padding:16px 20px 30px; overflow-y:auto; max-height:calc(85dvh - 60px);" id="chatPostViewContent"></div>
+  </div>
+</div>
+
+<!-- ── FOCUS SUMMARY MODAL ── -->
+<div class="modal-overlay" id="focusSummaryModal" style="z-index:100000;">
+  <div class="modal-sheet" style="max-width:340px; text-align:center; padding:0; background:rgba(10, 10, 10, 0.9); border:1px solid rgba(255,255,255,0.06); border-radius:24px; backdrop-filter:blur(20px); box-shadow:0 24px 64px rgba(0,0,0,0.8); position:relative;">
+    
+    <!-- Close cross button (allows skipping rating/closing at any step) -->
+    <span style="position:absolute; top:16px; right:20px; font-size:16px; color:var(--text-3); cursor:pointer; font-weight:bold; z-index:100;" onclick="closeFocusSummaryModal()">✕</span>
+
+    <!-- STEP 1: OVERVIEW -->
+    <div class="summary-step active" id="stepOverview">
+      <div style="display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); margin-bottom:16px; color:#fff; font-size:18px;">✓</div>
+      <div style="font-size:13px; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; margin-bottom:6px;">SEANS TAMAMLANDI</div>
+      <div style="font-size:11px; color:var(--text-3); margin-bottom:24px;">Gelişiminiz başarıyla tescillendi.</div>
+      
+      <div style="background:rgba(255,255,255,0.01); border:1px solid rgba(255,255,255,0.03); border-radius:14px; padding:20px; margin-bottom:24px; display:flex; flex-direction:column; gap:12px; text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:10px; color:var(--text-3); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Odak Süresi</span>
+          <span style="font-size:13px; font-weight:800; color:#fff; font-family:monospace;" id="summaryDuration">00:00</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.04); padding-top:10px;">
+          <span style="font-size:10px; color:var(--text-3); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Kazanılan XP</span>
+          <span style="font-size:13px; font-weight:800; color:#fff;" id="summaryXP">+0 XP</span>
+        </div>
+        <div id="summaryBonusRow" style="display:none; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.04); padding-top:10px;">
+          <span style="font-size:10px; color:var(--text-3); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Milestone Bonusu</span>
+          <span style="font-size:13px; font-weight:800; color:#00e676;" id="summaryBonus">+0 XP</span>
+        </div>
+      </div>
+      
+      <button class="timer-start-btn" style="padding:14px; font-size:12px; margin:0; width:100%; border-radius:12px; background:#fff; color:#000; letter-spacing:1px;" onclick="goToStep('Feeling')">SEANSI DEĞERLENDİR</button>
+    </div>
+
+    <!-- STEP 2: FEELING -->
+    <div class="summary-step" id="stepFeeling">
+      <div style="font-size:13px; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; margin-bottom:6px;">NASIL HİSSETTİNİZ?</div>
+      <div style="font-size:11px; color:var(--text-3); margin-bottom:24px;">Seans sonundaki psikolojik durumunuz nedir?</div>
+      
+      <div class="feeling-grid">
+        <button class="feeling-btn" onclick="selectFeeling('😫', 'Yorgun')">
+          <span class="feeling-emoji">😫</span>
+          <span class="feeling-label">Yorgun</span>
+        </button>
+        <button class="feeling-btn" onclick="selectFeeling('😕', 'Dağınık')">
+          <span class="feeling-emoji">😕</span>
+          <span class="feeling-label">Dağınık</span>
+        </button>
+        <button class="feeling-btn" onclick="selectFeeling('🙂', 'Odaklı')">
+          <span class="feeling-emoji">🙂</span>
+          <span class="feeling-label">Odaklı</span>
+        </button>
+        <button class="feeling-btn" onclick="selectFeeling('😃', 'Enerjik')">
+          <span class="feeling-emoji">😃</span>
+          <span class="feeling-label">Enerjik</span>
+        </button>
+        <button class="feeling-btn" onclick="selectFeeling('🏆', 'Gururlu')">
+          <span class="feeling-emoji">🏆</span>
+          <span class="feeling-label">Gururlu</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 3: CATEGORY -->
+    <div class="summary-step" id="stepCategory">
+      <div style="font-size:13px; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; margin-bottom:6px;">ANA KATEGORİ</div>
+      <div style="font-size:11px; color:var(--text-3); margin-bottom:24px;">Çalışmanız hangi genel sınıfa ait?</div>
+      
+      <div class="category-grid">
+        <div class="category-card" onclick="selectCategory('Eğitim')">
+          <span class="category-card-icon">📚</span>
+          <span class="category-card-title">Eğitim</span>
+        </div>
+        <div class="category-card" onclick="selectCategory('İş & Proje')">
+          <span class="category-card-icon">💼</span>
+          <span class="category-card-title">İş & Proje</span>
+        </div>
+        <div class="category-card" onclick="selectCategory('Sanat')">
+          <span class="category-card-icon">🎨</span>
+          <span class="category-card-title">Sanat</span>
+        </div>
+        <div class="category-card" onclick="selectCategory('Hobi')">
+          <span class="category-card-icon">🎮</span>
+          <span class="category-card-title">Hobi & Oyun</span>
+        </div>
+        <div class="category-card" onclick="selectCategory('Sağlık')">
+          <span class="category-card-icon">⚡</span>
+          <span class="category-card-title">Spor & Sağlık</span>
+        </div>
+        <div class="category-card" onclick="selectCategory('Gelişim & Ev')">
+          <span class="category-card-icon">🌱</span>
+          <span class="category-card-title">Gelişim & Ev</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: ACTIVITY -->
+    <div class="summary-step" id="stepActivity">
+      <div style="font-size:13px; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; margin-bottom:6px;">SPESİFİK EYLEM</div>
+      <div style="font-size:11px; color:var(--text-3); margin-bottom:24px;">Tam olarak ne üzerinde çalıştınız?</div>
+      
+      <div class="activity-search-box">
+        <input type="text" id="activitySearchInput" class="activity-search-input" placeholder="Aramaya başlayın (örn: Ders, Tasarım, Temizlik...)" autocomplete="off" oninput="onActivitySearch(this.value)">
+        <div class="activity-suggestions" id="activitySuggestions" style="display:none;"></div>
+      </div>
+
+      <button class="timer-start-btn" style="padding:14px; font-size:12px; margin:0; width:100%; border-radius:12px; background:#fff; color:#000; letter-spacing:1px;" onclick="submitRating()">KAYDI TAMAMLA</button>
+    </div>
+
+    <!-- STEP 5: DONE / SIMILAR USERS -->
+    <div class="summary-step" id="stepDone">
+      <div style="display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); margin-bottom:16px; color:#fff; font-size:18px;">✓</div>
+      <div style="font-size:13px; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; margin-bottom:6px;">KAYDEDİLDİ!</div>
+      <div style="font-size:11px; color:var(--text-3); margin-bottom:16px;">Verileriniz başarıyla tescillendi.</div>
+      
+      <div id="similarUsersContainer" style="display:none; text-align:left;">
+        <div style="font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:1.5px; text-align:left; border-top:1px solid rgba(255,255,255,0.04); padding-top:16px;">Sizinle Benzer Odaklananlar</div>
+        <div class="similar-users-list" id="similarUsersList"></div>
+      </div>
+
+      <button class="timer-start-btn" style="padding:14px; font-size:12px; margin:0; width:100%; border-radius:12px; background:#fff; color:#000; letter-spacing:1px;" onclick="closeFocusSummaryModal()">ODAKLANMAYA DEVAM ET</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── FEED COMMENTS MODAL ── -->
+<div class="modal-overlay" id="feedCommentsModal" style="z-index:99999;" onclick="if(event.target===this) closeFeedCommentsModal()">
+  <div class="modal-sheet" style="max-height:85dvh; max-width:480px; margin:auto; display:flex; flex-direction:column; padding:0;">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header" style="border-bottom:1px solid var(--border-soft); padding:16px 20px 12px;">
+      <span style="font-size:14px; font-weight:800; color:#fff; letter-spacing:0.5px;">YORUMLAR</span>
+      <span class="modal-close" onclick="closeFeedCommentsModal()" style="font-size:18px; cursor:pointer;">✕</span>
+    </div>
+    <div class="feed-comments-modal-body" id="feedCommentsModalBody" style="flex:1; overflow-y:auto; padding:20px; min-height:200px;">
+      <!-- Loaded dynamically via feed.js -->
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTIFICATION PERMISSION MODAL ── -->
+<div class="modal-overlay" id="pushPermissionModal" style="z-index:100000;">
+  <div class="modal-sheet" style="max-width:320px; text-align:center; padding:30px 20px; background:rgba(10, 10, 10, 0.95); border:1px solid rgba(255,255,255,0.06); border-radius:24px; backdrop-filter:blur(20px); box-shadow:0 24px 64px rgba(0,0,0,0.8);">
+    <div style="display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:50%; background:rgba(255,255,255,0.05); margin-bottom:16px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" width="28" height="28"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    </div>
+    <div style="font-size:16px; font-weight:800; color:#fff; margin-bottom:8px;">Bildirimleri Aç</div>
+    <div style="font-size:13px; color:var(--text-3); line-height:1.5; margin-bottom:24px;">Arkadaşların etkileşime geçtiğinde veya bir odak odasına davet edildiğinde haberdar olmak ister misin? İstediğin zaman ayarlardan kapatabilirsin.</div>
+    
+    <div style="display:flex; gap:12px; flex-direction:column;">
+      <button class="mono-btn-primary" style="padding:14px; font-size:13px; font-weight:700; width:100%; border-radius:12px; margin:0;" onclick="requestPushPermission()">EVET, BİLDİRİM GÖNDER</button>
+      <button style="background:none; border:none; color:var(--text-3); font-size:13px; font-weight:600; padding:10px; cursor:pointer;" onclick="closePushPermissionModal()">ŞİMDİLİK DEĞİL</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROFILE SETTINGS FULL-SCREEN MODAL ── -->
+<div id="profileSettingsModal" style="display:none; position:fixed; inset:0; z-index:10005; background:#000; flex-direction:column; overflow-y:auto;">
+  <div style="max-width:600px; margin:0 auto; width:100%; padding:20px 24px; box-sizing:border-box;">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px; margin-bottom:24px;">
+      <span style="font-size:16px; font-weight:900; color:#fff; letter-spacing:1px;">PROFİL AYARLARI</span>
+      <button class="mono-btn-secondary" style="width:auto; padding:6px 16px; font-size:11px; margin:0;" onclick="closeProfileSettingsModal()">✕ KAPAT</button>
+    </div>
+
+    <!-- Avatar Upload Section -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:32px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:20px; border-radius:16px; text-align:center;">
+      <div id="settingsAvatarContainer"></div>
+      <button class="mono-btn-secondary" style="width:auto; padding:8px 16px; font-size:11px; margin:0;" onclick="document.getElementById('photoUpload').click()">Fotoğrafı Değiştir</button>
+    </div>
+
+    <!-- Form Section -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="profile-settings-toggle-row" style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
+        <div class="profile-settings-toggle-info">
+          <div class="profile-settings-toggle-title" style="font-size:13px; font-weight:700; color:#fff;">Gizli Profil</div>
+          <div class="profile-settings-toggle-desc" style="font-size:11px; color:var(--text-3); margin-top:2px;">Yalnızca arkadaşlarınız görebilir.</div>
+        </div>
+        <label class="mono-switch">
+          <input type="checkbox" id="settingsPrivateToggle">
+          <span class="mono-switch-slider"></span>
+        </label>
+      </div>
+
+      <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
+        <label class="profile-settings-label" style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Biyografi</label>
+        <textarea class="profile-edit-textarea" id="settingsBio" placeholder="Kendinden bahset..." maxlength="200" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; resize:none; box-sizing:border-box;" rows="3"></textarea>
+      </div>
+
+      <div style="display:flex; gap:16px;">
+        <div class="profile-settings-row" style="flex:1; display:flex; flex-direction:column; gap:6px;">
+          <label class="profile-settings-label" style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Boy (cm)</label>
+          <input type="number" class="profile-edit-input" id="settingsHeight" placeholder="170" min="100" max="250" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+        </div>
+        <div class="profile-settings-row" style="flex:1; display:flex; flex-direction:column; gap:6px;">
+          <label class="profile-settings-label" style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Kilo (kg)</label>
+          <input type="number" class="profile-edit-input" id="settingsWeight" placeholder="70" min="30" max="300" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+        </div>
+      </div>
+
+      <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
+        <label class="profile-settings-label" style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">CV / Hakkımda</label>
+        <textarea class="profile-edit-textarea" id="settingsCv" placeholder="Eğitim, kariyer veya diğer detaylar..." rows="4" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; resize:none; box-sizing:border-box;"></textarea>
+      </div>
+
+      <button class="mono-btn-primary" onclick="saveSettings()" id="settingsSaveBtn" style="margin:8px 0 0; padding:14px; font-size:13px; font-weight:700; border-radius:12px;">AYARLARI KAYDET</button>
+    </div>
+
+    <!-- Change Password Section -->
+    <div style="margin-top:40px; border-top:1px solid rgba(255,255,255,0.08); padding-top:32px;">
+      <h3 style="font-size:14px; font-weight:800; color:#fff; margin:0 0 16px; letter-spacing:0.5px;">ŞİFRE DEĞİŞTİR</h3>
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Eski Şifre</label>
+          <input type="password" id="settingsOldPassword" placeholder="••••••" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Yeni Şifre</label>
+          <input type="password" id="settingsNewPassword" placeholder="En az 6 karakter" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+        </div>
+        <button class="mono-btn-secondary" onclick="updatePassword()" id="settingsPasswordBtn" style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid rgba(255,255,255,0.1); color:#fff; background:none;">ŞİFREYİ GÜNCELLE</button>
+      </div>
+    </div>
+
+    <!-- Account Actions Section -->
+    <div style="margin-top:40px; border-top:1px solid rgba(255,255,255,0.08); padding-top:32px; padding-bottom:40px; display:flex; flex-direction:column; gap:12px;">
+      <button class="mono-btn-secondary" onclick="logout()" style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid var(--danger); color:var(--danger); background:none; transition: all 0.2s ease;">ÇIKIŞ YAP</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="/js/app.js?v=2.1.6"></script>
+<script src="/js/timer.js?v=2.1.6"></script>
+<script src="/js/feed.js?v=2.1.6"></script>
+<script src="/js/profile.js?v=2.1.6"></script>
+<script src="/js/party.js?v=2.1.6"></script>
+<script src="/js/messages.js?v=2.1.6"></script>
+</body>
+</html>
