@@ -4,8 +4,7 @@
   "description": "Odak savaşı uygulaması",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "postinstall": "npm rebuild sqlite3"
+    "start": "node server/index.js"
   },
   "engines": {
     "node": ">=18"
@@ -18,7 +17,7 @@
     "hono": "^4.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^1.4.5-lts.1",
-    "sqlite3": "^6.0.1",
+    "sqlite3": "5.1.7",
     "web-push": "^3.6.7"
   }
 }
