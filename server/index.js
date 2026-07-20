@@ -73,16 +73,9 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 const schemaPath = path.join(__dirname, '..', 'schema.sql');
 if (fs.existsSync(schemaPath)) {
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  // Split by semicolons and run each statement
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-  db.serialize(() => {
-    statements.forEach(stmt => {
-      db.run(stmt + ';', err => {
-        if (err && !err.message.includes('already exists')) {
-          console.error('Schema error:', err.message, '\nStatement:', stmt.substring(0, 80));
-        }
-      });
-    });
+  db.exec(schema, err => {
+    if (err) console.error('Schema apply error:', err.message);
+    else console.log('Schema applied successfully');
   });
 }
 
