@@ -478,47 +478,54 @@ function updateLobbyVoiceBadges() {
 window._modalActiveUser = null;
 
 function openUserVoiceModal(username) {
-  if (username === currentUser.username) return; // Cannot adjust self volume/latency here
-  window._modalActiveUser = username;
+  try {
+    if (currentUser && username === currentUser.username) return; // Cannot adjust self volume/latency here
+    window._modalActiveUser = username;
 
-  const modal = document.getElementById('userVoiceSettingsModal');
-  if (!modal) return;
+    const modal = document.getElementById('userVoiceSettingsModal');
+    if (!modal) return;
 
-  // Set Profile Photo
-  const avatarEl = document.getElementById('uvAvatarContainer');
-  if (avatarEl) {
-    avatarEl.innerHTML = typeof renderAvatar === 'function' ? renderAvatar({ username }, 'avatar avatar-xl') : '';
+    // Set Profile Photo
+    const avatarEl = document.getElementById('uvAvatarContainer');
+    if (avatarEl) {
+      avatarEl.innerHTML = typeof renderAvatar === 'function' ? renderAvatar({ username }, 'avatar avatar-xl') : '';
+    }
+
+    // Set Username & Latency (ms)
+    const nameEl = document.getElementById('uvUsername');
+    if (nameEl) nameEl.textContent = username;
+    
+    const pingEl = document.getElementById('uvLatency');
+    if (pingEl) {
+      const state = window._partyVoiceMembers && window._partyVoiceMembers[username];
+      const latency = state ? state.pingMs : 0;
+      pingEl.textContent = `MS: ${latency || '—'}`;
+    }
+
+    // Set Volume Slider
+    const slider = document.getElementById('uvVolumeSlider');
+    if (slider) {
+      const currentVol = getUserVolume(username);
+      slider.value = Math.round(currentVol * 100);
+    }
+
+    // Set Mute state button
+    const muteBtn = document.getElementById('uvMuteToggleBtn');
+    if (muteBtn) {
+      const isMuted = !!window._userLocalMuted[username];
+      muteBtn.classList.toggle('muted', isMuted);
+      muteBtn.innerHTML = isMuted
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Susturuldu`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur`;
+    }
+
+    modal.classList.add('open');
+  } catch (err) {
+    console.error("Error in openUserVoiceModal:", err);
+    // Fallback opening
+    const modal = document.getElementById('userVoiceSettingsModal');
+    if (modal) modal.classList.add('open');
   }
-
-  // Set Username & Latency (ms)
-  const nameEl = document.getElementById('uvUsername');
-  if (nameEl) nameEl.textContent = username;
-  
-  const pingEl = document.getElementById('uvLatency');
-  if (pingEl) {
-    const state = window._partyVoiceMembers[username];
-    const latency = state ? state.pingMs : 0;
-    pingEl.textContent = `MS: ${latency || '—'}`;
-  }
-
-  // Set Volume Slider
-  const slider = document.getElementById('uvVolumeSlider');
-  if (slider) {
-    const currentVol = getUserVolume(username);
-    slider.value = Math.round(currentVol * 100);
-  }
-
-  // Set Mute state button
-  const muteBtn = document.getElementById('uvMuteToggleBtn');
-  if (muteBtn) {
-    const isMuted = !!window._userLocalMuted[username];
-    muteBtn.classList.toggle('muted', isMuted);
-    muteBtn.innerHTML = isMuted
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Susturuldu`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur`;
-  }
-
-  modal.classList.add('open');
 }
 
 function closeUserVoiceModal() {

@@ -746,42 +746,53 @@ function switchProfileTab(tab) {
 }
 
 function openProfileSettings() {
-  const modal = document.getElementById('profileSettingsModal');
-  if (!modal) return;
+  try {
+    const modal = document.getElementById('profileSettingsModal');
+    if (!modal) return;
 
-  const user = currentUser || {};
+    const user = currentUser || {};
 
-  const avatarContainer = document.getElementById('settingsAvatarContainer');
-  if (avatarContainer && typeof renderAvatar === 'function') {
-    avatarContainer.innerHTML = renderAvatar(user, 'avatar avatar-xl');
+    const avatarContainer = document.getElementById('settingsAvatarContainer');
+    if (avatarContainer && typeof renderAvatar === 'function') {
+      avatarContainer.innerHTML = renderAvatar(user, 'avatar avatar-xl');
+    }
+
+    const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
+    if (settingsPrivateToggle) settingsPrivateToggle.checked = !!user.is_private;
+
+    const settingsBio = document.getElementById('settingsBio');
+    if (settingsBio) settingsBio.value = user.bio || '';
+
+    const settingsHeight = document.getElementById('settingsHeight');
+    if (settingsHeight) settingsHeight.value = user.height || '';
+
+    const settingsWeight = document.getElementById('settingsWeight');
+    if (settingsWeight) settingsWeight.value = user.weight || '';
+
+    const settingsCv = document.getElementById('settingsCv');
+    if (settingsCv) settingsCv.value = user.cv || '';
+
+    // Clear password inputs
+    const settingsOldPassword = document.getElementById('settingsOldPassword');
+    if (settingsOldPassword) settingsOldPassword.value = '';
+    const settingsNewPassword = document.getElementById('settingsNewPassword');
+    if (settingsNewPassword) settingsNewPassword.value = '';
+
+    try {
+      if (typeof populateMicDeviceList === 'function') {
+        populateMicDeviceList();
+      }
+    } catch (e) {
+      console.warn("Failed to populate mic list inside settings:", e);
+    }
+
+    modal.style.display = 'flex';
+  } catch (err) {
+    console.error("Error in openProfileSettings:", err);
+    // Fallback opening
+    const modal = document.getElementById('profileSettingsModal');
+    if (modal) modal.style.display = 'flex';
   }
-
-  const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
-  if (settingsPrivateToggle) settingsPrivateToggle.checked = !!user.is_private;
-
-  const settingsBio = document.getElementById('settingsBio');
-  if (settingsBio) settingsBio.value = user.bio || '';
-
-  const settingsHeight = document.getElementById('settingsHeight');
-  if (settingsHeight) settingsHeight.value = user.height || '';
-
-  const settingsWeight = document.getElementById('settingsWeight');
-  if (settingsWeight) settingsWeight.value = user.weight || '';
-
-  const settingsCv = document.getElementById('settingsCv');
-  if (settingsCv) settingsCv.value = user.cv || '';
-
-  // Clear password inputs
-  const settingsOldPassword = document.getElementById('settingsOldPassword');
-  if (settingsOldPassword) settingsOldPassword.value = '';
-  const settingsNewPassword = document.getElementById('settingsNewPassword');
-  if (settingsNewPassword) settingsNewPassword.value = '';
-
-  if (typeof populateMicDeviceList === 'function') {
-    populateMicDeviceList();
-  }
-
-  modal.style.display = 'flex';
 }
 
 function closeProfileSettingsModal() {
