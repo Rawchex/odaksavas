@@ -32,6 +32,8 @@ webpush.setVapidDetails(
 );
 
 const app = express();
+app.set('trust proxy', 1); // Railway runs behind a proxy
+
 const DB_PATH = process.env.DB_PATH || 'odaksavas.db';
 const db = new sqlite3.Database(DB_PATH);
 
