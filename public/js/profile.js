@@ -971,3 +971,13 @@ function closeProfilePostSlider() {
   const overlay = document.getElementById('profilePostSliderOverlay');
   if (overlay) overlay.classList.remove('open');
 }
+
+// Event delegation to bulletproof profile settings click trigger
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.topbar-settings-btn');
+  if (btn) {
+    e.preventDefault();
+    e.stopPropagation();
+    openProfileSettings();
+  }
+});

@@ -620,3 +620,16 @@ async function handleMicDeviceChange(deviceId) {
     } catch(e){}
   }
 }
+
+// Event delegation to bulletproof member settings click triggers in Lobby
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.member-voice-settings-btn');
+  if (btn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const username = btn.getAttribute('data-username');
+    if (username) {
+      openUserVoiceModal(username);
+    }
+  }
+});
