@@ -4,7 +4,11 @@
   "description": "Odak savaşı uygulaması",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "postinstall": "npm rebuild sqlite3"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
