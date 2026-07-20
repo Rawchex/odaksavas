@@ -33,6 +33,12 @@ async function initVoiceChat(partyId) {
   console.log('Initializing Voice Chat for party:', partyId);
   stopVoiceChat();
 
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    console.warn('navigator.mediaDevices.getUserMedia is not supported or not available (HTTPS connection may be required)');
+    showToast('Sesli sohbet desteklenmiyor (HTTPS bağlantısı gerekli olabilir).');
+    return;
+  }
+
   try {
     // 1. Get User Media (Microphone)
     const constraints = {
@@ -543,6 +549,11 @@ async function populateMicDeviceList() {
   const select = document.getElementById('settingsMicDeviceSelect');
   if (!select) return;
 
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    select.innerHTML = '<option value="">Ses Girişi Desteklenmiyor (HTTPS gerekli)</option>';
+    return;
+  }
+
   try {
     // Explicitly re-request permissions first to make sure device labels are populated
     await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -570,6 +581,10 @@ async function handleMicDeviceChange(deviceId) {
   console.log('Switching microphone device to:', deviceId);
   window._selectedMicId = deviceId;
   localStorage.setItem('os_selected_mic_id', deviceId);
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return;
+  }
 
   // If currently active in a voice chat, reinitialize to swap track
   if (window._currentPartyId) {
