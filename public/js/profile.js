@@ -95,9 +95,6 @@ function renderMyProfile(user) {
           <span class="lvl-badge">LVL ${user.level}</span>
           <div class="status-dot-indicator" style="background:${userStatusColor}; width:12px; height:12px; border-radius:50%; cursor:pointer;" onclick="openStatusSelector()"></div>
         </div>
-        <div onclick="openProfileSettings()" style="cursor:pointer; padding:8px; color:#fff; display:flex; align-items:center; justify-content:center; z-index:10;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-        </div>
       </div>
 
       <div class="profile-insta-top">

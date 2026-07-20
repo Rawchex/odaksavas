@@ -4,6 +4,22 @@
 
 'use strict';
 
+// Safe storage wrapper to prevent exceptions in sandboxed contexts
+const safeStorage = {
+  getItem(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  },
+  setItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {}
+  }
+};
+
 // ─── VOICE CHAT STATE ────────────────────────────────────────
 window._localStream          = null;
 window._peerConnections     = {}; // username -> RTCPeerConnection
@@ -14,7 +30,7 @@ window._userLocalMuted      = {}; // username -> boolean (muted locally by me)
 window._partyVoiceMembers   = {}; // username -> { micMuted, deafened, pingMs }
 window._micMuted            = false;
 window._deafened            = false;
-window._selectedMicId       = localStorage.getItem('os_selected_mic_id') || 'default';
+window._selectedMicId       = safeStorage.getItem('os_selected_mic_id') || 'default';
 window._voiceInterval       = null;
 window._voiceSignalsInterval = null;
 window._audioContext        = null;
@@ -312,13 +328,13 @@ function applyUserVolume(username) {
 function setUserVolume(username, volPercent) {
   const vol = Math.max(0, Math.min(100, volPercent)) / 100;
   window._userVolumes[username] = vol;
-  localStorage.setItem(`os_voice_vol_${username}`, vol);
+  safeStorage.setItem(`os_voice_vol_${username}`, vol);
   applyUserVolume(username);
 }
 
 function getUserVolume(username) {
   if (window._userVolumes[username] !== undefined) return window._userVolumes[username];
-  const stored = localStorage.getItem(`os_voice_vol_${username}`);
+  const stored = safeStorage.getItem(`os_voice_vol_${username}`);
   if (stored !== null) {
     const parsed = parseFloat(stored);
     window._userVolumes[username] = parsed;
@@ -587,7 +603,7 @@ async function handleMicDeviceChange(deviceId) {
   if (!deviceId) return;
   console.log('Switching microphone device to:', deviceId);
   window._selectedMicId = deviceId;
-  localStorage.setItem('os_selected_mic_id', deviceId);
+  safeStorage.setItem('os_selected_mic_id', deviceId);
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     return;

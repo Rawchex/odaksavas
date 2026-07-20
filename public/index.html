@@ -512,8 +512,12 @@
 
     <!-- ── PROFILE PAGE ── -->
     <div class="page" id="profilePage">
-      <div class="topbar">
+      <div class="topbar" style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;">
         <span class="topbar-title">Profil</span>
+        <!-- Settings button in sticky topbar -->
+        <button class="topbar-settings-btn" onclick="openProfileSettings()" title="Ayarlar" style="background:none; border:none; color:#fff; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
       </div>
       <div id="myProfileContent"></div>
       <input type="file" id="photoUpload" accept="image/*" style="display:none" onchange="uploadProfilePhoto(this)">
