@@ -58,7 +58,7 @@ const upload = multer({
 // Generic Rate Limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per 15 mins
+  max: 5000, // Limit each IP to 5000 requests per 15 mins (avoiding 429 during active polling)
   message: { error: 'Çok fazla istek gönderdiniz, lütfen daha sonra tekrar deneyin.' }
 });
 
@@ -91,9 +91,25 @@ if (fs.existsSync(schemaPath)) {
   });
 }
 
-// Database setup
-db.serialize(() =>{
+// Migration checks for existing databases
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS party_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    user_limit INTEGER DEFAULT 0,
+    position INTEGER DEFAULT 0,
+    is_default INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (party_id) REFERENCES parties(id)
+  )`);
 
+  db.run(`ALTER TABLE party_members ADD COLUMN channel_id INTEGER DEFAULT NULL`, () => {});
+  db.run(`ALTER TABLE party_members ADD COLUMN role VARCHAR DEFAULT 'member'`, () => {});
+});
+
+// Database setup
+db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -317,6 +333,21 @@ db.serialize(() =>{
   `);
 });
 
+// Periodic database cleanup for messages and party chats
+function cleanupOldMessages() {
+  db.run("DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE created_at < datetime('now', '-24 hours'))", (err) => {
+    if (err) console.error('Error cleaning up message reactions:', err.message);
+  });
+  db.run("DELETE FROM messages WHERE created_at < datetime('now', '-24 hours')", (err) => {
+    if (err) console.error('Error cleaning up messages:', err.message);
+  });
+  db.run("DELETE FROM party_messages WHERE created_at < datetime('now', '-6 hours')", (err) => {
+    if (err) console.error('Error cleaning up party messages:', err.message);
+  });
+}
+cleanupOldMessages();
+setInterval(cleanupOldMessages, 60 * 1000); // Check every minute
+
 
 // Auth middleware — JWT tabanlı
 const auth = (req, res, next) => {
@@ -474,9 +505,16 @@ app.get('/api/search/users', auth, (req, res) => {
   );
 });
 
-// Heartbeat — online/offline takibi için her 30sn'de çağrılır
+// Heartbeat — online/offline takibi için her 15sn'de çağrılır
 app.patch('/api/me/heartbeat', auth, (req, res) => {
   db.run('UPDATE users SET last_seen = datetime("now") WHERE id = ?', [req.user.id], () => {
+    res.json({ ok: true });
+  });
+});
+
+// Instant offline signal on tab close / logout
+app.post('/api/me/offline', auth, (req, res) => {
+  db.run('UPDATE users SET last_seen = datetime("now", "-5 minutes") WHERE id = ?', [req.user.id], () => {
     res.json({ ok: true });
   });
 });
@@ -1113,27 +1151,243 @@ app.post('/api/parties/invites/:id/reject', auth, (req, res) => {
   });
 });
 
+// Helper to check management permission (owner, admin, or moderator) in a party
+function checkPartyManagementPermission(partyId, userId, callback) {
+  db.get('SELECT owner_id FROM parties WHERE id = ?', [partyId], (err, party) => {
+    if (!party) return callback(null, false, 'Parti bulunamadı');
+    if (party.owner_id === userId) return callback(null, true, 'owner');
+
+    db.get('SELECT role FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, userId], (err, member) => {
+      if (!member) return callback(null, false, 'Üye değilsiniz');
+      const role = member.role || 'member';
+      const isAllowed = ['owner', 'admin', 'moderator'].includes(role);
+      callback(null, isAllowed, role);
+    });
+  });
+}
+
 app.get('/api/parties/:id', auth, (req, res) => {
-  db.get('SELECT * FROM parties WHERE id = ?', [req.params.id], (err, party) => {
+  const partyId = req.params.id;
+  db.get('SELECT * FROM parties WHERE id = ?', [partyId], (err, party) => {
     if (!party) return res.status(404).json({ error: 'Parti bulunamadı' });
     
     db.get('SELECT username FROM users WHERE id = ?', [party.owner_id], (err, owner) => {
-      db.all(`
-        SELECT u.id, u.username, u.profile_photo, u.level, u.total_focus_time,
-          (SELECT id FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as active_session_id,
-          (SELECT start_time FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as session_start,
-          (SELECT COALESCE(SUM(duration), 0) FROM sessions WHERE user_id = u.id AND party_id = ? AND status = 'completed') as party_total_time
-        FROM party_members pm 
-        JOIN users u ON pm.user_id = u.id 
-        WHERE pm.party_id = ? 
-        ORDER BY party_total_time DESC
-      `, [req.params.id, req.params.id], (err, members) => {
-        res.json({ 
-          ...party, 
-          owner_name: owner.username,
-          members: members || [] 
+      // Ensure at least 1 default sub-channel exists
+      db.all('SELECT * FROM party_channels WHERE party_id = ? ORDER BY position ASC, id ASC', [partyId], (err, channels) => {
+        let channelList = channels || [];
+
+        const fetchMembersAndRespond = (activeChannels) => {
+          const defaultChannel = activeChannels.find(c => c.is_default) || activeChannels[0];
+          const defaultChannelId = defaultChannel ? defaultChannel.id : null;
+
+          db.all(`
+            SELECT u.id, u.username, u.profile_photo, u.level, u.total_focus_time, u.status,
+              pm.channel_id,
+              CASE WHEN u.id = ? THEN 'owner' ELSE COALESCE(pm.role, 'member') END as role,
+              (u.last_seen > datetime('now', '-45 seconds')) as is_online,
+              (SELECT id FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as active_session_id,
+              (SELECT start_time FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as session_start,
+              (SELECT COALESCE(SUM(duration), 0) FROM sessions WHERE user_id = u.id AND party_id = ? AND status = 'completed') as party_total_time
+            FROM party_members pm 
+            JOIN users u ON pm.user_id = u.id 
+            WHERE pm.party_id = ? 
+            ORDER BY party_total_time DESC
+          `, [party.owner_id, partyId, partyId], (err, members) => {
+            const formattedMembers = (members || []).map(m => ({
+              ...m,
+              channel_id: m.channel_id ? parseInt(m.channel_id) : defaultChannelId
+            }));
+
+            res.json({ 
+              ...party, 
+              owner_name: owner ? owner.username : 'Bilinmiyor',
+              channels: activeChannels,
+              default_channel_id: defaultChannelId,
+              members: formattedMembers
+            });
+          });
+        };
+
+        if (channelList.length === 0) {
+          db.run(
+            'INSERT INTO party_channels (party_id, name, user_limit, position, is_default) VALUES (?, ?, 0, 0, 1)',
+            [partyId, 'Genel Odak Odası'],
+            function() {
+              const newChanId = this.lastID;
+              channelList = [{
+                id: newChanId,
+                party_id: parseInt(partyId),
+                name: 'Genel Odak Odası',
+                user_limit: 0,
+                position: 0,
+                is_default: 1
+              }];
+              fetchMembersAndRespond(channelList);
+            }
+          );
+        } else {
+          fetchMembersAndRespond(channelList);
+        }
+      });
+    });
+  });
+});
+
+// Rename party
+app.put('/api/parties/:id/name', auth, (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Oda adı boş olamaz' });
+
+  checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Bu işlem için oda yönetici yetkisi gereklidir' });
+
+    db.run('UPDATE parties SET name = ? WHERE id = ?', [name.trim(), req.params.id], () => {
+      res.json({ success: true, name: name.trim() });
+    });
+  });
+});
+
+// Create sub-channel
+app.post('/api/parties/:id/channels', auth, (req, res) => {
+  const { name, userLimit } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Kanal adı boş olamaz' });
+
+  checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Kanal oluşturma yetkiniz yok' });
+
+    db.get('SELECT MAX(position) as maxPos FROM party_channels WHERE party_id = ?', [req.params.id], (err, row) => {
+      const pos = (row && row.maxPos !== null) ? row.maxPos + 1 : 0;
+      const limit = parseInt(userLimit) || 0;
+
+      db.run(
+        'INSERT INTO party_channels (party_id, name, user_limit, position, is_default) VALUES (?, ?, ?, ?, 0)',
+        [req.params.id, name.trim(), limit, pos],
+        function() {
+          res.json({ success: true, channelId: this.lastID });
+        }
+      );
+    });
+  });
+});
+
+// Edit sub-channel
+app.put('/api/parties/:id/channels/:channelId', auth, (req, res) => {
+  const { name, userLimit } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Kanal adı boş olamaz' });
+
+  checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Kanal düzenleme yetkiniz yok' });
+
+    const limit = parseInt(userLimit) || 0;
+    db.run(
+      'UPDATE party_channels SET name = ?, user_limit = ? WHERE id = ? AND party_id = ?',
+      [name.trim(), limit, req.params.channelId, req.params.id],
+      () => {
+        res.json({ success: true });
+      }
+    );
+  });
+});
+
+// Delete sub-channel
+app.delete('/api/parties/:id/channels/:channelId', auth, (req, res) => {
+  checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Kanal silme yetkiniz yok' });
+
+    db.get('SELECT * FROM party_channels WHERE id = ? AND party_id = ?', [req.params.channelId, req.params.id], (err, chan) => {
+      if (!chan) return res.status(404).json({ error: 'Kanal bulunamadı' });
+
+      // Find default channel
+      db.get('SELECT id FROM party_channels WHERE party_id = ? AND is_default = 1 LIMIT 1', [req.params.id], (err, defChan) => {
+        const fallbackChannelId = defChan ? defChan.id : null;
+
+        // Move members to fallback channel
+        db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND channel_id = ?', 
+          [fallbackChannelId, req.params.id, req.params.channelId], () => {
+          db.run('DELETE FROM party_channels WHERE id = ? AND party_id = ?', [req.params.channelId, req.params.id], () => {
+            res.json({ success: true });
+          });
         });
       });
+    });
+  });
+});
+
+// Reorder channels
+app.put('/api/parties/:id/channels-reorder', auth, (req, res) => {
+  const { channels } = req.body; // Array of { id, position }
+  if (!Array.isArray(channels)) return res.status(400).json({ error: 'Geçersiz kanal sıralaması' });
+
+  checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Kanal sıralama yetkiniz yok' });
+
+    db.serialize(() => {
+      channels.forEach(ch => {
+        db.run('UPDATE party_channels SET position = ? WHERE id = ? AND party_id = ?', [ch.position, ch.id, req.params.id]);
+      });
+      res.json({ success: true });
+    });
+  });
+});
+
+// Join sub-channel
+app.post('/api/parties/:id/channels/:channelId/join', auth, (req, res) => {
+  const partyId = req.params.id;
+  const channelId = parseInt(req.params.channelId);
+
+  db.get('SELECT * FROM party_channels WHERE id = ? AND party_id = ?', [channelId, partyId], (err, chan) => {
+    if (!chan) return res.status(404).json({ error: 'Kanal bulunamadı' });
+
+    // Check user limit if limit > 0
+    db.get('SELECT COUNT(*) as currentCount FROM party_members WHERE party_id = ? AND channel_id = ? AND user_id != ?', 
+      [partyId, channelId, req.user.id], (err, row) => {
+      const currentCount = row ? row.currentCount : 0;
+      if (chan.user_limit > 0 && currentCount >= chan.user_limit) {
+        return res.status(400).json({ error: `Kanal dolu! Maksimum ${chan.user_limit} kişi katılabilir.` });
+      }
+
+      db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?', [channelId, partyId, req.user.id], () => {
+        res.json({ success: true, channelId });
+      });
+    });
+  });
+});
+
+// Move specific member to another channel (Drag & drop move by manager)
+app.post('/api/parties/:id/members/:targetUserId/move', auth, (req, res) => {
+  const partyId = req.params.id;
+  const targetUserId = parseInt(req.params.targetUserId);
+  const { channelId } = req.body;
+
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Kullanıcı taşıma yetkiniz yok' });
+
+    db.get('SELECT * FROM party_channels WHERE id = ? AND party_id = ?', [channelId, partyId], (err, chan) => {
+      if (!chan) return res.status(404).json({ error: 'Hedef kanal bulunamadı' });
+
+      db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?', [channelId, partyId, targetUserId], () => {
+        res.json({ success: true, channelId, targetUserId });
+      });
+    });
+  });
+});
+
+// Update member role (Owner / Admin granting Moderator/Admin role)
+app.put('/api/parties/:id/members/:targetUserId/role', auth, (req, res) => {
+  const partyId = req.params.id;
+  const targetUserId = parseInt(req.params.targetUserId);
+  const { role } = req.body; // 'admin', 'moderator', 'member'
+
+  const allowedRoles = ['admin', 'moderator', 'member'];
+  if (!allowedRoles.includes(role)) return res.status(400).json({ error: 'Geçersiz rol' });
+
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, requesterRole) => {
+    if (!allowed || requesterRole === 'moderator') {
+      return res.status(403).json({ error: 'Rol atamak için Kurucu veya Yönetici yetkisi gereklidir' });
+    }
+
+    db.run('UPDATE party_members SET role = ? WHERE party_id = ? AND user_id = ?', [role, partyId, targetUserId], () => {
+      res.json({ success: true, role });
     });
   });
 });
@@ -1240,73 +1494,91 @@ app.post('/api/parties/:id/leave', auth, (req, res) => {
 // --- PARTY VOICE CHAT SIGNALING & STATE ENDPOINTS ---
 
 app.post('/api/parties/:id/voice-state', auth, (req, res) => {
-  const partyId = req.params.id;
-  const { micMuted, deafened, pingMs } = req.body;
-  const userId = req.user.id;
-  const username = req.user.username;
+  try {
+    const partyId = req.params.id;
+    const { micMuted, deafened, pingMs, channelId } = req.body;
+    const userId = req.user.id;
+    const username = req.user.username;
 
-  if (!global.partyVoiceStates[partyId]) {
-    global.partyVoiceStates[partyId] = {};
-  }
-
-  // Update current user state
-  global.partyVoiceStates[partyId][userId] = {
-    username,
-    micMuted: !!micMuted,
-    deafened: !!deafened,
-    pingMs: parseInt(pingMs) || 0,
-    lastSeen: Date.now()
-  };
-
-  // Cleanup users that haven't sent state in 15 seconds
-  const now = Date.now();
-  Object.keys(global.partyVoiceStates[partyId]).forEach(uid => {
-    if (now - global.partyVoiceStates[partyId][uid].lastSeen > 15000) {
-      delete global.partyVoiceStates[partyId][uid];
+    if (!global.partyVoiceStates) global.partyVoiceStates = {};
+    if (!global.partyVoiceStates[partyId]) {
+      global.partyVoiceStates[partyId] = {};
     }
-  });
 
-  res.json({ members: global.partyVoiceStates[partyId] });
+    // Update current user state
+    global.partyVoiceStates[partyId][userId] = {
+      username,
+      micMuted: !!micMuted,
+      deafened: !!deafened,
+      channelId: channelId ? parseInt(channelId) : null,
+      pingMs: parseInt(pingMs) || 0,
+      lastSeen: Date.now()
+    };
+
+    // Cleanup users that haven't sent state in 15 seconds
+    const now = Date.now();
+    Object.keys(global.partyVoiceStates[partyId]).forEach(uid => {
+      if (now - global.partyVoiceStates[partyId][uid].lastSeen > 15000) {
+        delete global.partyVoiceStates[partyId][uid];
+      }
+    });
+
+    res.json({ members: global.partyVoiceStates[partyId] });
+  } catch (err) {
+    console.error('[Server Voice] Error in /voice-state:', err);
+    res.status(500).json({ error: 'Voice state update failed', details: err.message });
+  }
 });
 
 app.post('/api/parties/:id/voice-signal', auth, (req, res) => {
-  const partyId = req.params.id;
-  const { toUsername, signal } = req.body;
-  const fromUsername = req.user.username;
+  try {
+    const partyId = req.params.id;
+    const { toUsername, signal } = req.body;
+    const fromUsername = req.user.username;
 
-  if (!global.partySignals[partyId]) {
-    global.partySignals[partyId] = [];
+    if (!global.partySignals) global.partySignals = {};
+    if (!global.partySignals[partyId]) {
+      global.partySignals[partyId] = [];
+    }
+
+    global.partySignals[partyId].push({
+      fromUsername,
+      toUsername,
+      signal,
+      timestamp: Date.now()
+    });
+
+    // Keep signal array clean - limit to last 200 items or delete signals older than 1 minute
+    const now = Date.now();
+    global.partySignals[partyId] = global.partySignals[partyId].filter(sig => now - sig.timestamp < 60000);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Server Voice] Error in /voice-signal:', err);
+    res.status(500).json({ error: 'Voice signal post failed', details: err.message });
   }
-
-  global.partySignals[partyId].push({
-    fromUsername,
-    toUsername,
-    signal,
-    timestamp: Date.now()
-  });
-
-  // Keep signal array clean - limit to last 200 items or delete signals older than 1 minute
-  const now = Date.now();
-  global.partySignals[partyId] = global.partySignals[partyId].filter(sig => now - sig.timestamp < 60000);
-
-  res.json({ success: true });
 });
 
 app.get('/api/parties/:id/voice-signals', auth, (req, res) => {
-  const partyId = req.params.id;
-  const username = req.user.username;
+  try {
+    const partyId = req.params.id;
+    const username = req.user.username;
 
-  if (!global.partySignals[partyId]) {
-    return res.json([]);
+    if (!global.partySignals || !global.partySignals[partyId]) {
+      return res.json([]);
+    }
+
+    // Find signals addressed to current user
+    const mySignals = global.partySignals[partyId].filter(sig => sig.toUsername === username);
+
+    // Remove my signals from the main queue
+    global.partySignals[partyId] = global.partySignals[partyId].filter(sig => sig.toUsername !== username);
+
+    res.json(mySignals);
+  } catch (err) {
+    console.error('[Server Voice] Error in /voice-signals:', err);
+    res.status(500).json({ error: 'Voice signals fetch failed', details: err.message });
   }
-
-  // Find signals addressed to current user
-  const mySignals = global.partySignals[partyId].filter(sig => sig.toUsername === username);
-
-  // Remove my signals from the main queue
-  global.partySignals[partyId] = global.partySignals[partyId].filter(sig => sig.toUsername !== username);
-
-  res.json(mySignals);
 });
 
 // (duplicate route removed - session start with partyId is handled above)

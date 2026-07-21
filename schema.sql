@@ -58,10 +58,23 @@ CREATE TABLE IF NOT EXISTS party_members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   party_id INTEGER,
   user_id INTEGER,
+  channel_id INTEGER DEFAULT NULL,
+  role VARCHAR DEFAULT 'member',
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (party_id) REFERENCES parties(id),
   FOREIGN KEY (user_id) REFERENCES users(id),
   UNIQUE(party_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS party_channels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  user_limit INTEGER DEFAULT 0,
+  position INTEGER DEFAULT 0,
+  is_default INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (party_id) REFERENCES parties(id)
 );
 
 CREATE TABLE IF NOT EXISTS friendships (

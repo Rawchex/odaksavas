@@ -995,6 +995,10 @@ async function fetchPartyAndRender(partyId) {
   if (!partyId || partyId === 'undefined' || partyId === 'null') return;
   try {
     const res = await fetch(`/api/parties/${partyId}`);
+    if (res.status === 404 || res.status === 401 || res.status === 403) {
+      if (typeof clearActiveParty === 'function') clearActiveParty();
+      return;
+    }
     if (!res.ok) return;
     const party = await res.json();
     
@@ -1019,8 +1023,10 @@ async function fetchPartyAndRender(partyId) {
     });
     _lastFocusingMembers = newFocusing;
 
-    renderPartyDuel(party.members || []);
-  } catch {}
+    renderPartyDuel(party);
+  } catch (err) {
+    console.error("fetchPartyAndRender error:", err);
+  }
 }
 
 window._lobbyCardSize = localStorage.getItem('os_lobby_size') || 'm';
@@ -1033,13 +1039,20 @@ function setGlobalCardSize(size) {
   }
 }
 
-function renderPartyDuel(members) {
+window._currentPartyData = null;
+
+function renderPartyDuel(partyData) {
+  const party = (partyData && partyData.members) ? partyData : { members: Array.isArray(partyData) ? partyData : [] };
+  const members = party.members || [];
+  window._currentPartyData = party;
+
   const grid      = document.getElementById('partyDuelGrid');
   const solo      = document.getElementById('timerSolo');
   const duelInner = document.getElementById('timerDuelInner');
   const overlay   = document.getElementById('partyFocusOverlay');
   const membersEl = document.getElementById('partyFocusMembers');
   const labelEl   = document.getElementById('partyFocusLabel');
+  const addChanBtn = document.getElementById('addChannelBtnHeader');
 
   if (!members.length || !overlay) {
     if (grid) grid.style.display = 'none';
@@ -1051,18 +1064,35 @@ function renderPartyDuel(members) {
   _duelMode = false;
   solo.style.display      = 'flex';
   duelInner.style.display = 'none';
-  grid.style.display      = 'none'; // old grid hidden
+  if (grid) grid.style.display = 'none';
 
-  const activeCount = members.filter(m => m.active_session_id !== null).length;
-  const timerSmall = document.getElementById('partyFocusTime');
-  
-  if (!window._activeSession) {
-    if (labelEl) labelEl.textContent = `Odak Odası (${members.length} üye)`;
-    if (timerSmall) timerSmall.style.display = 'none';
-  } else {
-    if (labelEl) labelEl.textContent = `${activeCount} kişi odakta`;
-    if (timerSmall) timerSmall.style.display = 'block';
+  // Identify current user's role in party
+  const meMember = members.find(m => m.username === currentUser?.username);
+  const myRole = meMember ? meMember.role : (party.owner_id === currentUser?.id ? 'owner' : 'member');
+  const canManage = ['owner', 'admin', 'moderator'].includes(myRole);
+
+  // Set Party Name Header
+  const partyName = party.name || 'Odak Odası';
+  if (labelEl) {
+    labelEl.innerHTML = `${esc(partyName)} ${canManage ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="margin-left:4px; opacity:0.6;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' : ''}`;
   }
+
+  if (addChanBtn) {
+    addChanBtn.style.display = canManage ? 'inline-block' : 'none';
+  }
+
+  // Find user's current channel
+  const defaultChanId = party.default_channel_id || (party.channels && party.channels[0] ? party.channels[0].id : null);
+  if (meMember) {
+    window._currentChannelId = meMember.channel_id || defaultChanId;
+  } else if (!window._currentChannelId) {
+    window._currentChannelId = defaultChanId;
+  }
+
+  // Render Sub-Channels
+  const channels = (party.channels && party.channels.length > 0) 
+    ? party.channels 
+    : [{ id: defaultChanId, name: 'Genel Odak Odası', user_limit: 0, position: 0, is_default: 1 }];
 
   const maxSecs = members.reduce((max, m) => {
     const isMe = m.username === currentUser?.username;
@@ -1072,47 +1102,405 @@ function renderPartyDuel(members) {
     return Math.max(max, elapsed);
   }, 1);
 
-  membersEl.innerHTML = members.map(m => {
-    const isMe = m.username === currentUser?.username;
-    const isActive = m.active_session_id !== null || (isMe && window._activeSession);
-    const sessionStartUtc = m.session_start ? new Date(m.session_start.replace(' ', 'T') + 'Z') : null;
-    const elapsed = isMe ? _sessionElapsed : (isActive && sessionStartUtc ? Math.floor((Date.now() - sessionStartUtc.getTime()) / 1000) : 0);
-    const pct = isActive ? Math.min(100, (elapsed / maxSecs) * 100) : 0;
+  membersEl.innerHTML = channels.map((chan, index) => {
+    const channelMembers = members.filter(m => parseInt(m.channel_id) === parseInt(chan.id) || (!m.channel_id && chan.is_default));
+    const isCurrentChannel = window._currentChannelId && parseInt(window._currentChannelId) === parseInt(chan.id);
+    const isFull = chan.user_limit > 0 && channelMembers.length >= chan.user_limit;
 
     return `
-      <div class="party-focus-member ${isMe ? 'is-me' : ''}" id="member-card-${m.username}">
-        <div style="position:relative; display:flex;">
-          ${renderAvatar(m, 'avatar avatar-sm')}
-        </div>
-        <div class="party-focus-member-info" style="flex:1;">
-          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-            <span class="party-focus-member-name" style="cursor:${isMe ? 'default':'pointer'}" ${isMe ? '' : `onclick="openUserPage('${esc(m.username)}')"`}>
-              ${esc(m.username)}
-            </span>
-            ${isMe ? '<span style="font-size:8px; color:#000; background:#fff; padding:2px 5px; border-radius:4px; font-weight:900; vertical-align:middle; line-height:1;">SEN</span>' : ''}
-            <!-- Voice status badge container -->
-            <div id="voice-badge-${m.username}" style="display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"></div>
-          </div>
-          <div class="party-focus-member-bar-wrap">
-            <div class="party-focus-member-bar ${isMe ? 'is-me' : (isActive ? 'live' : '')}" style="width:${pct}%"></div>
-          </div>
-        </div>
+      <div class="sub-channel-card ${isCurrentChannel ? 'active-channel' : ''}" 
+           id="channel-card-${chan.id}"
+           ondragover="handleChannelDragOver(event)" 
+           ondragleave="handleChannelDragLeave(event)" 
+           ondrop="handleChannelDrop(event, ${chan.id})">
         
-        <!-- Voice settings button for other users -->
-        ${isMe ? '' : `
-          <button class="member-voice-settings-btn" data-username="${esc(m.username)}" onclick="openUserVoiceModal('${esc(m.username)}')" title="Ses Ayarları" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:6px; display:flex; align-items:center; justify-content:center; transition:all 0.2s; margin-right:8px; border-radius:50%;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          </button>
-        `}
-        <span class="party-focus-member-time ${isMe ? 'is-me' : ''}">${isActive ? fmtTimeClock(elapsed) : '—'}</span>
+        <div class="sub-channel-header" onclick="joinSubChannel(${chan.id})">
+          <div class="sub-channel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="${isCurrentChannel ? '#4ade80' : 'currentColor'}" stroke-width="2" width="14" height="14"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            <span style="color:${isCurrentChannel ? '#4ade80' : '#fff'}">${esc(chan.name)}</span>
+            ${isCurrentChannel ? '<span style="font-size:9px; color:#000; background:#4ade80; padding:1px 5px; border-radius:4px; font-weight:900;">BAĞLI</span>' : ''}
+          </div>
+
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="sub-channel-badge ${isFull ? 'full' : ''}">
+              ${channelMembers.length}${chan.user_limit > 0 ? `/${chan.user_limit}` : ''}
+            </span>
+
+            ${canManage ? `
+              <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:2px;">
+                ${index > 0 ? `<button onclick="reorderChannel(${chan.id}, -1)" title="Yukarı Taşın" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">▲</button>` : ''}
+                ${index < channels.length - 1 ? `<button onclick="reorderChannel(${chan.id}, 1)" title="Aşağı Taşın" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">▼</button>` : ''}
+                <button onclick="promptEditChannel(${chan.id}, '${esc(chan.name)}', ${chan.user_limit})" title="Kanalı Düzenle" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">✏️</button>
+                ${!chan.is_default ? `<button onclick="promptDeleteChannel(${chan.id})" title="Kanalı Sil" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">🗑️</button>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="sub-channel-members-list" style="display:flex; flex-direction:column; gap:6px;">
+          ${channelMembers.length === 0 ? '<div style="font-size:11px; color:rgba(255,255,255,0.2); padding:4px 8px; font-style:italic;">Kanalda kimse yok</div>' : ''}
+          ${channelMembers.map(m => {
+            const isMe = m.username === currentUser?.username;
+            const isActive = m.active_session_id !== null || (isMe && window._activeSession);
+            const sessionStartUtc = m.session_start ? new Date(m.session_start.replace(' ', 'T') + 'Z') : null;
+            const elapsed = isMe ? _sessionElapsed : (isActive && sessionStartUtc ? Math.floor((Date.now() - sessionStartUtc.getTime()) / 1000) : 0);
+            const pct = isActive ? Math.min(100, (elapsed / maxSecs) * 100) : 0;
+            const roleClass = m.role || 'member';
+
+            return `
+              <div class="party-focus-member ${isMe ? 'is-me' : ''} ${canManage ? 'draggable-member' : ''}" 
+                   id="member-card-${m.username}"
+                   ${canManage ? `draggable="true" ondragstart="handleMemberDragStart(event, ${m.id})"` : ''}
+                   onclick="openUserVoiceModal('${esc(m.username)}')"
+                   style="cursor:pointer;">
+                <div style="position:relative; display:flex;">
+                  ${renderAvatar(m, 'avatar avatar-sm')}
+                </div>
+                <div class="party-focus-member-info" style="flex:1;">
+                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    <span class="party-focus-member-name">
+                      ${esc(m.username)}
+                    </span>
+                    <span class="role-badge ${roleClass}">
+                      ${roleClass === 'owner' ? 'KURUCU' : (roleClass === 'admin' ? 'YÖNETİCİ' : (roleClass === 'moderator' ? 'MODERATÖR' : 'ÜYE'))}
+                    </span>
+                    ${isMe ? '<span style="font-size:8px; color:#000; background:#fff; padding:2px 5px; border-radius:4px; font-weight:900; vertical-align:middle; line-height:1;">SEN</span>' : ''}
+                    <div id="voice-badge-${m.username}" style="display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"></div>
+                  </div>
+                  <div class="party-focus-member-bar-wrap">
+                    <div class="party-focus-member-bar ${isMe ? 'is-me' : (isActive ? 'live' : '')}" style="width:${pct}%"></div>
+                  </div>
+                </div>
+                
+                <span class="party-focus-member-time ${isMe ? 'is-me' : ''}">${isActive ? fmtTimeClock(elapsed) : '—'}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
     `;
   }).join('');
 
   overlay.style.display = 'block';
 
+  // Sound Notification logic: Scoped strictly to current user's sub-channel
+  const myChanId = window._currentChannelId || party.default_channel_id;
+  const currentMyChannelUsers = new Set(
+    (members || [])
+      .filter(m => {
+        const cId = m.channel_id ? parseInt(m.channel_id) : party.default_channel_id;
+        return parseInt(cId) === parseInt(myChanId);
+      })
+      .map(m => m.username)
+  );
+
+  if (window._lastMyChannelUsers !== undefined && window._lastMyChannelId === myChanId) {
+    let playedSound = false;
+
+    // Check if anyone joined my channel
+    currentMyChannelUsers.forEach(uname => {
+      if (uname !== currentUser?.username && !window._lastMyChannelUsers.has(uname) && !playedSound) {
+        playChannelSound('connect');
+        playedSound = true;
+      }
+    });
+
+    // Check if anyone left my channel
+    window._lastMyChannelUsers.forEach(uname => {
+      if (uname !== currentUser?.username && !currentMyChannelUsers.has(uname) && !playedSound) {
+        playChannelSound('disconnect');
+        playedSound = true;
+      }
+    });
+  }
+
+  window._lastMyChannelUsers = currentMyChannelUsers;
+  window._lastMyChannelId = myChanId;
+
   if (typeof updateLobbyVoiceBadges === 'function') {
     updateLobbyVoiceBadges();
+  }
+}
+
+// ─── AUDIO NOTIFICATION PLAYER ────────────────────────────────
+function playChannelSound(type) {
+  try {
+    const volSetting = localStorage.getItem('os_channel_sound_volume');
+    const vol = volSetting !== null ? parseInt(volSetting) / 100 : 1.0;
+    if (vol <= 0) return;
+
+    const audioPath = type === 'connect' ? '/audio/connect.wav' : '/audio/disconnect.wav';
+    const audio = new Audio(audioPath);
+    audio.volume = Math.max(0, Math.min(1, vol));
+    audio.play().catch(e => console.warn('[Sound] Audio play prevented:', e));
+  } catch (e) {
+    console.warn('[Sound] Error playing channel sound:', e);
+  }
+}
+
+// ─── CUSTOM CHANNEL & MANAGEMENT MODAL HANDLERS ───────────────
+window._ccmMode = null; // 'rename_party' | 'add_channel' | 'edit_channel'
+window._ccmTargetChannelId = null;
+
+function openChannelConfigModal(mode, options = {}) {
+  window._ccmMode = mode;
+  window._ccmTargetChannelId = options.channelId || null;
+
+  const modal = document.getElementById('channelConfigModal');
+  const title = document.getElementById('ccmTitle');
+  const nameLabel = document.getElementById('ccmNameLabel');
+  const nameInput = document.getElementById('ccmNameInput');
+  const limitWrap = document.getElementById('ccmLimitWrap');
+  const limitInput = document.getElementById('ccmLimitInput');
+  const deleteBtn = document.getElementById('ccmDeleteBtn');
+
+  if (!modal) return;
+
+  if (mode === 'rename_party') {
+    if (title) title.textContent = 'Oda Adını Değiştir';
+    if (nameLabel) nameLabel.textContent = 'ODA ADI';
+    if (nameInput) nameInput.value = options.currentName || '';
+    if (limitWrap) limitWrap.style.display = 'none';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+  } else if (mode === 'add_channel') {
+    if (title) title.textContent = 'Yeni Alt Oda Ekle';
+    if (nameLabel) nameLabel.textContent = 'KANAL ADI';
+    if (nameInput) nameInput.value = '';
+    if (limitWrap) limitWrap.style.display = 'block';
+    if (limitInput) limitInput.value = '0';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+  } else if (mode === 'edit_channel') {
+    if (title) title.textContent = 'Alt Odayı Düzenle';
+    if (nameLabel) nameLabel.textContent = 'KANAL ADI';
+    if (nameInput) nameInput.value = options.currentName || '';
+    if (limitWrap) limitWrap.style.display = 'block';
+    if (limitInput) limitInput.value = options.currentLimit || 0;
+    if (deleteBtn) deleteBtn.style.display = options.isDefault ? 'none' : 'inline-block';
+  }
+
+  modal.classList.add('open');
+  if (nameInput) setTimeout(() => nameInput.focus(), 100);
+}
+
+function closeChannelConfigModal() {
+  const modal = document.getElementById('channelConfigModal');
+  if (modal) modal.classList.remove('open');
+  window._ccmMode = null;
+  window._ccmTargetChannelId = null;
+}
+
+async function submitChannelConfigModal() {
+  if (!window._currentPartyId || !window._ccmMode) return;
+
+  const nameInput = document.getElementById('ccmNameInput');
+  const limitInput = document.getElementById('ccmLimitInput');
+  const name = nameInput ? nameInput.value.trim() : '';
+  const userLimit = limitInput ? parseInt(limitInput.value) || 0 : 0;
+
+  if (!name) {
+    if (typeof showToast === 'function') showToast('Lütfen geçerli bir isim giriniz');
+    return;
+  }
+
+  try {
+    if (window._ccmMode === 'rename_party') {
+      const res = await fetch(`/api/parties/${window._currentPartyId}/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (res.ok) {
+        showToast('Oda adı güncellendi');
+        closeChannelConfigModal();
+        fetchPartyAndRender(window._currentPartyId);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Güncellenemedi');
+      }
+    } else if (window._ccmMode === 'add_channel') {
+      const res = await fetch(`/api/parties/${window._currentPartyId}/channels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, userLimit })
+      });
+      if (res.ok) {
+        showToast('Alt oda eklendi');
+        playChannelSound('connect');
+        closeChannelConfigModal();
+        fetchPartyAndRender(window._currentPartyId);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Eklenemedi');
+      }
+    } else if (window._ccmMode === 'edit_channel' && window._ccmTargetChannelId) {
+      const res = await fetch(`/api/parties/${window._currentPartyId}/channels/${window._ccmTargetChannelId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, userLimit })
+      });
+      if (res.ok) {
+        showToast('Alt oda güncellendi');
+        closeChannelConfigModal();
+        fetchPartyAndRender(window._currentPartyId);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || 'Güncellenemedi');
+      }
+    }
+  } catch (e) {
+    console.error('Submit channel config error:', e);
+  }
+}
+
+async function submitChannelDeleteFromModal() {
+  if (!window._currentPartyId || !window._ccmTargetChannelId) return;
+
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/channels/${window._ccmTargetChannelId}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      showToast('Alt oda silindi');
+      playChannelSound('disconnect');
+      closeChannelConfigModal();
+      fetchPartyAndRender(window._currentPartyId);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Silinemedi');
+    }
+  } catch (e) {
+    console.error('Delete channel error:', e);
+  }
+}
+
+function triggerPartyRenameFromHeader() {
+  if (!window._currentPartyId || !window._currentPartyData) return;
+  const me = (window._currentPartyData.members || []).find(m => m.username === currentUser?.username);
+  const canManage = me && ['owner', 'admin', 'moderator'].includes(me.role);
+  if (!canManage) return;
+
+  const currentName = window._currentPartyData.name || '';
+  openChannelConfigModal('rename_party', { currentName });
+}
+
+function promptAddChannel() {
+  if (!window._currentPartyId) return;
+  openChannelConfigModal('add_channel');
+}
+
+function promptEditChannel(chanId, currentName, currentLimit) {
+  if (!window._currentPartyId) return;
+  const chan = (window._currentPartyData?.channels || []).find(c => parseInt(c.id) === parseInt(chanId));
+  openChannelConfigModal('edit_channel', { channelId: chanId, currentName, currentLimit, isDefault: chan ? chan.is_default : false });
+}
+
+function promptDeleteChannel(chanId) {
+  if (!window._currentPartyId) return;
+  const chan = (window._currentPartyData?.channels || []).find(c => parseInt(c.id) === parseInt(chanId));
+  openChannelConfigModal('edit_channel', { channelId: chanId, currentName: chan ? chan.name : '', currentLimit: chan ? chan.user_limit : 0, isDefault: chan ? chan.is_default : false });
+}
+
+async function reorderChannel(chanId, direction) {
+  if (!window._currentPartyId || !window._currentPartyData) return;
+  const channels = window._currentPartyData.channels || [];
+  const idx = channels.findIndex(c => parseInt(c.id) === parseInt(chanId));
+  if (idx === -1) return;
+
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= channels.length) return;
+
+  // Swap position values
+  const reordered = channels.map((c, i) => ({ id: c.id, position: i }));
+  const tempPos = reordered[idx].position;
+  reordered[idx].position = reordered[targetIdx].position;
+  reordered[targetIdx].position = tempPos;
+
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/channels-reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channels: reordered })
+    });
+    if (res.ok) {
+      fetchPartyAndRender(window._currentPartyId);
+    }
+  } catch (e) {
+    console.error('Reorder channels error:', e);
+  }
+}
+
+async function joinSubChannel(chanId) {
+  if (!window._currentPartyId) return;
+  if (window._currentChannelId && parseInt(window._currentChannelId) === parseInt(chanId)) return;
+
+  const targetChan = (window._currentPartyData?.channels || []).find(c => parseInt(c.id) === parseInt(chanId));
+  const chanName = targetChan ? targetChan.name : 'Kanal';
+
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/channels/${chanId}/join`, {
+      method: 'POST'
+    });
+    if (res.ok) {
+      window._currentChannelId = chanId;
+      showToast(`"${chanName}" kanalına geçildi`);
+      fetchPartyAndRender(window._currentPartyId);
+      if (typeof maintainPeerConnections === 'function') maintainPeerConnections();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Kanala katılamadı');
+    }
+  } catch (e) {
+    console.error('Join channel error:', e);
+  }
+}
+
+// Drag and Drop Event Handlers
+function handleMemberDragStart(e, memberUserId) {
+  e.stopPropagation();
+  e.dataTransfer.setData('text/plain', memberUserId.toString());
+  e.target.classList.add('dragging');
+  setTimeout(() => e.target.classList.remove('dragging'), 500);
+}
+
+function handleChannelDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function handleChannelDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.remove('drag-over');
+}
+
+async function handleChannelDrop(e, targetChannelId) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.remove('drag-over');
+
+  const userIdStr = e.dataTransfer.getData('text/plain');
+  const targetUserId = parseInt(userIdStr);
+  if (!targetUserId || !window._currentPartyId) return;
+
+  const targetChan = (window._currentPartyData?.channels || []).find(c => parseInt(c.id) === parseInt(targetChannelId));
+  const chanName = targetChan ? targetChan.name : 'Kanal';
+
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${targetUserId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: parseInt(targetChannelId) })
+    });
+    if (res.ok) {
+      showToast(`Kullanıcı "${chanName}" kanalına taşındı`);
+      fetchPartyAndRender(window._currentPartyId);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Taşıma başarısız');
+    }
+  } catch (e) {
+    console.error('Channel drop error:', e);
   }
 }
 
@@ -1152,10 +1540,14 @@ function setActiveParty(partyId) {
     return;
   }
   _currentPartyId = partyId;
+  window._currentPartyId = partyId;
   const info = document.getElementById('activePartyInfo');
   const btn  = document.getElementById('timerPartyBtn');
   const chatBtn = document.getElementById('timerChatBtn');
   const leaveBtn = document.getElementById('timerLeavePartyBtn');
+  
+  const soloPartyRow = document.getElementById('soloPartyControlsRow');
+  if (soloPartyRow) soloPartyRow.style.display = 'none';
   
   if (info) {
     info.style.display = 'none';
@@ -1183,18 +1575,27 @@ function setActiveParty(partyId) {
 
 function clearActiveParty() {
   _currentPartyId = null;
+  window._currentPartyId = null;
   _duelMode = false;
-  clearInterval(_partyPollInterval);
-  _partyPollInterval = null;
+
+  if (_partyPollInterval) { clearInterval(_partyPollInterval); _partyPollInterval = null; }
+  if (_partyMessagesPoller) { clearInterval(_partyMessagesPoller); _partyMessagesPoller = null; }
+  if (_partyLiveUIRefresh) { clearInterval(_partyLiveUIRefresh); _partyLiveUIRefresh = null; }
+
   if (typeof stopVoiceChat === 'function') {
     stopVoiceChat();
   }
+
   const info = document.getElementById('activePartyInfo');
   const btn  = document.getElementById('timerPartyBtn');
   const chatBtn = document.getElementById('timerChatBtn');
   const leaveBtn = document.getElementById('timerLeavePartyBtn');
-  
+  const overlay = document.getElementById('partyFocusOverlay');
+  const soloPartyRow = document.getElementById('soloPartyControlsRow');
+
+  if (overlay) overlay.style.display = 'none';
   if (info) info.style.display = 'none';
+  if (soloPartyRow) soloPartyRow.style.display = 'flex';
   if (btn) {
     btn.style.display  = 'block';
     btn.innerHTML = `
@@ -1202,16 +1603,17 @@ function clearActiveParty() {
       Odak Odası
     `;
   }
-  if (chatBtn) {
-    chatBtn.style.display = 'none';
-  }
-  if (leaveBtn) {
-    leaveBtn.style.display = 'none';
-  }
-  togglePartyChatModal(false);
-  
-  document.getElementById('timerSolo').style.display      = 'flex';
-  document.getElementById('timerDuelInner').style.display = 'none';
+  if (chatBtn) chatBtn.style.display = 'none';
+  if (leaveBtn) leaveBtn.style.display = 'none';
+  if (typeof togglePartyChatModal === 'function') togglePartyChatModal(false);
+
+  const solo = document.getElementById('timerSolo');
+  const duelInner = document.getElementById('timerDuelInner');
+  if (solo) solo.style.display = 'flex';
+  if (duelInner) duelInner.style.display = 'none';
+
+  _partyLiveMembers = [];
+  _lastFocusingMembers = {};
 }
 
 async function checkActiveParty() {
@@ -1231,28 +1633,37 @@ async function checkActiveParty() {
 }
 
 async function leavePartyFromTimer() {
-  if (!_currentPartyId) return;
+  if (!_currentPartyId) {
+    if (typeof clearActiveParty === 'function') clearActiveParty();
+    return;
+  }
+  const pid = _currentPartyId;
   try {
-    const res = await fetch(`/api/parties/${_currentPartyId}`);
+    const res = await fetch(`/api/parties/${pid}`);
     if (!res.ok) {
       if (typeof leaveParty === 'function') {
-        await leaveParty(_currentPartyId);
+        await leaveParty(pid);
+      } else if (typeof clearActiveParty === 'function') {
+        clearActiveParty();
       }
       return;
     }
     const party = await res.json();
-    const isOwner = party.owner_id === currentUser.id;
+    const isOwner = currentUser && party.owner_id === currentUser.id;
     if (isOwner) {
       if (typeof deleteParty === 'function') {
-        await deleteParty(_currentPartyId);
+        await deleteParty(pid);
       }
     } else {
       if (typeof leaveParty === 'function') {
-        await leaveParty(_currentPartyId);
+        await leaveParty(pid);
       }
     }
   } catch (err) {
     console.error('Leave party from timer failed:', err);
+  } finally {
+    if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+    if (typeof clearActiveParty === 'function') clearActiveParty();
   }
 }
 
@@ -1377,16 +1788,16 @@ function startStatusChipAnimation() {
         { transform: 'translateY(-50%) scale(1)',    opacity: 1 },
         { transform: 'translateY(-50%) scale(1.45)', opacity: 1, offset: 0.3 },
         { transform: 'translateY(-50%) translateX(-32px) scale(0.1)', opacity: 0 }
-      ], { duration: 290, easing: FAST_OUT, fill: 'forwards' }).finished);
+      ], { duration: 290, easing: FAST_OUT, fill: 'forwards' }).finished.catch(() => {}));
     }
     if (textEl) {
       freeze(textEl);
       exits.push(textEl.animate([
         { opacity: 1, transform: 'translateY(-50%) translateX(-50%) scale(1)' },
         { opacity: 0, transform: 'translateY(-66%) translateX(-50%) scale(0.82)' }
-      ], { duration: 210, easing: FAST_OUT, fill: 'forwards' }).finished);
+      ], { duration: 210, easing: FAST_OUT, fill: 'forwards' }).finished.catch(() => {}));
     }
-    await Promise.all(exits);
+    await Promise.all(exits).catch(() => {});
 
     // ─ Switch chip width state ─
     chip.classList.remove('state-status');
@@ -1413,7 +1824,7 @@ function startStatusChipAnimation() {
         if (chip.classList.contains('state-profile') && nameEl) {
           nameEl.style.animation = 'metallicShimmer 5s 0.5s ease-in-out infinite';
         }
-      });
+      }).catch(() => {});
     }
 
     // ─ ENTER: dot shoots in from right (60ms after username) ─
@@ -1427,7 +1838,7 @@ function startStatusChipAnimation() {
         { transform: 'translateY(-50%) translateX(0)    scale(1)',    opacity: 1 }
       ], { duration: 510, easing: SPRING, fill: 'forwards' }).finished.then(() => {
         startIdle('profile');
-      });
+      }).catch(() => {});
     }
   };
 
@@ -1445,23 +1856,23 @@ function startStatusChipAnimation() {
         { transform: 'translateY(-50%) scale(1)',    opacity: 1 },
         { transform: 'translateY(-50%) scale(1.45)', opacity: 1, offset: 0.28 },
         { transform: 'translateY(-50%) translateX(-32px) scale(0.1)', opacity: 0 }
-      ], { duration: 275, easing: FAST_OUT, fill: 'forwards' }).finished);
+      ], { duration: 275, easing: FAST_OUT, fill: 'forwards' }).finished.catch(() => {}));
     }
     if (nameEl) {
       freeze(nameEl);
       exits.push(nameEl.animate([
         { opacity: 1, transform: 'translateY(-50%) translateX(0)' },
         { opacity: 0, transform: 'translateY(-50%) translateX(-18px)' }
-      ], { duration: 195, easing: FAST_OUT, fill: 'forwards' }).finished);
+      ], { duration: 195, easing: FAST_OUT, fill: 'forwards' }).finished.catch(() => {}));
     }
     if (avatarEl) {
       freeze(avatarEl);
       exits.push(avatarEl.animate([
         { opacity: 1, transform: 'translateY(-50%) translateX(0) scale(1)' },
         { opacity: 0, transform: 'translateY(-50%) translateX(-24px) scale(0.6)' }
-      ], { duration: 230, delay: 35, easing: FAST_OUT, fill: 'forwards' }).finished);
+      ], { duration: 230, delay: 35, easing: FAST_OUT, fill: 'forwards' }).finished.catch(() => {}));
     }
-    await Promise.all(exits);
+    await Promise.all(exits).catch(() => {});
 
     // ─ Switch chip width state ─
     chip.classList.remove('state-profile');
@@ -1487,7 +1898,7 @@ function startStatusChipAnimation() {
         { transform: 'translateY(-50%) translateX(0)    scale(1)',    opacity: 1 }
       ], { duration: 490, easing: SPRING, fill: 'forwards' }).finished.then(() => {
         startIdle('status');
-      });
+      }).catch(() => {});
     }
   };
 

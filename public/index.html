@@ -391,16 +391,40 @@
       <div class="party-focus-overlay" id="partyFocusOverlay" style="display:none">
         <div class="party-focus-header" style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="party-focus-label" id="partyFocusLabel">Odak Odası</span>
+            <span class="party-focus-label" id="partyFocusLabel" style="font-size:15px; font-weight:900; color:#fff; cursor:pointer;" onclick="triggerPartyRenameFromHeader()" title="Oda Adını Düzenle">Odak Odası</span>
             <span class="party-focus-timer-small" id="partyFocusTime">00:00</span>
           </div>
-          <!-- Voice control buttons inside lobby -->
-          <div class="voice-lobby-controls" style="display:flex; align-items:center; gap:8px;">
+          <!-- Manager Add Channel Button -->
+          <button id="addChannelBtnHeader" onclick="promptAddChannel()" style="display:none; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; font-size:11px; font-weight:800; padding:6px 12px; border-radius:8px; cursor:pointer; transition:all 0.2s;">
+            + Alt Oda Ekle
+          </button>
+        </div>
+
+        <div class="party-focus-members" id="partyFocusMembers" style="margin-top:12px;"></div>
+
+        <!-- Bottom Controls Bar inside Focus Room Modal -->
+        <div class="party-focus-footer" style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box; margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.08);">
+          <div class="voice-lobby-controls" style="display:flex; align-items:center; gap:6px;">
             <button id="voiceMicToggleBtn" class="voice-ctrl-btn" onclick="setMicMuteState(!window._micMuted)" title="Mikrofonu Kapat/Aç"></button>
             <button id="voiceDeafToggleBtn" class="voice-ctrl-btn" onclick="setDeafState(!window._deafened)" title="Kulaklığı Kapat/Aç"></button>
           </div>
+
+          <div class="timer-secondary-row" style="margin:0; display:flex; align-items:center; gap:8px;">
+            <button class="timer-room-btn" id="timerPartyBtn" onclick="openPartyModal()" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Lobi Yönetimi
+            </button>
+            <button class="timer-chat-btn" id="timerChatBtn" onclick="togglePartyChatModal(true)" style="display:none; position:relative;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Sohbet
+              <div id="partyChatUnreadBadge" style="display:none;">0</div>
+            </button>
+            <button class="timer-leave-btn" id="timerLeavePartyBtn" onclick="leavePartyFromTimer()" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Ayrıl
+            </button>
+          </div>
         </div>
-        <div class="party-focus-members" id="partyFocusMembers"></div>
       </div>
 
       <!-- Controls -->
@@ -411,22 +435,15 @@
         <button class="timer-stop-btn" id="timerStopBtn" onclick="stopFocusSession()" style="display:none">
           Bitir
         </button>
-
-        <div class="timer-secondary-row">
-          <button class="timer-room-btn" id="timerPartyBtn" onclick="openPartyModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Odak Odası
-          </button>
-          <button class="timer-chat-btn" id="timerChatBtn" onclick="togglePartyChatModal(true)" style="display:none; position:relative;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Sohbet
-            <div id="partyChatUnreadBadge" style="display:none;">0</div>
-          </button>
-          <button class="timer-leave-btn" id="timerLeavePartyBtn" onclick="leavePartyFromTimer()" style="display:none">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            Ayrıl
+        
+        <!-- Solo mode Party Join/Create button -->
+        <div id="soloPartyControlsRow" style="display:flex; justify-content:center; width:100%; margin-top:14px;">
+          <button class="timer-room-btn" id="timerSoloPartyBtn" onclick="openPartyModal()" style="display:flex; align-items:center; gap:8px; padding:10px 18px; font-size:13px; font-weight:800; border-radius:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; cursor:pointer; transition:all 0.2s;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Odak Odalarına Katıl / Oluştur
           </button>
         </div>
+
         <div id="activePartyInfo" style="display:none;"></div>
       </div>
     </div>
@@ -515,7 +532,7 @@
       <div class="topbar" style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;">
         <span class="topbar-title">Profil</span>
         <!-- Settings button in sticky topbar -->
-        <button class="topbar-settings-btn" onclick="openProfileSettings()" title="Ayarlar" style="background:none; border:none; color:#fff; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
+        <button class="topbar-settings-btn" onclick="openProfileSettings(); event.stopPropagation();" title="Ayarlar" style="background:none; border:none; color:#fff; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
         </button>
       </div>
@@ -695,6 +712,7 @@
       <span class="modal-close" onclick="closeReactionDetailsModal()">✕</span>
     </div>
     <div style="padding:0 20px 30px; display:flex; flex-direction:column; gap:12px; max-height:50dvh; overflow-y:auto;" id="reactionDetailsList"></div>
+  </div>
 </div>
 
 <!-- ── CHAT POST VIEW MODAL ── -->
@@ -916,6 +934,14 @@
         <select id="settingsMicDeviceSelect" onchange="handleMicDeviceChange(this.value)" style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box; cursor:pointer; font-size:13px;"></select>
       </div>
 
+      <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label class="profile-settings-label" style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Kanal Katılma / Ayrılma Ses Seviyesi</label>
+          <span id="settingsChannelSoundVolVal" style="font-size:11px; font-weight:800; color:#fff; font-family:monospace;">100%</span>
+        </div>
+        <input type="range" id="settingsChannelSoundVol" min="0" max="100" value="100" oninput="handleChannelSoundVolChange(this.value)" style="width:100%; accent-color:#fff; cursor:pointer; height:6px; border-radius:3px; background:rgba(255,255,255,0.1);">
+      </div>
+
       <button class="mono-btn-primary" onclick="saveSettings()" id="settingsSaveBtn" style="margin:8px 0 0; padding:14px; font-size:13px; font-weight:700; border-radius:12px;">AYARLARI KAYDET</button>
     </div>
 
@@ -942,29 +968,76 @@
   </div>
 </div>
 
-<!-- ── USER VOICE SETTINGS MODAL ── -->
+<!-- ── USER VOICE & ROLE SETTINGS MODAL ── -->
 <div class="modal-overlay" id="userVoiceSettingsModal" style="z-index:999999;">
   <div class="modal-sheet" style="max-width:340px; text-align:center; padding:24px 20px; background:rgba(10, 10, 10, 0.95); border:1px solid rgba(255,255,255,0.06); border-radius:24px; backdrop-filter:blur(20px); box-shadow:0 24px 64px rgba(0,0,0,0.8); position:relative; box-sizing:border-box; width:calc(100% - 32px);">
     <span class="modal-close" onclick="closeUserVoiceModal()" style="position:absolute; top:20px; right:20px; font-size:18px; color:var(--text-3); cursor:pointer;">✕</span>
     
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; width:100%; text-align:left;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; width:100%; text-align:left;">
       <div id="uvAvatarContainer" style="display:flex;"></div>
-      <div id="uvLatency" style="font-size:11px; font-weight:900; color:#4ade80; background:rgba(74,222,128,0.1); padding:4px 8px; border-radius:8px; font-family:monospace; letter-spacing:0.5px;">MS: --</div>
+      <div id="uvLatency" style="font-size:11px; font-weight:800; color:#fff; font-family:monospace; letter-spacing:0.5px;">MS: --</div>
     </div>
 
-    <div style="text-align:left; margin-bottom:20px;">
+    <div style="text-align:left; margin-bottom:16px;">
       <div id="uvUsername" style="font-size:18px; font-weight:900; color:#fff; margin-bottom:4px;">Kullanıcı</div>
-      <div style="font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; font-weight:700;">Ses Ayarları</div>
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+        <span id="uvStatusLabel" style="font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; color:#888;">Çevrimdışı</span>
+        <span style="font-size:11px; color:var(--text-3);">•</span>
+        <span id="uvRoleBadge" class="role-badge member">ÜYE</span>
+      </div>
     </div>
 
-    <div style="text-align:left; margin-bottom:24px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:16px; border-radius:16px; box-sizing:border-box;">
-      <label style="display:block; font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">Ses Düzeyi</label>
+    <!-- Manager Controls Section (Role & Channel Moving) -->
+    <div id="uvManagerControls" style="display:none; text-align:left; margin-bottom:16px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); padding:14px; border-radius:14px; box-sizing:border-box;">
+      <div id="uvRoleSelectWrap" style="margin-bottom:12px; display:none;">
+        <label style="display:block; font-size:10px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">YETKİ / ROL ATAMA</label>
+        <select id="uvRoleSelect" onchange="handleUvRoleChange(this.value)" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 10px; color:#fff; font-size:12px; outline:none; cursor:pointer;">
+          <option value="member">Üye</option>
+          <option value="moderator">Moderatör</option>
+          <option value="admin">Yönetici</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="display:block; font-size:10px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">ALT KANAL TAŞI</label>
+        <select id="uvChannelSelect" onchange="handleUvChannelMove(this.value)" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 10px; color:#fff; font-size:12px; outline:none; cursor:pointer;"></select>
+      </div>
+    </div>
+
+    <!-- Audio Volume Controls -->
+    <div style="text-align:left; margin-bottom:20px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:16px; border-radius:16px; box-sizing:border-box;">
+      <label style="display:block; font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">SES DÜZEYİ</label>
       <input type="range" id="uvVolumeSlider" min="0" max="100" value="100" oninput="handleUvVolumeChange(this.value)" style="width:100%; accent-color:#fff; cursor:pointer; height:6px; border-radius:3px; background:rgba(255,255,255,0.1);">
     </div>
 
     <button class="mono-btn-primary" id="uvMuteToggleBtn" onclick="handleUvMuteToggle()" style="margin:0; padding:14px; font-size:13px; font-weight:700; width:100%; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:8px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur
     </button>
+  </div>
+</div>
+
+<!-- ── CUSTOM CHANNEL & PARTY CONFIG MODAL ── -->
+<div class="modal-overlay" id="channelConfigModal" style="z-index:999999;">
+  <div class="modal-sheet" style="max-width:360px; text-align:left; padding:24px 20px; background:rgba(10, 10, 10, 0.95); border:1px solid rgba(255,255,255,0.08); border-radius:24px; backdrop-filter:blur(20px); box-shadow:0 24px 64px rgba(0,0,0,0.8); position:relative; box-sizing:border-box; width:calc(100% - 32px);">
+    <span class="modal-close" onclick="closeChannelConfigModal()" style="position:absolute; top:20px; right:20px; font-size:18px; color:var(--text-3); cursor:pointer;">✕</span>
+    
+    <div style="font-size:16px; font-weight:900; color:#fff; margin-bottom:16px;" id="ccmTitle">Oda Ayarları</div>
+    
+    <div style="margin-bottom:14px;" id="ccmNameWrap">
+      <label style="display:block; font-size:10px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;" id="ccmNameLabel">KANAL ADI</label>
+      <input type="text" id="ccmNameInput" placeholder="Örn: Kitap Okuma" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 12px; color:#fff; font-size:13px; outline:none; box-sizing:border-box;">
+    </div>
+
+    <div style="margin-bottom:20px;" id="ccmLimitWrap">
+      <label style="display:block; font-size:10px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">KULLANICI LİMİTİ (0 = SINIRSIZ)</label>
+      <input type="number" id="ccmLimitInput" min="0" max="100" placeholder="0" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 12px; color:#fff; font-size:13px; outline:none; box-sizing:border-box;">
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; width:100%;">
+      <button class="mono-btn-primary" id="ccmSaveBtn" onclick="submitChannelConfigModal()" style="flex:1; margin:0; padding:12px; font-size:13px; font-weight:800; border-radius:12px;">Kaydet</button>
+      <button id="ccmDeleteBtn" onclick="submitChannelDeleteFromModal()" style="display:none; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.3); color:#ef4444; padding:12px 14px; font-size:13px; font-weight:800; border-radius:12px; cursor:pointer;">Sil</button>
+      <button class="mono-btn-secondary" onclick="closeChannelConfigModal()" style="margin:0; padding:12px 14px; font-size:13px; font-weight:700; border-radius:12px;">İptal</button>
+    </div>
   </div>
 </div>
 

@@ -242,12 +242,22 @@ function reportDeviceType() {
 
 function startHeartbeat() {
   reportDeviceType(); // Report device on load
-  fetch('/api/me/heartbeat', { method: 'PATCH' }).catch(()=>{});
-  setInterval(() => {
+  const sendHb = () => {
     if (currentUser) {
       fetch('/api/me/heartbeat', { method: 'PATCH' }).catch(()=>{});
     }
-  }, 30000);
+  };
+  sendHb();
+  setInterval(sendHb, 15000);
+
+  // Send instant offline signal when closing browser or navigating away
+  const sendOffline = () => {
+    if (currentUser && navigator.sendBeacon) {
+      navigator.sendBeacon('/api/me/offline');
+    }
+  };
+  window.addEventListener('beforeunload', sendOffline);
+  window.addEventListener('pagehide', sendOffline);
 }
 
 

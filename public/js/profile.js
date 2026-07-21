@@ -743,15 +743,25 @@ function switchProfileTab(tab) {
 }
 
 function openProfileSettings() {
+  console.log("openProfileSettings() triggered.");
   try {
     const modal = document.getElementById('profileSettingsModal');
-    if (!modal) return;
+    if (!modal) {
+      console.error("profileSettingsModal element not found in DOM!");
+      if (typeof showToast === 'function') showToast("Ayarlar modalı DOM'da bulunamadı!");
+      return;
+    }
 
     const user = currentUser || {};
+    console.log("openProfileSettings - Current User Data:", user);
 
     const avatarContainer = document.getElementById('settingsAvatarContainer');
     if (avatarContainer && typeof renderAvatar === 'function') {
-      avatarContainer.innerHTML = renderAvatar(user, 'avatar avatar-xl');
+      try {
+        avatarContainer.innerHTML = renderAvatar(user, 'avatar avatar-xl');
+      } catch (avatarErr) {
+        console.error("Error rendering avatar in settings:", avatarErr);
+      }
     }
 
     const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
@@ -775,6 +785,15 @@ function openProfileSettings() {
     const settingsNewPassword = document.getElementById('settingsNewPassword');
     if (settingsNewPassword) settingsNewPassword.value = '';
 
+    // Channel sound volume initialization
+    const savedSoundVol = localStorage.getItem('os_channel_sound_volume') !== null
+      ? parseInt(localStorage.getItem('os_channel_sound_volume'))
+      : 100;
+    const volSlider = document.getElementById('settingsChannelSoundVol');
+    const volLabel = document.getElementById('settingsChannelSoundVolVal');
+    if (volSlider) volSlider.value = savedSoundVol;
+    if (volLabel) volLabel.textContent = `${savedSoundVol}%`;
+
     try {
       if (typeof populateMicDeviceList === 'function') {
         populateMicDeviceList();
@@ -783,9 +802,15 @@ function openProfileSettings() {
       console.warn("Failed to populate mic list inside settings:", e);
     }
 
+    console.log("Displaying profile settings modal.");
     modal.style.display = 'flex';
   } catch (err) {
     console.error("Error in openProfileSettings:", err);
+    if (typeof showToast === 'function') {
+      showToast("Ayarlar açılırken hata: " + err.message);
+    } else {
+      alert("Ayarlar açılırken hata: " + err.message);
+    }
     // Fallback opening
     const modal = document.getElementById('profileSettingsModal');
     if (modal) modal.style.display = 'flex';
@@ -972,10 +997,18 @@ function closeProfilePostSlider() {
   if (overlay) overlay.classList.remove('open');
 }
 
+function handleChannelSoundVolChange(val) {
+  const vol = Math.max(0, Math.min(100, parseInt(val) || 0));
+  localStorage.setItem('os_channel_sound_volume', vol.toString());
+  const label = document.getElementById('settingsChannelSoundVolVal');
+  if (label) label.textContent = `${vol}%`;
+}
+
 // Event delegation to bulletproof profile settings click trigger
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.topbar-settings-btn');
   if (btn) {
+    console.log("topbar-settings-btn click intercepted by document event delegation.");
     e.preventDefault();
     e.stopPropagation();
     openProfileSettings();

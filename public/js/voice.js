@@ -28,6 +28,7 @@ window._userAudioNodes      = {}; // username -> { source, analyser }
 window._userVolumes         = {}; // username -> volume (0 to 1)
 window._userLocalMuted      = {}; // username -> boolean (muted locally by me)
 window._partyVoiceMembers   = {}; // username -> { micMuted, deafened, pingMs }
+window._peerIceQueues       = {}; // username -> array of RTCIceCandidate (queued until remote desc set)
 window._micMuted            = false;
 window._deafened            = false;
 window._selectedMicId       = safeStorage.getItem('os_selected_mic_id') || 'default';
@@ -35,23 +36,46 @@ window._voiceInterval       = null;
 window._voiceSignalsInterval = null;
 window._audioContext        = null;
 
-// WebRTC Configuration - Google Public STUN Servers
+// WebRTC Configuration - Google Public STUN, Cloudflare, and Open Relay Project TURN Servers
 const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
   ]
 };
 
 // ─── INITIALIZATION ──────────────────────────────────────────
 async function initVoiceChat(partyId) {
   if (!partyId) return;
-  console.log('Initializing Voice Chat for party:', partyId);
-  stopVoiceChat();
+  console.log('[VoiceChat] Initializing Voice Chat for party:', partyId);
+  
+  // Set current party ID globally so all voice polling & signaling routines function properly
+  window._currentPartyId = partyId;
+  stopVoiceChat(false); // Clean previous connections without resetting window._currentPartyId
+  window._currentPartyId = partyId;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    console.warn('navigator.mediaDevices.getUserMedia is not supported or not available (HTTPS connection may be required)');
-    showToast('Sesli sohbet desteklenmiyor (HTTPS bağlantısı gerekli olabilir).');
+    console.warn('[VoiceChat] navigator.mediaDevices.getUserMedia is not supported or not available (HTTPS connection may be required on remote hosts)');
+    showToast('Sesli sohbet desteklenmiyor (HTTPS bağlantısı gerekebilir).');
     return;
   }
 
@@ -65,7 +89,7 @@ async function initVoiceChat(partyId) {
     try {
       window._localStream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (e) {
-      console.warn('Selected microphone failed, falling back to default', e);
+      console.warn('[VoiceChat] Selected microphone failed, falling back to default:', e);
       window._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     }
 
@@ -73,20 +97,47 @@ async function initVoiceChat(partyId) {
     setMicMuteState(window._micMuted);
 
     // Initialize AudioContext for speaking indicators
-    window._audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      window._audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      if (window._audioContext.state === 'suspended') {
+        const resumeContext = () => {
+          if (window._audioContext && window._audioContext.state === 'suspended') {
+            window._audioContext.resume().then(() => {
+              console.log('[VoiceChat] AudioContext resumed successfully');
+            }).catch(e => console.error("[VoiceChat] AudioContext resume failed:", e));
+          }
+          document.removeEventListener('click', resumeContext);
+          document.removeEventListener('touchstart', resumeContext);
+        };
+        document.addEventListener('click', resumeContext);
+        document.addEventListener('touchstart', resumeContext);
+      }
+    } catch (acErr) {
+      console.error('[VoiceChat] Failed to initialize AudioContext:', acErr);
+    }
+
+    // Start local user speaking analyser
+    if (currentUser && currentUser.username) {
+      setupUserSpeechAnalyser(currentUser.username, window._localStream);
+    }
 
     // 2. Start Signaling & Voice State Loops
     startVoiceStateLoop(partyId);
     startVoiceSignalsLoop(partyId);
 
   } catch (err) {
-    console.error('Failed to access microphone:', err);
+    console.error('[VoiceChat] Failed to access microphone:', err);
     showToast('Mikrofona erişilemedi. Lütfen izinleri veya cihaz ayarlarını kontrol edin.');
   }
 }
 
-function stopVoiceChat() {
-  console.log('Stopping Voice Chat');
+function stopVoiceChat(resetPartyId = true) {
+  console.log('[VoiceChat] Stopping Voice Chat');
+  if (resetPartyId && window._currentPartyId) {
+    if (typeof playChannelSound === 'function') playChannelSound('disconnect');
+    window._currentPartyId = null;
+  }
   
   // Clear loops
   if (window._voiceInterval) { clearInterval(window._voiceInterval); window._voiceInterval = null; }
@@ -116,6 +167,7 @@ function stopVoiceChat() {
   window._userAudioElements = {};
   window._userAudioNodes = {};
   window._partyVoiceMembers = {};
+  window._peerIceQueues = {};
 
   if (window._audioContext) {
     try {
@@ -124,6 +176,10 @@ function stopVoiceChat() {
     window._audioContext = null;
   }
 }
+
+// ─── STATE POLLING & HEARTBEAT ───────────────────────────────
+window._peerMissingTicks = {};
+window._currentChannelId = null;
 
 // ─── STATE POLLING & HEARTBEAT ───────────────────────────────
 function startVoiceStateLoop(partyId) {
@@ -139,9 +195,17 @@ function startVoiceStateLoop(partyId) {
         body: JSON.stringify({
           micMuted: window._micMuted || window._deafened,
           deafened: window._deafened,
+          channelId: window._currentChannelId || null,
           pingMs: Date.now() - tStart
         })
       });
+
+      if (res.status === 401 || res.status === 404 || res.status === 403) {
+        console.warn(`[VoiceChat] Voice state heartbeat returned ${res.status}, stopping voice chat.`);
+        if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+        if (typeof clearActiveParty === 'function') clearActiveParty();
+        return;
+      }
 
       if (res.ok) {
         const data = await res.json();
@@ -151,7 +215,7 @@ function startVoiceStateLoop(partyId) {
         window._partyVoiceMembers = {};
         Object.keys(serverMembers).forEach(uid => {
           const m = serverMembers[uid];
-          if (m.username !== currentUser.username) {
+          if (m.username !== currentUser?.username) {
             window._partyVoiceMembers[m.username] = m;
           }
         });
@@ -160,7 +224,7 @@ function startVoiceStateLoop(partyId) {
         maintainPeerConnections();
       }
     } catch (e) {
-      console.warn('Voice state heartbeat failed:', e);
+      console.warn('[VoiceChat] Voice state heartbeat failed:', e);
     }
   };
 
@@ -173,6 +237,13 @@ function startVoiceSignalsLoop(partyId) {
     if (!window._currentPartyId) return;
     try {
       const res = await fetch(`/api/parties/${partyId}/voice-signals`);
+      if (res.status === 401 || res.status === 404 || res.status === 403) {
+        console.warn(`[VoiceChat] Voice signals pull returned ${res.status}, stopping voice chat.`);
+        if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+        if (typeof clearActiveParty === 'function') clearActiveParty();
+        return;
+      }
+
       if (res.ok) {
         const signals = await res.json();
         for (const sig of signals) {
@@ -180,7 +251,7 @@ function startVoiceSignalsLoop(partyId) {
         }
       }
     } catch (e) {
-      console.warn('Voice signaling pull failed:', e);
+      console.warn('[VoiceChat] Voice signaling pull failed:', e);
     }
   };
 
@@ -189,26 +260,37 @@ function startVoiceSignalsLoop(partyId) {
 
 // ─── WEBRTC CONNECTION MANAGEMENT ──────────────────────────
 async function maintainPeerConnections() {
-  // Connect to anyone who is in the party and not connected yet
-  const activeUsernames = Object.keys(window._partyVoiceMembers);
+  // Only connect to members who are in the SAME sub-channel
+  const allPartyMembers = window._partyVoiceMembers || {};
+  const activeSameChannelUsernames = Object.keys(allPartyMembers).filter(uname => {
+    const member = allPartyMembers[uname];
+    if (!window._currentChannelId) return true; // fallback if no channels
+    return member && parseInt(member.channelId) === parseInt(window._currentChannelId);
+  });
   
-  for (const username of activeUsernames) {
+  // Connect to anyone in the same sub-channel who is not connected yet
+  for (const username of activeSameChannelUsernames) {
+    window._peerMissingTicks[username] = 0; // Reset missing counter
     if (!window._peerConnections[username]) {
-      // Establish peer connection. To avoid double offer collisions, 
-      // the user with alphabetically smaller username initiates.
-      const isInitiator = currentUser.username < username;
+      const isInitiator = currentUser?.username < username;
       if (isInitiator) {
-        console.log('Initiating peer connection to:', username);
+        console.log('[VoiceChat] Initiating channel voice connection to:', username);
         await createPeerConnection(username, true);
       }
     }
   }
 
-  // Clean up connections for users who left
+  // Close peer connections for users who switched to a different sub-channel or left
   Object.keys(window._peerConnections).forEach(username => {
-    if (!activeUsernames.includes(username)) {
-      console.log('User left, closing peer connection:', username);
-      closePeerConnection(username);
+    if (!activeSameChannelUsernames.includes(username)) {
+      window._peerMissingTicks[username] = (window._peerMissingTicks[username] || 0) + 1;
+      if (window._peerMissingTicks[username] >= 2) {
+        console.log('[VoiceChat] User left sub-channel, closing peer connection:', username);
+        closePeerConnection(username);
+        delete window._peerMissingTicks[username];
+      }
+    } else {
+      window._peerMissingTicks[username] = 0;
     }
   });
 }
@@ -233,22 +315,57 @@ async function createPeerConnection(targetUsername, isInitiator) {
     }
   };
 
+  // Monitor ICE Connection State
+  pc.oniceconnectionstatechange = () => {
+    console.log(`ICE Connection State with ${targetUsername}: ${pc.iceConnectionState}`);
+    if (pc.iceConnectionState === 'failed') {
+      console.warn(`WebRTC connection failed with ${targetUsername}. A TURN server might be required.`);
+      showToast(`Bağlantı kurulamadı (${targetUsername}). Farklı ağlardaysanız TURN sunucusu gereklidir.`);
+    }
+  };
+
   // Receive Remote Audio
   pc.ontrack = (event) => {
-    console.log('Received track from:', targetUsername);
-    const remoteStream = event.streams[0];
+    console.log('[VoiceChat] Received track from:', targetUsername, event.track.kind);
+    const remoteStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
     
     // Play audio in dynamic HTMLAudioElement
     let audio = window._userAudioElements[targetUsername];
     if (!audio) {
-      audio = new Audio();
+      audio = document.createElement('audio');
       audio.autoplay = true;
+      audio.playsInline = true;
+      audio.style.display = 'none';
+      audio.id = `remote-audio-${targetUsername}`;
+      document.body.appendChild(audio);
       window._userAudioElements[targetUsername] = audio;
     }
-    audio.srcObject = remoteStream;
+    
+    if (audio.srcObject !== remoteStream) {
+      audio.srcObject = remoteStream;
+    }
 
     // Apply volume adjustments
     applyUserVolume(targetUsername);
+
+    // Play audio with catch for browser autoplay policies
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        console.log(`[VoiceChat] Remote audio playing for ${targetUsername}`);
+      }).catch(err => {
+        console.warn(`[VoiceChat] Autoplay blocked for user ${targetUsername}, waiting for user gesture:`, err);
+        const unlock = () => {
+          if (audio) {
+            audio.play().catch(e => console.error("[VoiceChat] Audio unlock failed:", e));
+          }
+          document.removeEventListener('click', unlock);
+          document.removeEventListener('touchstart', unlock);
+        };
+        document.addEventListener('click', unlock);
+        document.addEventListener('touchstart', unlock);
+      });
+    }
 
     // Setup speech analyzer
     setupUserSpeechAnalyser(targetUsername, remoteStream);
@@ -275,6 +392,9 @@ function closePeerConnection(username) {
     if (window._userAudioNodes[username]) {
       delete window._userAudioNodes[username];
     }
+    if (window._peerIceQueues[username]) {
+      delete window._peerIceQueues[username];
+    }
   } catch(e){}
 }
 
@@ -287,6 +407,19 @@ async function sendVoiceSignal(toUsername, signal) {
       body: JSON.stringify({ toUsername, signal })
     });
   } catch(e){}
+}
+
+async function drainIceQueue(username, pc) {
+  const queue = window._peerIceQueues[username];
+  if (!queue) return;
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch(e) {
+      console.warn("Failed to add queued candidate:", e);
+    }
+  }
 }
 
 async function handleIncomingSignal(fromUsername, signal) {
@@ -302,11 +435,20 @@ async function handleIncomingSignal(fromUsername, signal) {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await sendVoiceSignal(fromUsername, { type: 'answer', answer: pc.localDescription });
+    await drainIceQueue(fromUsername, pc);
   } else if (signal.type === 'answer') {
     await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+    await drainIceQueue(fromUsername, pc);
   } else if (signal.type === 'candidate') {
     try {
-      await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      if (pc.remoteDescription && pc.remoteDescription.type) {
+        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      } else {
+        if (!window._peerIceQueues[fromUsername]) {
+          window._peerIceQueues[fromUsername] = [];
+        }
+        window._peerIceQueues[fromUsername].push(signal.candidate);
+      }
     } catch(e){}
   }
 }
@@ -352,6 +494,9 @@ function toggleMuteUserLocally(username) {
 
 // Local Mic Mute (Mutes our track)
 function setMicMuteState(muted) {
+  if (window._audioContext && window._audioContext.state === 'suspended') {
+    window._audioContext.resume().catch(e => console.error("AudioContext resume failed on mic toggle:", e));
+  }
   window._micMuted = muted;
   if (window._localStream) {
     window._localStream.getAudioTracks().forEach(track => {
@@ -359,10 +504,14 @@ function setMicMuteState(muted) {
     });
   }
   updateSelfVoiceUI();
+  updateLobbyVoiceBadges();
 }
 
 // Local Headphone Deafen (Mutes all incoming audio + mutes our mic)
 function setDeafState(deafened) {
+  if (window._audioContext && window._audioContext.state === 'suspended') {
+    window._audioContext.resume().catch(e => console.error("AudioContext resume failed on deafen toggle:", e));
+  }
   window._deafened = deafened;
   
   if (deafened) {
@@ -385,38 +534,59 @@ function setDeafState(deafened) {
 function setupUserSpeechAnalyser(username, mediaStream) {
   if (!window._audioContext) return;
   try {
+    // If speech analyser node already exists for this user, do not recreate Web Audio nodes
+    if (window._userAudioNodes[username]) return;
+
     const source = window._audioContext.createMediaStreamSource(mediaStream);
     const analyser = window._audioContext.createAnalyser();
     analyser.fftSize = 512;
     source.connect(analyser);
 
-    window._userAudioNodes[username] = { source, analyser };
+    // Complete Web Audio graph to destination with 0-gain to keep processing active without doubling speaker audio
+    const silentGain = window._audioContext.createGain();
+    silentGain.gain.value = 0;
+    analyser.connect(silentGain);
+    silentGain.connect(window._audioContext.destination);
+
+    window._userAudioNodes[username] = { source, analyser, silentGain };
 
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     
     // Check speech levels periodically
     const checkSpeech = () => {
-      if (!window._userAudioNodes[username] || !window._peerConnections[username]) return;
+      try {
+        const isMe = currentUser && username === currentUser.username;
+        if (!isMe && (!window._userAudioNodes[username] || !window._peerConnections[username])) return;
+        if (isMe && (!window._userAudioNodes[username] || !window._localStream)) return;
 
-      analyser.getByteFrequencyData(dataArray);
-      
-      // Calculate simple average level
-      let total = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        total += dataArray[i];
-      }
-      const avg = total / dataArray.length;
-
-      // Threshold level 12 indicates active speaking
-      const isSpeaking = avg > 12 && !window._deafened && !window._userLocalMuted[username];
-      
-      const avatarEl = document.querySelector(`#member-card-${username} .avatar`);
-      if (avatarEl) {
-        if (isSpeaking) {
-          avatarEl.classList.add('is-speaking');
-        } else {
-          avatarEl.classList.remove('is-speaking');
+        // Auto-resume AudioContext if suspended during speech check
+        if (window._audioContext && window._audioContext.state === 'suspended') {
+          window._audioContext.resume().catch(() => {});
         }
+
+        analyser.getByteFrequencyData(dataArray);
+        
+        // Calculate simple average level
+        let total = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          total += dataArray[i];
+        }
+        const avg = total / dataArray.length;
+
+        // Threshold level 10 indicates active speaking (disable if muted or deafened)
+        const isMutedSelf = username === currentUser?.username && (window._micMuted || window._deafened);
+        const isSpeaking = avg > 10 && !window._deafened && !window._userLocalMuted[username] && !isMutedSelf;
+        
+        const avatarEls = document.querySelectorAll(`#member-card-${username} .avatar, .avatar-user-${username}, .avatar[data-username="${username}"]`);
+        avatarEls.forEach(avatarEl => {
+          if (isSpeaking) {
+            avatarEl.classList.add('is-speaking');
+          } else {
+            avatarEl.classList.remove('is-speaking');
+          }
+        });
+      } catch (speechErr) {
+        console.warn('[VoiceChat] Error in checkSpeech loop for:', username, speechErr);
       }
 
       setTimeout(checkSpeech, 150);
@@ -424,7 +594,7 @@ function setupUserSpeechAnalyser(username, mediaStream) {
 
     checkSpeech();
   } catch (e) {
-    console.warn('Speech analysis failed to build for:', username, e);
+    console.warn('[VoiceChat] Speech analysis failed to build for:', username, e);
   }
 }
 
@@ -490,32 +660,128 @@ function updateLobbyVoiceBadges() {
   }
 }
 
-// ─── USER VOLUME & LATENCY MODAL ─────────────────────────────
+// ─── USER VOLUME, ROLE & LATENCY MODAL ─────────────────────────────
 window._modalActiveUser = null;
+window._modalActiveUserObj = null;
 
-function openUserVoiceModal(username) {
+async function openUserVoiceModal(username) {
   try {
-    if (currentUser && username === currentUser.username) return; // Cannot adjust self volume/latency here
     window._modalActiveUser = username;
 
     const modal = document.getElementById('userVoiceSettingsModal');
     if (!modal) return;
 
+    // Fetch user status first to be accurate
+    let user = { username };
+    try {
+      const res = await fetch(`/api/users/${username}`);
+      if (res.ok) {
+        user = await res.json();
+      }
+    } catch (e) {
+      console.warn("Failed to fetch user details for voice modal:", e);
+    }
+    window._modalActiveUserObj = user;
+
     // Set Profile Photo
     const avatarEl = document.getElementById('uvAvatarContainer');
     if (avatarEl) {
-      avatarEl.innerHTML = typeof renderAvatar === 'function' ? renderAvatar({ username }, 'avatar avatar-xl') : '';
+      avatarEl.innerHTML = typeof renderAvatar === 'function' ? renderAvatar(user, 'avatar avatar-xl') : '';
     }
 
-    // Set Username & Latency (ms)
+    // Set Username
     const nameEl = document.getElementById('uvUsername');
-    if (nameEl) nameEl.textContent = username;
+    if (nameEl) nameEl.textContent = `@${username}`;
+
+    // Set Status Label
+    const statusLabel = document.getElementById('uvStatusLabel');
+    if (statusLabel) {
+      const statusTextMap = {
+        online: 'Çevrimiçi',
+        away: 'Uzakta',
+        dnd: 'Rahatsız Etme',
+        invisible: 'Çevrimdışı',
+        offline: 'Çevrimdışı'
+      };
+      const statusColorMap = {
+        online: '#4ade80',
+        away: '#fbbf24',
+        dnd: '#ef4444',
+        invisible: '#9ca3af',
+        offline: '#9ca3af'
+      };
+      const status = user.status || 'offline';
+      statusLabel.textContent = statusTextMap[status] || 'Çevrimdışı';
+      statusLabel.style.color = statusColorMap[status] || '#9ca3af';
+    }
+
+    // Fetch current party details to populate role and channel move list
+    let party = null;
+    let myRole = 'member';
+    let targetMember = null;
+    if (window._currentPartyId) {
+      try {
+        const partyRes = await fetch(`/api/parties/${window._currentPartyId}`);
+        if (partyRes.ok) {
+          party = await partyRes.json();
+          const me = (party.members || []).find(m => m.username === currentUser?.username);
+          myRole = me ? me.role : 'member';
+          targetMember = (party.members || []).find(m => m.username === username);
+        }
+      } catch (e) {}
+    }
+
+    // Role badge display
+    const roleBadge = document.getElementById('uvRoleBadge');
+    const targetRole = targetMember ? targetMember.role : (party && party.owner_id === user.id ? 'owner' : 'member');
+    if (roleBadge) {
+      const roleTextMap = {
+        owner: 'KURUCU',
+        admin: 'YÖNETİCİ',
+        moderator: 'MODERATÖR',
+        member: 'ÜYE'
+      };
+      roleBadge.textContent = roleTextMap[targetRole] || 'ÜYE';
+      roleBadge.className = `role-badge ${targetRole}`;
+    }
     
+    // Latency MS
     const pingEl = document.getElementById('uvLatency');
     if (pingEl) {
       const state = window._partyVoiceMembers && window._partyVoiceMembers[username];
-      const latency = state ? state.pingMs : 0;
-      pingEl.textContent = `MS: ${latency || '—'}`;
+      const latency = (state && state.pingMs !== undefined) ? state.pingMs : '—';
+      pingEl.textContent = `MS: ${latency}`;
+    }
+
+    // Manager Controls Section
+    const managerControls = document.getElementById('uvManagerControls');
+    const roleSelectWrap = document.getElementById('uvRoleSelectWrap');
+    const roleSelect = document.getElementById('uvRoleSelect');
+    const channelSelect = document.getElementById('uvChannelSelect');
+
+    const isSelf = currentUser && username === currentUser.username;
+    const canManage = ['owner', 'admin', 'moderator'].includes(myRole) && !isSelf;
+
+    if (managerControls) {
+      managerControls.style.display = canManage ? 'block' : 'none';
+    }
+
+    if (canManage && party) {
+      // Role select (Owner and Admin can assign roles)
+      const canAssignRoles = ['owner', 'admin'].includes(myRole) && targetRole !== 'owner';
+      if (roleSelectWrap && roleSelect) {
+        roleSelectWrap.style.display = canAssignRoles ? 'block' : 'none';
+        roleSelect.value = targetRole === 'owner' ? 'admin' : targetRole;
+      }
+
+      // Channel move select
+      if (channelSelect) {
+        const channels = party.channels || [];
+        channelSelect.innerHTML = channels.map(c => {
+          const isCurrent = targetMember && parseInt(targetMember.channel_id) === parseInt(c.id);
+          return `<option value="${c.id}" ${isCurrent ? 'selected' : ''}>${esc(c.name)} ${c.user_limit > 0 ? `(Limit: ${c.user_limit})` : ''}</option>`;
+        }).join('');
+      }
     }
 
     // Set Volume Slider
@@ -523,11 +789,13 @@ function openUserVoiceModal(username) {
     if (slider) {
       const currentVol = getUserVolume(username);
       slider.value = Math.round(currentVol * 100);
+      slider.disabled = isSelf; // Disable volume slider for self
     }
 
     // Set Mute state button
     const muteBtn = document.getElementById('uvMuteToggleBtn');
     if (muteBtn) {
+      muteBtn.style.display = isSelf ? 'none' : 'flex';
       const isMuted = !!window._userLocalMuted[username];
       muteBtn.classList.toggle('muted', isMuted);
       muteBtn.innerHTML = isMuted
@@ -538,7 +806,6 @@ function openUserVoiceModal(username) {
     modal.classList.add('open');
   } catch (err) {
     console.error("Error in openUserVoiceModal:", err);
-    // Fallback opening
     const modal = document.getElementById('userVoiceSettingsModal');
     if (modal) modal.classList.add('open');
   }
@@ -548,6 +815,7 @@ function closeUserVoiceModal() {
   const modal = document.getElementById('userVoiceSettingsModal');
   if (modal) modal.classList.remove('open');
   window._modalActiveUser = null;
+  window._modalActiveUserObj = null;
 }
 
 function handleUvVolumeChange(val) {
@@ -564,6 +832,50 @@ function handleUvMuteToggle() {
     muteBtn.innerHTML = muted
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Susturuldu`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur`;
+  }
+}
+
+async function handleUvRoleChange(newRole) {
+  if (!window._modalActiveUser || !window._currentPartyId || !window._modalActiveUserObj) return;
+  try {
+    const userId = window._modalActiveUserObj.id;
+    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${userId}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole })
+    });
+    if (res.ok) {
+      showToast('Yetki güncellendi');
+      if (typeof fetchPartyAndRender === 'function') fetchPartyAndRender(window._currentPartyId);
+      openUserVoiceModal(window._modalActiveUser);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Yetki güncellenemedi');
+    }
+  } catch (e) {
+    console.error('Role update error:', e);
+  }
+}
+
+async function handleUvChannelMove(channelId) {
+  if (!window._modalActiveUser || !window._currentPartyId || !window._modalActiveUserObj) return;
+  try {
+    const userId = window._modalActiveUserObj.id;
+    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${userId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: parseInt(channelId) })
+    });
+    if (res.ok) {
+      showToast('Kullanıcı kanala taşındı');
+      if (typeof fetchPartyAndRender === 'function') fetchPartyAndRender(window._currentPartyId);
+      closeUserVoiceModal();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Taşınamadı');
+    }
+  } catch (e) {
+    console.error('Channel move error:', e);
   }
 }
 

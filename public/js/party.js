@@ -644,9 +644,17 @@ async function joinParty(partyId) {
 
 async function leaveParty(partyId) {
   if (!(await window.showConfirm('Lobiden ayrılmak istiyor musun?'))) return;
-  const res = await fetch(`/api/parties/${partyId}/leave`, { method: 'POST' });
-  if (res.ok) {
-    showToast('Lobiden ayrıldın');
+  try {
+    const res = await fetch(`/api/parties/${partyId}/leave`, { method: 'POST' });
+    if (res.ok) {
+      showToast('Lobiden ayrıldın');
+    } else if (res.status === 404) {
+      showToast('Lobi zaten kapatılmış');
+    }
+  } catch (e) {
+    console.warn('leaveParty request error:', e);
+  } finally {
+    if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
     if (typeof clearActiveParty === 'function') clearActiveParty();
     refreshPartyModal();
   }
@@ -654,9 +662,17 @@ async function leaveParty(partyId) {
 
 async function deleteParty(partyId) {
   if (!(await window.showConfirm('Lobiyi silmek istiyor musun?'))) return;
-  const res = await fetch(`/api/parties/${partyId}/leave`, { method: 'POST' });
-  if (res.ok) {
-    showToast('Lobi kapatıldı');
+  try {
+    const res = await fetch(`/api/parties/${partyId}/leave`, { method: 'POST' });
+    if (res.ok) {
+      showToast('Lobi kapatıldı');
+    } else if (res.status === 404) {
+      showToast('Lobi zaten bulunamadı');
+    }
+  } catch (e) {
+    console.warn('deleteParty request error:', e);
+  } finally {
+    if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
     if (typeof clearActiveParty === 'function') clearActiveParty();
     refreshPartyModal();
   }
