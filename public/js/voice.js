@@ -1,291 +1,322 @@
 /* ============================================================
-   VOICE.JS — WebRTC P2P Voice Chat, Audio Management, and UI States
+   VOICE.JS — WebRTC P2P Voice Chat + Screen Share
    ============================================================ */
 
 'use strict';
 
-// Safe storage wrapper to prevent exceptions in sandboxed contexts
 const safeStorage = {
-  getItem(key) {
-    try {
-      return localStorage.getItem(key);
-    } catch (e) {
-      return null;
-    }
-  },
-  setItem(key, value) {
-    try {
-      localStorage.setItem(key, value);
-    } catch (e) {}
-  }
+  getItem(key) { try { return localStorage.getItem(key); } catch(e) { return null; } },
+  setItem(key, value) { try { localStorage.setItem(key, value); } catch(e) {} }
 };
 
-// ─── VOICE CHAT STATE ────────────────────────────────────────
+// ─── VOICE CHAT STATE ───────────────────────────────────────
 window._localStream          = null;
 window._peerConnections     = {}; // username -> RTCPeerConnection
 window._userAudioElements   = {}; // username -> HTMLAudioElement
-window._userAudioNodes      = {}; // username -> { source, analyser }
-window._userVolumes         = {}; // username -> volume (0 to 1)
-window._userLocalMuted      = {}; // username -> boolean (muted locally by me)
-window._partyVoiceMembers   = {}; // username -> { micMuted, deafened, pingMs }
-window._peerIceQueues       = {}; // username -> array of RTCIceCandidate (queued until remote desc set)
+window._userAudioNodes      = {}; // username -> { source, analyser, gainNode }
+window._userVolumes         = {}; // username -> volume 0-2
+window._userLocalMuted      = {}; // username -> boolean
+window._partyVoiceMembers   = {}; // username -> { micMuted, deafened, pingMs, channelId }
+window._peerIceQueues       = {}; // username -> []
 window._micMuted            = false;
 window._deafened            = false;
 window._selectedMicId       = safeStorage.getItem('os_selected_mic_id') || 'default';
 window._voiceInterval       = null;
 window._voiceSignalsInterval = null;
 window._audioContext        = null;
+window._peerMissingTicks    = {};
+window._currentChannelId    = null;
+window._peerReconnectTimers = {}; // username -> timer
+window._voiceConnState      = 'disconnected'; // 'connecting' | 'connected' | 'disconnected'
+window._voiceSwitchToken    = 0;
+let _signalPollingSpeed     = 350;
 
-// WebRTC Configuration - Google Public STUN, Cloudflare, and Open Relay Project TURN Servers
+function updateVoiceConnectionStatus(state) {
+  window._voiceConnState = state;
+
+  document.querySelectorAll('.voice-status-pill').forEach(p => p.remove());
+
+  if (state === 'disconnected' || !window._currentChannelId) return;
+
+  const currentChanCard = document.getElementById(`channel-card-${window._currentChannelId}`);
+  if (currentChanCard) {
+    const header = currentChanCard.querySelector('.sub-channel-header');
+    if (header) {
+      const pill = document.createElement('div');
+      pill.className = `voice-status-pill ${state} icon-only`;
+      if (state === 'connecting') {
+        pill.setAttribute('data-tooltip', 'Kanal Bağlantısı Kuruluyor...');
+        pill.innerHTML = `<span class="voice-spinner"></span>`;
+      } else if (state === 'connected') {
+        pill.setAttribute('data-tooltip', 'Ses Bağlantısı Aktif (RTC)');
+        pill.innerHTML = `<span class="voice-connected-dot"></span>`;
+      }
+      header.appendChild(pill);
+    }
+  }
+}
+
+// ─── SCREEN SHARE STATE ────────────────────────────────────
+window._screenStream        = null;      // local screen capture stream
+window._ssConnections       = {};        // username -> RTCPeerConnection (screen share)
+window._ssRemoteStreams     = {};        // username -> MediaStream (incoming screen)
+window._ssPolling           = null;      // setInterval for screen share state polling
+window._ssCurrentSharer     = null;      // username of person being viewed
+
+// ─── WebRTC CONFIG ──────────────────────────────────────────
 const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
+    { urls: 'turn:openrelay.metered.ca:80',    username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',   username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
 
-// ─── INITIALIZATION ──────────────────────────────────────────
+// ─── INIT ────────────────────────────────────────────────────
 async function initVoiceChat(partyId) {
   if (!partyId) return;
-  console.log('[VoiceChat] Initializing Voice Chat for party:', partyId);
-  
-  // Set current party ID globally so all voice polling & signaling routines function properly
+  console.log('[VoiceChat] Initializing for party:', partyId);
+
   window._currentPartyId = partyId;
-  stopVoiceChat(false); // Clean previous connections without resetting window._currentPartyId
+  // Full cleanup without resetting partyId
+  stopVoiceChat(false);
   window._currentPartyId = partyId;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    console.warn('[VoiceChat] navigator.mediaDevices.getUserMedia is not supported or not available (HTTPS connection may be required on remote hosts)');
-    showToast('Sesli sohbet desteklenmiyor (HTTPS bağlantısı gerekebilir).');
+    showToast('Sesli sohbet bu tarayıcıda desteklenmiyor (HTTPS gerekli).');
     return;
   }
 
   try {
-    // 1. Get User Media (Microphone)
     const constraints = {
-      audio: window._selectedMicId && window._selectedMicId !== 'default' ? { deviceId: { exact: window._selectedMicId } } : true,
+      audio: window._selectedMicId && window._selectedMicId !== 'default'
+        ? { deviceId: { exact: window._selectedMicId }, echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
+        : { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
       video: false
     };
 
     try {
       window._localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (e) {
-      console.warn('[VoiceChat] Selected microphone failed, falling back to default:', e);
-      window._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch(e) {
+      console.warn('[VoiceChat] Selected mic failed, falling back:', e);
+      window._localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
     }
 
-    // Set initial mute states
     setMicMuteState(window._micMuted);
 
-    // Initialize AudioContext for speaking indicators
+    // AudioContext
     try {
       window._audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
       if (window._audioContext.state === 'suspended') {
-        const resumeContext = () => {
-          if (window._audioContext && window._audioContext.state === 'suspended') {
-            window._audioContext.resume().then(() => {
-              console.log('[VoiceChat] AudioContext resumed successfully');
-            }).catch(e => console.error("[VoiceChat] AudioContext resume failed:", e));
-          }
-          document.removeEventListener('click', resumeContext);
-          document.removeEventListener('touchstart', resumeContext);
+        const resume = () => {
+          if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
+          document.removeEventListener('click', resume);
+          document.removeEventListener('touchstart', resume);
         };
-        document.addEventListener('click', resumeContext);
-        document.addEventListener('touchstart', resumeContext);
+        document.addEventListener('click', resume);
+        document.addEventListener('touchstart', resume);
       }
-    } catch (acErr) {
-      console.error('[VoiceChat] Failed to initialize AudioContext:', acErr);
-    }
+    } catch(e) { console.warn('[VoiceChat] AudioContext init failed:', e); }
 
-    // Start local user speaking analyser
-    if (currentUser && currentUser.username) {
-      setupUserSpeechAnalyser(currentUser.username, window._localStream);
-    }
+    if (currentUser?.username) setupUserSpeechAnalyser(currentUser.username, window._localStream);
 
-    // 2. Start Signaling & Voice State Loops
     startVoiceStateLoop(partyId);
     startVoiceSignalsLoop(partyId);
+    startScreenShareStatePolling(partyId);
 
-  } catch (err) {
-    console.error('[VoiceChat] Failed to access microphone:', err);
-    showToast('Mikrofona erişilemedi. Lütfen izinleri veya cihaz ayarlarını kontrol edin.');
+  } catch(err) {
+    console.error('[VoiceChat] Mic access failed:', err);
+    showToast('Mikrofona erişilemedi. Lütfen izinleri kontrol edin.');
   }
 }
 
 function stopVoiceChat(resetPartyId = true) {
-  console.log('[VoiceChat] Stopping Voice Chat');
+  console.log('[VoiceChat] Stopping. resetPartyId:', resetPartyId);
   if (resetPartyId && window._currentPartyId) {
     if (typeof playChannelSound === 'function') playChannelSound('disconnect');
     window._currentPartyId = null;
   }
-  
-  // Clear loops
-  if (window._voiceInterval) { clearInterval(window._voiceInterval); window._voiceInterval = null; }
-  if (window._voiceSignalsInterval) { clearInterval(window._voiceSignalsInterval); window._voiceSignalsInterval = null; }
 
-  // Stop local stream tracks
+  if (window._voiceInterval)        { clearInterval(window._voiceInterval);        window._voiceInterval = null; }
+  if (window._voiceSignalsInterval)  { clearInterval(window._voiceSignalsInterval);  window._voiceSignalsInterval = null; }
+  if (window._ssPolling)             { clearInterval(window._ssPolling);             window._ssPolling = null; }
+
+  // Stop screen share if active
+  stopScreenShare(false);
+
+  // Stop local stream
   if (window._localStream) {
     window._localStream.getTracks().forEach(t => t.stop());
     window._localStream = null;
   }
 
-  // Close all peer connections
-  Object.keys(window._peerConnections).forEach(username => {
-    try {
-      window._peerConnections[username].close();
-    } catch(e){}
-  });
+  // Close peer connections
+  Object.keys(window._peerConnections).forEach(u => { try { window._peerConnections[u].close(); } catch(e){} });
   window._peerConnections = {};
 
   // Remove audio elements
-  Object.keys(window._userAudioElements).forEach(username => {
-    try {
-      window._userAudioElements[username].pause();
-      window._userAudioElements[username].remove();
-    } catch(e){}
+  Object.keys(window._userAudioElements).forEach(u => {
+    try { window._userAudioElements[u].pause(); window._userAudioElements[u].remove(); } catch(e){}
   });
   window._userAudioElements = {};
-  window._userAudioNodes = {};
+  window._userAudioNodes    = {};
   window._partyVoiceMembers = {};
-  window._peerIceQueues = {};
+  window._peerIceQueues     = {};
+  window._peerMissingTicks  = {};
+
+  Object.values(window._peerReconnectTimers || {}).forEach(t => clearTimeout(t));
+  window._peerReconnectTimers = {};
 
   if (window._audioContext) {
-    try {
-      window._audioContext.close();
-    } catch(e){}
+    try { window._audioContext.close(); } catch(e){}
     window._audioContext = null;
   }
 }
 
-// ─── STATE POLLING & HEARTBEAT ───────────────────────────────
-window._peerMissingTicks = {};
-window._currentChannelId = null;
+// ─── INSTANT CHANNEL SWITCH ──────────────────────────────────
+async function switchVoiceChannel(newChannelId) {
+  const currentToken = Date.now();
+  window._voiceSwitchToken = currentToken;
+  console.log('[VoiceChat] Channel switch to:', newChannelId, 'token:', currentToken);
 
-// ─── STATE POLLING & HEARTBEAT ───────────────────────────────
+  updateVoiceConnectionStatus('connecting');
+
+  // 1. If screen share is active, stop it immediately and notify user
+  if (window._screenStream) {
+    stopScreenShare(true);
+    showToast('Kanal değiştirildiği için ekran paylaşımı sonlandırıldı.');
+  }
+
+  // 2. Drop all existing peer connections immediately
+  const existingPeers = Object.keys(window._peerConnections);
+  existingPeers.forEach(u => closePeerConnection(u));
+  window._peerMissingTicks = {};
+  window._peerIceQueues = {};
+
+  window._currentChannelId = newChannelId;
+
+  // 3. Boost signal polling speed to 120ms during transition for instant WebRTC handshake
+  boostSignalPollingSpeed();
+
+  // 4. Force immediate voice state update to update server and get new channel members
+  await triggerVoiceStateUpdate();
+
+  // Abort if rapid channel click happened while fetching state
+  if (window._voiceSwitchToken !== currentToken) {
+    console.log('[VoiceChat] Aborting outdated switch token:', currentToken);
+    return;
+  }
+
+  // 5. Immediately establish peer connections for members in new channel
+  await maintainPeerConnections();
+
+  // 6. Pull signals right away
+  await fetchVoiceSignals();
+
+  // If no other members in channel, mark connected
+  const sameChannelPeers = Object.keys(window._partyVoiceMembers || {}).filter(u => {
+    const m = window._partyVoiceMembers[u];
+    return m && parseInt(m.channelId) === parseInt(newChannelId);
+  });
+  if (sameChannelPeers.length === 0) {
+    updateVoiceConnectionStatus('connected');
+  }
+}
+
+function boostSignalPollingSpeed() {
+  _signalPollingSpeed = 120;
+  if (window._currentPartyId) {
+    startVoiceSignalsLoop(window._currentPartyId);
+  }
+  setTimeout(() => {
+    _signalPollingSpeed = 350;
+    if (window._currentPartyId) {
+      startVoiceSignalsLoop(window._currentPartyId);
+    }
+  }, 4000);
+}
+
+// ─── STATE LOOP ──────────────────────────────────────────────
 function startVoiceStateLoop(partyId) {
   const sendVoiceState = async () => {
     if (!window._currentPartyId) return;
-
-    // Estimate ping time from request roundtrip
-    const tStart = Date.now();
-    try {
-      const res = await fetch(`/api/parties/${partyId}/voice-state`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          micMuted: window._micMuted || window._deafened,
-          deafened: window._deafened,
-          channelId: window._currentChannelId || null,
-          pingMs: Date.now() - tStart
-        })
-      });
-
-      if (res.status === 401 || res.status === 404 || res.status === 403) {
-        console.warn(`[VoiceChat] Voice state heartbeat returned ${res.status}, stopping voice chat.`);
-        if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
-        if (typeof clearActiveParty === 'function') clearActiveParty();
-        return;
-      }
-
-      if (res.ok) {
-        const data = await res.json();
-        const serverMembers = data.members || {};
-        
-        // Update local party voice list
-        window._partyVoiceMembers = {};
-        Object.keys(serverMembers).forEach(uid => {
-          const m = serverMembers[uid];
-          if (m.username !== currentUser?.username) {
-            window._partyVoiceMembers[m.username] = m;
-          }
-        });
-
-        updateLobbyVoiceBadges();
-        maintainPeerConnections();
-      }
-    } catch (e) {
-      console.warn('[VoiceChat] Voice state heartbeat failed:', e);
-    }
+    await triggerVoiceStateUpdate();
   };
 
   sendVoiceState();
   window._voiceInterval = setInterval(sendVoiceState, 4000);
 }
 
-function startVoiceSignalsLoop(partyId) {
-  const checkSignals = async () => {
-    if (!window._currentPartyId) return;
-    try {
-      const res = await fetch(`/api/parties/${partyId}/voice-signals`);
-      if (res.status === 401 || res.status === 404 || res.status === 403) {
-        console.warn(`[VoiceChat] Voice signals pull returned ${res.status}, stopping voice chat.`);
-        if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
-        if (typeof clearActiveParty === 'function') clearActiveParty();
-        return;
-      }
-
-      if (res.ok) {
-        const signals = await res.json();
-        for (const sig of signals) {
+// ─── SIGNAL LOOP (fast polling) ─────────────────────────────
+async function fetchVoiceSignals() {
+  if (!window._currentPartyId) return;
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/voice-signals`);
+    if (res.status === 401 || res.status === 404 || res.status === 403) {
+      if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+      if (typeof clearActiveParty === 'function') clearActiveParty();
+      return;
+    }
+    if (res.ok) {
+      const signals = await res.json();
+      for (const sig of signals) {
+        if (sig.signal && sig.signal._ssShare) {
+          await handleIncomingScreenShareSignal(sig.fromUsername, sig.signal);
+        } else {
           await handleIncomingSignal(sig.fromUsername, sig.signal);
         }
       }
-    } catch (e) {
-      console.warn('[VoiceChat] Voice signaling pull failed:', e);
     }
-  };
-
-  window._voiceSignalsInterval = setInterval(checkSignals, 1500);
+  } catch(e) {
+    // Network reconnecting/polling pause
+  }
 }
 
-// ─── WEBRTC CONNECTION MANAGEMENT ──────────────────────────
+function startVoiceSignalsLoop(partyId) {
+  if (window._voiceSignalsInterval) clearInterval(window._voiceSignalsInterval);
+  window._voiceSignalsInterval = setInterval(fetchVoiceSignals, _signalPollingSpeed);
+}
+
+// ─── PEER CONNECTION MANAGEMENT ──────────────────────────────
 async function maintainPeerConnections() {
-  // Only connect to members who are in the SAME sub-channel
-  const allPartyMembers = window._partyVoiceMembers || {};
-  const activeSameChannelUsernames = Object.keys(allPartyMembers).filter(uname => {
-    const member = allPartyMembers[uname];
-    if (!window._currentChannelId) return true; // fallback if no channels
-    return member && parseInt(member.channelId) === parseInt(window._currentChannelId);
+  const allMembers = window._partyVoiceMembers || {};
+  const sameChannel = Object.keys(allMembers).filter(uname => {
+    const m = allMembers[uname];
+    if (!window._currentChannelId) return true;
+    return m && parseInt(m.channelId) === parseInt(window._currentChannelId);
   });
-  
-  // Connect to anyone in the same sub-channel who is not connected yet
-  for (const username of activeSameChannelUsernames) {
-    window._peerMissingTicks[username] = 0; // Reset missing counter
+
+  // Connect to same-channel members
+  for (const username of sameChannel) {
+    window._peerMissingTicks[username] = 0;
     if (!window._peerConnections[username]) {
       const isInitiator = currentUser?.username < username;
       if (isInitiator) {
-        console.log('[VoiceChat] Initiating channel voice connection to:', username);
+        console.log('[VoiceChat] Initiating connection to:', username);
         await createPeerConnection(username, true);
+      }
+    } else {
+      // Check if connection is broken and recover it
+      const pc = window._peerConnections[username];
+      if (pc.iceConnectionState === 'failed' || pc.connectionState === 'failed') {
+        console.warn('[VoiceChat] Connection failed with', username, '- recovering...');
+        closePeerConnection(username);
+        const isInitiator = currentUser?.username < username;
+        if (isInitiator) await createPeerConnection(username, true);
       }
     }
   }
 
-  // Close peer connections for users who switched to a different sub-channel or left
+  // Close connections for members in different channels
   Object.keys(window._peerConnections).forEach(username => {
-    if (!activeSameChannelUsernames.includes(username)) {
+    if (!sameChannel.includes(username)) {
       window._peerMissingTicks[username] = (window._peerMissingTicks[username] || 0) + 1;
       if (window._peerMissingTicks[username] >= 2) {
-        console.log('[VoiceChat] User left sub-channel, closing peer connection:', username);
+        console.log('[VoiceChat] Closing stale connection to:', username);
         closePeerConnection(username);
         delete window._peerMissingTicks[username];
       }
@@ -303,33 +334,62 @@ async function createPeerConnection(targetUsername, isInitiator) {
 
   // Add local audio tracks
   if (window._localStream) {
-    window._localStream.getTracks().forEach(track => {
-      pc.addTrack(track, window._localStream);
-    });
+    window._localStream.getTracks().forEach(track => pc.addTrack(track, window._localStream));
   }
 
-  // Send ICE Candidates
+  // ICE candidates
   pc.onicecandidate = (event) => {
     if (event.candidate && window._currentPartyId) {
       sendVoiceSignal(targetUsername, { type: 'candidate', candidate: event.candidate });
     }
   };
 
-  // Monitor ICE Connection State
+  // ICE state monitoring + auto-recovery
   pc.oniceconnectionstatechange = () => {
-    console.log(`ICE Connection State with ${targetUsername}: ${pc.iceConnectionState}`);
-    if (pc.iceConnectionState === 'failed') {
-      console.warn(`WebRTC connection failed with ${targetUsername}. A TURN server might be required.`);
-      showToast(`Bağlantı kurulamadı (${targetUsername}). Farklı ağlardaysanız TURN sunucusu gereklidir.`);
+    const state = pc.iceConnectionState;
+    console.log(`[ICE] ${targetUsername}: ${state}`);
+    if (state === 'connected' || state === 'completed') {
+      updateVoiceConnectionStatus('connected');
+      if (window._peerReconnectTimers[targetUsername]) {
+        clearTimeout(window._peerReconnectTimers[targetUsername]);
+        delete window._peerReconnectTimers[targetUsername];
+      }
+    } else if (state === 'failed') {
+      console.warn(`[VoiceChat] ICE failed for ${targetUsername}, attempting reconnect in 2s`);
+      if (!window._peerReconnectTimers[targetUsername]) {
+        window._peerReconnectTimers[targetUsername] = setTimeout(async () => {
+          delete window._peerReconnectTimers[targetUsername];
+          if (window._peerConnections[targetUsername]) {
+            closePeerConnection(targetUsername);
+            const isInit = currentUser?.username < targetUsername;
+            if (isInit && window._currentPartyId) {
+              await createPeerConnection(targetUsername, true);
+            }
+          }
+        }, 2000);
+      }
+    } else if (state === 'disconnected') {
+      // Brief grace period before treating as failed
+      if (!window._peerReconnectTimers[targetUsername]) {
+        window._peerReconnectTimers[targetUsername] = setTimeout(async () => {
+          delete window._peerReconnectTimers[targetUsername];
+          const current = window._peerConnections[targetUsername];
+          if (current && (current.iceConnectionState === 'disconnected' || current.iceConnectionState === 'failed')) {
+            closePeerConnection(targetUsername);
+            const isInit = currentUser?.username < targetUsername;
+            if (isInit && window._currentPartyId) await createPeerConnection(targetUsername, true);
+          }
+        }, 5000);
+      }
     }
   };
 
-  // Receive Remote Audio
+  // Receive remote audio
   pc.ontrack = (event) => {
-    console.log('[VoiceChat] Received track from:', targetUsername, event.track.kind);
+    console.log('[VoiceChat] Track from:', targetUsername, event.track.kind);
+    updateVoiceConnectionStatus('connected');
     const remoteStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-    
-    // Play audio in dynamic HTMLAudioElement
+
     let audio = window._userAudioElements[targetUsername];
     if (!audio) {
       audio = document.createElement('audio');
@@ -340,25 +400,16 @@ async function createPeerConnection(targetUsername, isInitiator) {
       document.body.appendChild(audio);
       window._userAudioElements[targetUsername] = audio;
     }
-    
-    if (audio.srcObject !== remoteStream) {
-      audio.srcObject = remoteStream;
-    }
 
-    // Apply volume adjustments
+    if (audio.srcObject !== remoteStream) audio.srcObject = remoteStream;
     applyUserVolume(targetUsername);
 
-    // Play audio with catch for browser autoplay policies
     const playPromise = audio.play();
     if (playPromise !== undefined) {
-      playPromise.then(() => {
-        console.log(`[VoiceChat] Remote audio playing for ${targetUsername}`);
-      }).catch(err => {
-        console.warn(`[VoiceChat] Autoplay blocked for user ${targetUsername}, waiting for user gesture:`, err);
+      playPromise.catch(err => {
+        console.warn(`[VoiceChat] Autoplay blocked for ${targetUsername}:`, err);
         const unlock = () => {
-          if (audio) {
-            audio.play().catch(e => console.error("[VoiceChat] Audio unlock failed:", e));
-          }
+          audio?.play().catch(() => {});
           document.removeEventListener('click', unlock);
           document.removeEventListener('touchstart', unlock);
         };
@@ -367,12 +418,11 @@ async function createPeerConnection(targetUsername, isInitiator) {
       });
     }
 
-    // Setup speech analyzer
     setupUserSpeechAnalyser(targetUsername, remoteStream);
   };
 
   if (isInitiator) {
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
     await pc.setLocalDescription(offer);
     await sendVoiceSignal(targetUsername, { type: 'offer', offer: pc.localDescription });
   }
@@ -380,30 +430,37 @@ async function createPeerConnection(targetUsername, isInitiator) {
 
 function closePeerConnection(username) {
   try {
-    if (window._peerConnections[username]) {
-      window._peerConnections[username].close();
+    const pc = window._peerConnections[username];
+    if (pc) {
+      pc.onicecandidate = null;
+      pc.oniceconnectionstatechange = null;
+      pc.ontrack = null;
+      pc.close();
       delete window._peerConnections[username];
     }
-    if (window._userAudioElements[username]) {
-      window._userAudioElements[username].pause();
-      window._userAudioElements[username].remove();
+  } catch(e){}
+  try {
+    const audio = window._userAudioElements[username];
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      audio.remove();
       delete window._userAudioElements[username];
     }
-    if (window._userAudioNodes[username]) {
-      delete window._userAudioNodes[username];
-    }
-    if (window._peerIceQueues[username]) {
-      delete window._peerIceQueues[username];
-    }
   } catch(e){}
+  try { delete window._userAudioNodes[username]; } catch(e){}
+  try { delete window._peerIceQueues[username]; } catch(e){}
+  if (window._peerReconnectTimers[username]) {
+    clearTimeout(window._peerReconnectTimers[username]);
+    delete window._peerReconnectTimers[username];
+  }
 }
 
 async function sendVoiceSignal(toUsername, signal) {
   if (!window._currentPartyId) return;
   try {
     await fetch(`/api/parties/${window._currentPartyId}/voice-signal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ toUsername, signal })
     });
   } catch(e){}
@@ -414,61 +471,60 @@ async function drainIceQueue(username, pc) {
   if (!queue) return;
   while (queue.length > 0) {
     const candidate = queue.shift();
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch(e) {
-      console.warn("Failed to add queued candidate:", e);
-    }
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e){}
   }
 }
 
 async function handleIncomingSignal(fromUsername, signal) {
-  // Ensure connection exists
   if (!window._peerConnections[fromUsername]) {
     await createPeerConnection(fromUsername, false);
   }
-
   const pc = window._peerConnections[fromUsername];
+  if (!pc) return;
 
   if (signal.type === 'offer') {
-    await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await sendVoiceSignal(fromUsername, { type: 'answer', answer: pc.localDescription });
-    await drainIceQueue(fromUsername, pc);
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await sendVoiceSignal(fromUsername, { type: 'answer', answer: pc.localDescription });
+      await drainIceQueue(fromUsername, pc);
+    } catch(e) { console.warn('[VoiceChat] Offer handling failed:', e); }
   } else if (signal.type === 'answer') {
-    await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
-    await drainIceQueue(fromUsername, pc);
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+      await drainIceQueue(fromUsername, pc);
+    } catch(e) { console.warn('[VoiceChat] Answer handling failed:', e); }
   } else if (signal.type === 'candidate') {
     try {
       if (pc.remoteDescription && pc.remoteDescription.type) {
         await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
       } else {
-        if (!window._peerIceQueues[fromUsername]) {
-          window._peerIceQueues[fromUsername] = [];
-        }
+        if (!window._peerIceQueues[fromUsername]) window._peerIceQueues[fromUsername] = [];
         window._peerIceQueues[fromUsername].push(signal.candidate);
       }
     } catch(e){}
   }
 }
 
-// ─── AUDIO CONTROLS & LOCAL MUTES ─────────────────────────────
+// ─── AUDIO CONTROLS ──────────────────────────────────────────
 function applyUserVolume(username) {
-  const audio = window._userAudioElements[username];
-  if (!audio) return;
-
   const isLocallyMuted = !!window._userLocalMuted[username];
-  if (isLocallyMuted || window._deafened) {
-    audio.volume = 0;
-  } else {
-    const userPrefVol = window._userVolumes[username] !== undefined ? window._userVolumes[username] : 1.0;
-    audio.volume = userPrefVol;
+  const userPrefVol = window._userVolumes[username] !== undefined ? window._userVolumes[username] : getUserVolume(username);
+  const effectiveVol = (isLocallyMuted || window._deafened) ? 0 : userPrefVol;
+
+  if (window._userAudioNodes[username]?.gainNode) {
+    try { window._userAudioNodes[username].gainNode.gain.value = effectiveVol; } catch(e){}
+  }
+  const audio = window._userAudioElements[username];
+  if (audio) {
+    audio.volume = Math.max(0, Math.min(1.0, effectiveVol));
+    audio.muted  = effectiveVol === 0;
   }
 }
 
 function setUserVolume(username, volPercent) {
-  const vol = Math.max(0, Math.min(100, volPercent)) / 100;
+  const vol = Math.max(0, Math.min(200, parseInt(volPercent) || 0)) / 100;
   window._userVolumes[username] = vol;
   safeStorage.setItem(`os_voice_vol_${username}`, vol);
   applyUserVolume(username);
@@ -479,10 +535,9 @@ function getUserVolume(username) {
   const stored = safeStorage.getItem(`os_voice_vol_${username}`);
   if (stored !== null) {
     const parsed = parseFloat(stored);
-    window._userVolumes[username] = parsed;
-    return parsed;
+    if (!isNaN(parsed)) { window._userVolumes[username] = parsed; return parsed; }
   }
-  return 1.0; // Default: 100%
+  return 1.0;
 }
 
 function toggleMuteUserLocally(username) {
@@ -492,233 +547,251 @@ function toggleMuteUserLocally(username) {
   return window._userLocalMuted[username];
 }
 
-// Local Mic Mute (Mutes our track)
+async function triggerVoiceStateUpdate() {
+  if (!window._currentPartyId) return;
+  const tStart = Date.now();
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/voice-state`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        micMuted: window._micMuted || window._deafened,
+        deafened: window._deafened,
+        channelId: window._currentChannelId || null,
+        pingMs: Date.now() - tStart
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const serverMembers = data.members || {};
+      window._partyVoiceMembers = {};
+      Object.keys(serverMembers).forEach(uid => {
+        const m = serverMembers[uid];
+        if (m.username !== currentUser?.username) {
+          window._partyVoiceMembers[m.username] = m;
+        }
+      });
+      updateLobbyVoiceBadges();
+      await maintainPeerConnections();
+    }
+  } catch(e){}
+}
+
 function setMicMuteState(muted) {
-  if (window._audioContext && window._audioContext.state === 'suspended') {
-    window._audioContext.resume().catch(e => console.error("AudioContext resume failed on mic toggle:", e));
-  }
+  if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
   window._micMuted = muted;
   if (window._localStream) {
-    window._localStream.getAudioTracks().forEach(track => {
-      track.enabled = !muted;
-    });
+    window._localStream.getAudioTracks().forEach(track => { track.enabled = !muted; });
   }
+  Object.values(window._peerConnections || {}).forEach(pc => {
+    try { pc.getSenders().forEach(sender => { if (sender.track?.kind === 'audio') sender.track.enabled = !muted; }); } catch(e){}
+  });
   updateSelfVoiceUI();
   updateLobbyVoiceBadges();
+  triggerVoiceStateUpdate();
 }
 
-// Local Headphone Deafen (Mutes all incoming audio + mutes our mic)
 function setDeafState(deafened) {
-  if (window._audioContext && window._audioContext.state === 'suspended') {
-    window._audioContext.resume().catch(e => console.error("AudioContext resume failed on deafen toggle:", e));
-  }
+  if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
   window._deafened = deafened;
-  
   if (deafened) {
-    // If deafened, microphone must also be muted automatically
     setMicMuteState(true);
   } else {
-    // Keep mic muted status as it was previously
     setMicMuteState(window._micMuted);
   }
-
-  // Update all remote audio element volumes
-  Object.keys(window._userAudioElements).forEach(username => {
-    applyUserVolume(username);
-  });
-  
+  Object.keys(window._userAudioElements || {}).forEach(username => applyUserVolume(username));
   updateSelfVoiceUI();
+  triggerVoiceStateUpdate();
 }
 
-// ─── ACTIVE SPEAKER DETECTION (Web Audio Analyser) ─────────────
+// ─── SPEECH ANALYSER ─────────────────────────────────────────
 function setupUserSpeechAnalyser(username, mediaStream) {
   if (!window._audioContext) return;
   try {
-    // If speech analyser node already exists for this user, do not recreate Web Audio nodes
     if (window._userAudioNodes[username]) return;
 
-    const source = window._audioContext.createMediaStreamSource(mediaStream);
+    const source   = window._audioContext.createMediaStreamSource(mediaStream);
     const analyser = window._audioContext.createAnalyser();
     analyser.fftSize = 512;
-    source.connect(analyser);
+    const gainNode = window._audioContext.createGain();
+    const isMe     = currentUser && username === currentUser.username;
 
-    // Complete Web Audio graph to destination with 0-gain to keep processing active without doubling speaker audio
-    const silentGain = window._audioContext.createGain();
-    silentGain.gain.value = 0;
-    analyser.connect(silentGain);
-    silentGain.connect(window._audioContext.destination);
+    if (!isMe) {
+      const userPrefVol = getUserVolume(username);
+      gainNode.gain.value = (!!window._userLocalMuted[username] || window._deafened) ? 0 : userPrefVol;
+      source.connect(gainNode);
+      gainNode.connect(analyser);
+      analyser.connect(window._audioContext.destination);
+      const audio = window._userAudioElements[username];
+      if (audio) audio.muted = true; // WebAudio handles playback
+    } else {
+      gainNode.gain.value = 0; // No echo
+      source.connect(gainNode);
+      gainNode.connect(analyser);
+    }
 
-    window._userAudioNodes[username] = { source, analyser, silentGain };
+    window._userAudioNodes[username] = { source, analyser, gainNode };
 
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    
-    // Check speech levels periodically
     const checkSpeech = () => {
       try {
-        const isMe = currentUser && username === currentUser.username;
-        if (!isMe && (!window._userAudioNodes[username] || !window._peerConnections[username])) return;
-        if (isMe && (!window._userAudioNodes[username] || !window._localStream)) return;
-
-        // Auto-resume AudioContext if suspended during speech check
-        if (window._audioContext && window._audioContext.state === 'suspended') {
-          window._audioContext.resume().catch(() => {});
-        }
+        const me = currentUser && username === currentUser.username;
+        if (!me && (!window._userAudioNodes[username] || !window._peerConnections[username])) return;
+        if (me && (!window._userAudioNodes[username] || !window._localStream)) return;
+        if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
 
         analyser.getByteFrequencyData(dataArray);
-        
-        // Calculate simple average level
         let total = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          total += dataArray[i];
-        }
+        for (let i = 0; i < dataArray.length; i++) total += dataArray[i];
         const avg = total / dataArray.length;
 
-        // Threshold level 10 indicates active speaking (disable if muted or deafened)
         const isMutedSelf = username === currentUser?.username && (window._micMuted || window._deafened);
-        const isSpeaking = avg > 10 && !window._deafened && !window._userLocalMuted[username] && !isMutedSelf;
-        
+        const isSpeaking  = avg > 10 && !window._deafened && !window._userLocalMuted[username] && !isMutedSelf;
+
         const avatarEls = document.querySelectorAll(`#member-card-${username} .avatar, .avatar-user-${username}, .avatar[data-username="${username}"]`);
-        avatarEls.forEach(avatarEl => {
-          if (isSpeaking) {
-            avatarEl.classList.add('is-speaking');
-          } else {
-            avatarEl.classList.remove('is-speaking');
-          }
-        });
-      } catch (speechErr) {
-        console.warn('[VoiceChat] Error in checkSpeech loop for:', username, speechErr);
-      }
-
-      setTimeout(checkSpeech, 150);
+        avatarEls.forEach(el => el.classList.toggle('is-speaking', isSpeaking));
+      } catch(e){}
+      setTimeout(checkSpeech, 120);
     };
-
     checkSpeech();
-  } catch (e) {
-    console.warn('[VoiceChat] Speech analysis failed to build for:', username, e);
-  }
+  } catch(e) { console.warn('[VoiceChat] Speech analyser failed for:', username, e); }
 }
 
-// ─── UI UPDATES & MUTED BADGES ────────────────────────────────
+// ─── UI UPDATES ──────────────────────────────────────────────
 function updateSelfVoiceUI() {
-  const micBtn = document.getElementById('voiceMicToggleBtn');
+  const micBtn  = document.getElementById('voiceMicToggleBtn');
   const deafBtn = document.getElementById('voiceDeafToggleBtn');
-  
+
   if (micBtn) {
-    micBtn.classList.toggle('muted', window._micMuted || window._deafened);
-    micBtn.innerHTML = (window._micMuted || window._deafened) 
+    const isMuted = window._micMuted || window._deafened;
+    micBtn.setAttribute('data-tooltip', isMuted ? 'Susturmayı Kaldır' : 'Sustur');
+    micBtn.setAttribute('title',        isMuted ? 'Susturmayı Kaldır' : 'Sustur');
+    micBtn.classList.toggle('muted', isMuted);
+    micBtn.innerHTML = isMuted
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
   }
 
   if (deafBtn) {
-    deafBtn.classList.toggle('deafened', window._deafened);
-    deafBtn.innerHTML = window._deafened
+    const isDeaf = window._deafened;
+    deafBtn.setAttribute('data-tooltip', isDeaf ? 'Sağırlığı Kaldır' : 'Sağırlaştır');
+    deafBtn.setAttribute('title',        isDeaf ? 'Sağırlığı Kaldır' : 'Sağırlaştır');
+    deafBtn.classList.toggle('deafened', isDeaf);
+    deafBtn.innerHTML = isDeaf
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2c0-.58.07-1.14.2-1.68"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 1 2 2h1a2 2 0 0 1 2-2v-3a2 2 0 0 1-2-2H3z"/></svg>`;
+  }
+
+  // Screen share button state
+  const ssBtn = document.getElementById('voiceScreenShareBtn');
+  if (ssBtn) {
+    const isSharing = !!window._screenStream;
+    ssBtn.classList.toggle('active', isSharing);
+    ssBtn.setAttribute('data-tooltip', isSharing ? 'Paylaşımı Durdur' : 'Ekran Paylaş');
+    ssBtn.style.color = isSharing ? '#23a55a' : '';
   }
 }
 
 function updateLobbyVoiceBadges() {
-  // Update state badges next to names in Lobby
   Object.keys(window._partyVoiceMembers).forEach(username => {
-    const member = window._partyVoiceMembers[username];
-    const badgeContainer = document.getElementById(`voice-badge-${username}`);
-    
-    if (badgeContainer) {
-      const isMuted = member.micMuted || member.deafened;
-      const isDeaf = member.deafened;
-      const isLocallyMuted = !!window._userLocalMuted[username];
+    const member          = window._partyVoiceMembers[username];
+    const badgeContainer  = document.getElementById(`voice-badge-${username}`);
+    if (!badgeContainer) return;
 
-      let iconsHtml = '';
-      
-      // Beautiful SVG status icons styled with app-matching colors
-      if (isLocallyMuted) {
-        // Red locally muted badge
-        iconsHtml += `<span class="voice-badge-icon local-mute" title="Tarafınızdan Susturuldu"><svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
-      } else if (isDeaf) {
-        // Gray deafened badge
-        iconsHtml += `<span class="voice-badge-icon deafened" title="Kulaklığı Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg></span>`;
-      } else if (isMuted) {
-        // Yellow muted badge
-        iconsHtml += `<span class="voice-badge-icon muted" title="Susturulmuş"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
-      }
+    const isDeaf         = member.deafened;
+    const isMuted        = member.micMuted || member.deafened;
+    const isLocallyMuted = !!window._userLocalMuted[username];
 
-      badgeContainer.innerHTML = iconsHtml;
+    let iconsHtml = '';
+    if (isLocallyMuted) {
+      iconsHtml += `<span class="voice-badge-icon local-mute" title="Tarafınızdan Susturuldu"><svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
+    } else if (isDeaf) {
+      iconsHtml += `<span class="voice-badge-icon deafened" title="Kulaklığı Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg></span>`;
+    } else if (isMuted) {
+      iconsHtml += `<span class="voice-badge-icon muted" title="Susturulmuş"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
     }
+    badgeContainer.innerHTML = iconsHtml;
   });
 
-  // Self indicators
-  const selfBadgeContainer = document.getElementById(`voice-badge-${currentUser.username}`);
-  if (selfBadgeContainer) {
+  const selfBadge = document.getElementById(`voice-badge-${currentUser?.username}`);
+  if (selfBadge) {
     let selfIcons = '';
     if (window._deafened) {
       selfIcons += `<span class="voice-badge-icon deafened" title="Kulaklığınız Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg></span>`;
     } else if (window._micMuted) {
       selfIcons += `<span class="voice-badge-icon muted" title="Mikrofonunuz Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
     }
-    selfBadgeContainer.innerHTML = selfIcons;
+    selfBadge.innerHTML = selfIcons;
   }
 }
 
-// ─── USER VOLUME, ROLE & LATENCY MODAL ─────────────────────────────
-window._modalActiveUser = null;
+// ─── USER VOICE MODAL ─────────────────────────────────────────
+window._modalActiveUser    = null;
 window._modalActiveUserObj = null;
+window._modalFriendStatus  = null; // 'none'|'pending_sent'|'pending_received'|'friends'
 
 async function openUserVoiceModal(username) {
   try {
     window._modalActiveUser = username;
-
     const modal = document.getElementById('userVoiceSettingsModal');
     if (!modal) return;
 
-    // Fetch user status first to be accurate
+    // ── Fetch user profile ──
     let user = { username };
     try {
       const res = await fetch(`/api/users/${username}`);
-      if (res.ok) {
-        user = await res.json();
-      }
-    } catch (e) {
-      console.warn("Failed to fetch user details for voice modal:", e);
-    }
+      if (res.ok) user = await res.json();
+    } catch(e){}
     window._modalActiveUserObj = user;
 
-    // Set Profile Photo
+    // ── Avatar ──
     const avatarEl = document.getElementById('uvAvatarContainer');
     if (avatarEl) {
-      avatarEl.innerHTML = typeof renderAvatar === 'function' ? renderAvatar(user, 'avatar avatar-xl') : '';
+      if (user.profile_photo) {
+        avatarEl.innerHTML = `<img src="${user.profile_photo}" alt="${esc(username)}" style="width:100%;height:100%;object-fit:cover;">`;
+      } else {
+        const initials = (username || '?')[0].toUpperCase();
+        const colors = ['#5865f2','#3ba55d','#faa61a','#ed4245','#9b59b6'];
+        const color  = colors[username.charCodeAt(0) % colors.length];
+        avatarEl.innerHTML = `<div style="width:100%;height:100%;background:${color};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;">${initials}</div>`;
+      }
     }
 
-    // Set Username
+    // ── Online ring ──
+    const ring = document.getElementById('uvOnlineRing');
+    if (ring) {
+      const statusColorMap = { online: '#3ba55d', away: '#faa61a', dnd: '#ed4245', invisible: null, offline: null };
+      const status = user.status || 'offline';
+      const color  = statusColorMap[status];
+      if (color) {
+        ring.style.background = color;
+        ring.classList.add('visible');
+      } else {
+        ring.classList.remove('visible');
+      }
+    }
+
+    // ── Username / Status ──
     const nameEl = document.getElementById('uvUsername');
     if (nameEl) nameEl.textContent = `@${username}`;
 
-    // Set Status Label
     const statusLabel = document.getElementById('uvStatusLabel');
     if (statusLabel) {
-      const statusTextMap = {
-        online: 'Çevrimiçi',
-        away: 'Uzakta',
-        dnd: 'Rahatsız Etme',
-        invisible: 'Çevrimdışı',
-        offline: 'Çevrimdışı'
-      };
-      const statusColorMap = {
-        online: '#4ade80',
-        away: '#fbbf24',
-        dnd: '#ef4444',
-        invisible: '#9ca3af',
-        offline: '#9ca3af'
-      };
+      const statusTextMap  = { online: 'Çevrimiçi', away: 'Uzakta', dnd: 'Rahatsız Etme', invisible: 'Çevrimdışı', offline: 'Çevrimdışı' };
+      const statusColorMap = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af', offline: '#9ca3af' };
       const status = user.status || 'offline';
-      statusLabel.textContent = statusTextMap[status] || 'Çevrimdışı';
-      statusLabel.style.color = statusColorMap[status] || '#9ca3af';
+      statusLabel.textContent  = statusTextMap[status] || 'Çevrimdışı';
+      statusLabel.style.color  = statusColorMap[status] || '#9ca3af';
     }
 
-    // Fetch current party details to populate role and channel move list
-    let party = null;
-    let myRole = 'member';
-    let targetMember = null;
+    // ── Latency ──
+    const pingEl = document.getElementById('uvLatency');
+    if (pingEl) {
+      const state = window._partyVoiceMembers?.[username];
+      pingEl.textContent = state?.pingMs ? `${state.pingMs} ms` : '— ms';
+    }
+
+    // ── Party / role data ──
+    let party = null, myRole = 'member', targetMember = null;
     if (window._currentPartyId) {
       try {
         const partyRes = await fetch(`/api/parties/${window._currentPartyId}`);
@@ -728,84 +801,125 @@ async function openUserVoiceModal(username) {
           myRole = me ? me.role : 'member';
           targetMember = (party.members || []).find(m => m.username === username);
         }
-      } catch (e) {}
+      } catch(e){}
     }
 
-    // Role badge display
-    const roleBadge = document.getElementById('uvRoleBadge');
+    // ── Role badge ──
+    const roleBadge  = document.getElementById('uvRoleBadge');
     const targetRole = targetMember ? targetMember.role : (party && party.owner_id === user.id ? 'owner' : 'member');
     if (roleBadge) {
-      const roleTextMap = {
-        owner: 'KURUCU',
-        admin: 'YÖNETİCİ',
-        moderator: 'MODERATÖR',
-        member: 'ÜYE'
-      };
+      const roleTextMap = { owner: 'KURUCU', admin: 'YÖNETİCİ', moderator: 'MODERATÖR', member: 'ÜYE' };
       roleBadge.textContent = roleTextMap[targetRole] || 'ÜYE';
-      roleBadge.className = `role-badge ${targetRole}`;
-    }
-    
-    // Latency MS
-    const pingEl = document.getElementById('uvLatency');
-    if (pingEl) {
-      const state = window._partyVoiceMembers && window._partyVoiceMembers[username];
-      const latency = (state && state.pingMs !== undefined) ? state.pingMs : '—';
-      pingEl.textContent = `MS: ${latency}`;
+      roleBadge.className   = `role-badge ${targetRole}`;
     }
 
-    // Manager Controls Section
-    const managerControls = document.getElementById('uvManagerControls');
-    const roleSelectWrap = document.getElementById('uvRoleSelectWrap');
-    const roleSelect = document.getElementById('uvRoleSelect');
-    const channelSelect = document.getElementById('uvChannelSelect');
-
-    const isSelf = currentUser && username === currentUser.username;
+    const isSelf    = currentUser && username === currentUser.username;
     const canManage = ['owner', 'admin', 'moderator'].includes(myRole) && !isSelf;
 
-    if (managerControls) {
-      managerControls.style.display = canManage ? 'block' : 'none';
+    // ── Friendship status (for social buttons) ──
+    window._modalFriendStatus = 'none';
+    if (!isSelf) {
+      try {
+        const profRes = await fetch(`/api/users/${username}`);
+        if (profRes.ok) {
+          const profData = await profRes.json();
+          const fs = profData.friendship;
+          if (fs) {
+            if (fs.status === 'accepted') window._modalFriendStatus = 'friends';
+            else if (fs.from_user_id === currentUser?.id) window._modalFriendStatus = 'pending_sent';
+            else window._modalFriendStatus = 'pending_received';
+          }
+        }
+      } catch(e){}
     }
 
+    // ── Social row ──
+    const socialRow = document.getElementById('uvSocialRow');
+    if (socialRow) socialRow.style.display = isSelf ? 'none' : 'flex';
+
+    const friendBtn = document.getElementById('uvFriendBtn');
+    if (friendBtn && !isSelf) {
+      const fs = window._modalFriendStatus;
+      if (fs === 'friends') {
+        friendBtn.style.display = 'none'; // Already friends — show DM only
+      } else if (fs === 'pending_sent') {
+        friendBtn.setAttribute('data-tooltip', 'İstek Gönderildi');
+        friendBtn.classList.add('friend-pending');
+        friendBtn.style.display = 'flex';
+      } else {
+        friendBtn.setAttribute('data-tooltip', 'Arkadaş Ekle');
+        friendBtn.classList.remove('friend-pending','friend-active');
+        friendBtn.style.display = 'flex';
+      }
+    }
+
+    const dmBtn = document.getElementById('uvDmBtn');
+    if (dmBtn && !isSelf) {
+      dmBtn.style.display = 'flex';
+      if (window._modalFriendStatus === 'friends') {
+        dmBtn.setAttribute('data-tooltip', 'Mesaj Gönder');
+        dmBtn.style.opacity = '1';
+        dmBtn.disabled = false;
+      } else {
+        dmBtn.setAttribute('data-tooltip', 'Mesaj (Arkadaş değilsiniz)');
+        dmBtn.style.opacity = '0.4';
+        dmBtn.disabled = true;
+      }
+    }
+
+    // ── Volume section ──
+    const volSection = document.getElementById('uvVolumeSection');
+    if (volSection) volSection.style.display = isSelf ? 'none' : 'block';
+
+    const slider  = document.getElementById('uvVolumeSlider');
+    const valText = document.getElementById('uvVolumeVal');
+    if (slider) {
+      const pct    = Math.round(getUserVolume(username) * 100);
+      slider.value = pct;
+      if (valText) valText.textContent = `${pct}%`;
+      slider.disabled = isSelf;
+    }
+
+    const muteBtn   = document.getElementById('uvMuteToggleBtn');
+    const muteLabel = document.getElementById('uvMuteBtnLabel');
+    if (muteBtn) {
+      const isMuted = !!window._userLocalMuted[username];
+      muteBtn.classList.toggle('muted', isMuted);
+      if (muteLabel) muteLabel.textContent = isMuted ? 'Susturuldu' : 'Sustur';
+    }
+
+    // ── Manager controls ──
+    const managerControls = document.getElementById('uvManagerControls');
+    if (managerControls) managerControls.style.display = canManage ? 'block' : 'none';
+
     if (canManage && party) {
-      // Role select (Owner and Admin can assign roles)
       const canAssignRoles = ['owner', 'admin'].includes(myRole) && targetRole !== 'owner';
+      const roleSelectWrap = document.getElementById('uvRoleSelectWrap');
+      const roleSelect     = document.getElementById('uvRoleSelect');
       if (roleSelectWrap && roleSelect) {
         roleSelectWrap.style.display = canAssignRoles ? 'block' : 'none';
         roleSelect.value = targetRole === 'owner' ? 'admin' : targetRole;
       }
-
-      // Channel move select
+      const channelSelect = document.getElementById('uvChannelSelect');
       if (channelSelect) {
         const channels = party.channels || [];
         channelSelect.innerHTML = channels.map(c => {
           const isCurrent = targetMember && parseInt(targetMember.channel_id) === parseInt(c.id);
-          return `<option value="${c.id}" ${isCurrent ? 'selected' : ''}>${esc(c.name)} ${c.user_limit > 0 ? `(Limit: ${c.user_limit})` : ''}</option>`;
+          return `<option value="${c.id}" ${isCurrent ? 'selected' : ''}>${esc(c.name)}${c.user_limit > 0 ? ` (Limit: ${c.user_limit})` : ''}</option>`;
         }).join('');
       }
     }
 
-    // Set Volume Slider
-    const slider = document.getElementById('uvVolumeSlider');
-    if (slider) {
-      const currentVol = getUserVolume(username);
-      slider.value = Math.round(currentVol * 100);
-      slider.disabled = isSelf; // Disable volume slider for self
-    }
+    // ── Danger controls ──
+    const dangerControls = document.getElementById('uvDangerControls');
+    if (dangerControls) dangerControls.style.display = canManage ? 'flex' : 'none';
 
-    // Set Mute state button
-    const muteBtn = document.getElementById('uvMuteToggleBtn');
-    if (muteBtn) {
-      muteBtn.style.display = isSelf ? 'none' : 'flex';
-      const isMuted = !!window._userLocalMuted[username];
-      muteBtn.classList.toggle('muted', isMuted);
-      muteBtn.innerHTML = isMuted
-        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Susturuldu`
-        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur`;
-    }
+    const banBtn = document.getElementById('uvBanBtn');
+    if (banBtn) banBtn.style.display = ['owner', 'admin'].includes(myRole) && !isSelf ? 'flex' : 'none';
 
     modal.classList.add('open');
-  } catch (err) {
-    console.error("Error in openUserVoiceModal:", err);
+  } catch(err) {
+    console.error('openUserVoiceModal error:', err);
     const modal = document.getElementById('userVoiceSettingsModal');
     if (modal) modal.classList.add('open');
   }
@@ -814,34 +928,111 @@ async function openUserVoiceModal(username) {
 function closeUserVoiceModal() {
   const modal = document.getElementById('userVoiceSettingsModal');
   if (modal) modal.classList.remove('open');
-  window._modalActiveUser = null;
+  window._modalActiveUser    = null;
   window._modalActiveUserObj = null;
+  window._modalFriendStatus  = null;
 }
 
 function handleUvVolumeChange(val) {
   if (!window._modalActiveUser) return;
-  setUserVolume(window._modalActiveUser, val);
+  const numVal  = parseInt(val) || 0;
+  const valText = document.getElementById('uvVolumeVal');
+  if (valText) valText.textContent = `${numVal}%`;
+  setUserVolume(window._modalActiveUser, numVal);
 }
 
 function handleUvMuteToggle() {
   if (!window._modalActiveUser) return;
-  const muted = toggleMuteUserLocally(window._modalActiveUser);
-  const muteBtn = document.getElementById('uvMuteToggleBtn');
-  if (muteBtn) {
-    muteBtn.classList.toggle('muted', muted);
-    muteBtn.innerHTML = muted
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Susturuldu`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> Sustur`;
+  const muted     = toggleMuteUserLocally(window._modalActiveUser);
+  const muteBtn   = document.getElementById('uvMuteToggleBtn');
+  const muteLabel = document.getElementById('uvMuteBtnLabel');
+  if (muteBtn) muteBtn.classList.toggle('muted', muted);
+  if (muteLabel) muteLabel.textContent = muted ? 'Susturuldu' : 'Sustur';
+}
+
+function handleUvViewProfile() {
+  const username = window._modalActiveUser;
+  if (!username) return;
+  closeUserVoiceModal();
+  if (typeof openUserPage === 'function') openUserPage(username);
+}
+
+async function handleUvFriendRequest() {
+  const username = window._modalActiveUser;
+  if (!username || window._modalFriendStatus !== 'none') return;
+  try {
+    const res = await fetch(`/api/friends/request/${username}`, { method: 'POST' });
+    if (res.ok) {
+      window._modalFriendStatus = 'pending_sent';
+      const friendBtn = document.getElementById('uvFriendBtn');
+      if (friendBtn) {
+        friendBtn.setAttribute('data-tooltip', 'İstek Gönderildi');
+        friendBtn.classList.add('friend-pending');
+      }
+      showToast('Arkadaşlık isteği gönderildi');
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'İstek gönderilemedi');
+    }
+  } catch(e) { console.error('Friend request error:', e); }
+}
+
+async function handleUvSendMessage() {
+  const username = window._modalActiveUser;
+  if (!username || window._modalFriendStatus !== 'friends') return;
+  closeUserVoiceModal();
+  if (typeof navigateTo === 'function') {
+    navigateTo('messages');
+    // Give messages page a moment to render before opening the DM
+    setTimeout(() => {
+      if (typeof openDmWithUser === 'function') openDmWithUser(username);
+      else if (typeof selectConversation === 'function') selectConversation(username);
+    }, 200);
   }
+}
+
+async function handleUvKick() {
+  const user = window._modalActiveUserObj;
+  if (!user || !window._currentPartyId) return;
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${user.id}/kick`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast(`${user.username} odadan atıldı`);
+      if (typeof fetchPartyAndRender === 'function') fetchPartyAndRender(window._currentPartyId);
+      closeUserVoiceModal();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Kullanıcı atılamadı');
+    }
+  } catch(e) { console.error('Kick error:', e); }
+}
+
+async function handleUvBan() {
+  const user = window._modalActiveUserObj;
+  if (!user || !window._currentPartyId) return;
+  if (!confirm(`@${user.username} bu odadan kalıcı olarak yasaklansın mı?`)) return;
+  try {
+    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${user.id}/ban`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      showToast(`${user.username} yasaklandı`);
+      if (typeof fetchPartyAndRender === 'function') fetchPartyAndRender(window._currentPartyId);
+      closeUserVoiceModal();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Kullanıcı yasaklanamadı');
+    }
+  } catch(e) { console.error('Ban error:', e); }
 }
 
 async function handleUvRoleChange(newRole) {
   if (!window._modalActiveUser || !window._currentPartyId || !window._modalActiveUserObj) return;
   try {
     const userId = window._modalActiveUserObj.id;
-    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${userId}/role`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+    const res    = await fetch(`/api/parties/${window._currentPartyId}/members/${userId}/role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: newRole })
     });
     if (res.ok) {
@@ -852,18 +1043,15 @@ async function handleUvRoleChange(newRole) {
       const d = await res.json().catch(() => ({}));
       showToast(d.error || 'Yetki güncellenemedi');
     }
-  } catch (e) {
-    console.error('Role update error:', e);
-  }
+  } catch(e) { console.error('Role update error:', e); }
 }
 
 async function handleUvChannelMove(channelId) {
   if (!window._modalActiveUser || !window._currentPartyId || !window._modalActiveUserObj) return;
   try {
     const userId = window._modalActiveUserObj.id;
-    const res = await fetch(`/api/parties/${window._currentPartyId}/members/${userId}/move`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res    = await fetch(`/api/parties/${window._currentPartyId}/members/${userId}/move`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channelId: parseInt(channelId) })
     });
     if (res.ok) {
@@ -874,58 +1062,38 @@ async function handleUvChannelMove(channelId) {
       const d = await res.json().catch(() => ({}));
       showToast(d.error || 'Taşınamadı');
     }
-  } catch (e) {
-    console.error('Channel move error:', e);
-  }
+  } catch(e) { console.error('Channel move error:', e); }
 }
 
-// ─── AUDIO INPUT DEVICES ─────────────────────────────────────
+// ─── MIC DEVICE ──────────────────────────────────────────────
 async function populateMicDeviceList() {
   const select = document.getElementById('settingsMicDeviceSelect');
   if (!select) return;
-
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  if (!navigator.mediaDevices?.getUserMedia) {
     select.innerHTML = '<option value="">Ses Girişi Desteklenmiyor (HTTPS gerekli)</option>';
     return;
   }
-
   try {
-    // Explicitly re-request permissions first to make sure device labels are populated
     await navigator.mediaDevices.getUserMedia({ audio: true });
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const audioInputs = devices.filter(device => device.kind === 'audioinput');
-
-    select.innerHTML = audioInputs.map(device => {
-      const label = device.label || `Mikrofon (${device.deviceId.substring(0, 5)}...)`;
-      const isSelected = device.deviceId === window._selectedMicId;
-      return `<option value="${esc(device.deviceId)}" ${isSelected ? 'selected' : ''}>${esc(label)}</option>`;
+    const devices    = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(d => d.kind === 'audioinput');
+    select.innerHTML = audioInputs.map(d => {
+      const label = d.label || `Mikrofon (${d.deviceId.substring(0, 5)}...)`;
+      return `<option value="${esc(d.deviceId)}" ${d.deviceId === window._selectedMicId ? 'selected' : ''}>${esc(label)}</option>`;
     }).join('');
-
-    // Fallback if none
-    if (audioInputs.length === 0) {
-      select.innerHTML = '<option value="">Mikrofon bulunamadı</option>';
-    }
-  } catch (err) {
-    console.error('Failed to populate device list:', err);
+    if (audioInputs.length === 0) select.innerHTML = '<option value="">Mikrofon bulunamadı</option>';
+  } catch(err) {
     select.innerHTML = '<option value="">Erişim İzni Eksik</option>';
   }
 }
 
 async function handleMicDeviceChange(deviceId) {
   if (!deviceId) return;
-  console.log('Switching microphone device to:', deviceId);
   window._selectedMicId = deviceId;
   safeStorage.setItem('os_selected_mic_id', deviceId);
-
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    return;
-  }
-
-  // If currently active in a voice chat, reinitialize to swap track
   if (window._currentPartyId) {
     await initVoiceChat(window._currentPartyId);
   } else {
-    // Just trigger a re-get user media to test permissions
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
       stream.getTracks().forEach(t => t.stop());
@@ -933,15 +1101,512 @@ async function handleMicDeviceChange(deviceId) {
   }
 }
 
-// Event delegation to bulletproof member settings click triggers in Lobby
+// ─── SCREEN SHARE PROMPT & SOURCE SELECTOR ───────────────────
+window._selectedSSSurface = 'monitor';
+
+function openScreenSharePromptModal() {
+  if (!window._currentPartyId || !window._currentChannelId) {
+    showToast('Önce bir ses kanalına girin.');
+    return;
+  }
+
+  fetch(`/api/parties/${window._currentPartyId}/screenshare-state`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sharing: true, channelId: window._currentChannelId })
+  }).then(async res => {
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Bu kanalda ekran paylaşımı izni yok.');
+      return;
+    }
+    const modal = document.getElementById('screenSharePromptModal');
+    if (modal) modal.classList.add('open');
+  }).catch(() => {
+    showToast('Ekran paylaşımı izni kontrol edilemedi.');
+  });
+}
+
+function closeScreenSharePromptModal() {
+  const modal = document.getElementById('screenSharePromptModal');
+  if (modal) modal.classList.remove('open');
+}
+
+function selectSSSurface(surface, btn) {
+  window._selectedSSSurface = surface;
+  const opts = document.querySelectorAll('.ss-prompt-option');
+  opts.forEach(o => o.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+async function confirmStartScreenShare() {
+  closeScreenSharePromptModal();
+  await startScreenShare(window._selectedSSSurface);
+}
+
+// ─── SCREEN SHARE STREAMING ──────────────────────────────────
+async function toggleScreenShare() {
+  if (window._screenStream) {
+    stopScreenShare(true);
+  } else {
+    openScreenSharePromptModal();
+  }
+}
+
+async function startScreenShare(preferredSurface = 'monitor') {
+  if (!window._currentPartyId || !window._currentChannelId) return;
+
+  try {
+    const videoConstraints = {
+      frameRate: { ideal: 60, max: 60 },
+      cursor: 'always'
+    };
+    if (preferredSurface) videoConstraints.displaySurface = preferredSurface;
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: videoConstraints,
+      audio: false
+    });
+
+    window._screenStream = stream;
+
+    stream.getVideoTracks()[0].onended = () => stopScreenShare(true);
+
+    updateSelfVoiceUI();
+    showToast('Ekran paylaşımı başlatıldı');
+
+    showScreenShareViewer(currentUser?.username || 'Siz', stream, true);
+
+    const sameChannelPeers = Object.keys(window._partyVoiceMembers).filter(u => {
+      const m = window._partyVoiceMembers[u];
+      return m && parseInt(m.channelId) === parseInt(window._currentChannelId);
+    });
+
+    for (const username of sameChannelPeers) {
+      await createScreenShareConnection(username, true);
+    }
+
+  } catch(err) {
+    console.warn('[ScreenShare] getDisplayMedia failed:', err);
+    try {
+      await fetch(`/api/parties/${window._currentPartyId}/screenshare-state`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sharing: false, channelId: window._currentChannelId })
+      });
+    } catch(e2){}
+    if (err.name !== 'NotAllowedError') showToast('Ekran paylaşımı başlatılamadı.');
+    window._screenStream = null;
+    updateSelfVoiceUI();
+  }
+}
+
+function stopScreenShare(announce = true) {
+  if (window._screenStream) {
+    window._screenStream.getTracks().forEach(t => t.stop());
+    window._screenStream = null;
+  }
+
+  Object.keys(window._ssConnections).forEach(u => {
+    try { window._ssConnections[u].close(); } catch(e){}
+  });
+  window._ssConnections = {};
+
+  updateSelfVoiceUI();
+
+  if (announce && window._currentPartyId) {
+    fetch(`/api/parties/${window._currentPartyId}/screenshare-state`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sharing: false, channelId: window._currentChannelId })
+    }).catch(() => {});
+  }
+
+  if (window._ssCurrentSharer === currentUser?.username) {
+    closeScreenShareViewer();
+  }
+}
+
+async function createScreenShareConnection(targetUsername, isInitiator) {
+  if (window._ssConnections[targetUsername]) {
+    try { window._ssConnections[targetUsername].close(); } catch(e){}
+  }
+
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  window._ssConnections[targetUsername] = pc;
+
+  if (window._screenStream) {
+    window._screenStream.getTracks().forEach(track => pc.addTrack(track, window._screenStream));
+  }
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate && window._currentPartyId) {
+      sendScreenShareSignal(targetUsername, { type: 'candidate', candidate: event.candidate });
+    }
+  };
+
+  pc.ontrack = (event) => {
+    const stream = event.streams?.[0] || new MediaStream([event.track]);
+    window._ssRemoteStreams[targetUsername] = stream;
+    showScreenShareViewer(targetUsername, stream, false);
+  };
+
+  if (isInitiator && window._screenStream) {
+    const offer = await pc.createOffer({ offerToReceiveVideo: true });
+    await pc.setLocalDescription(offer);
+    await sendScreenShareSignal(targetUsername, { type: 'ss-offer', offer: pc.localDescription });
+  }
+}
+
+async function sendScreenShareSignal(toUsername, signal) {
+  if (!window._currentPartyId) return;
+  try {
+    await fetch(`/api/parties/${window._currentPartyId}/screenshare-signal`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toUsername, signal })
+    });
+  } catch(e){}
+}
+
+if (!window._ssIceQueues) window._ssIceQueues = {};
+
+async function handleIncomingScreenShareSignal(fromUsername, signal) {
+  if (!window._ssIceQueues[fromUsername]) window._ssIceQueues[fromUsername] = [];
+
+  if (signal.type === 'ss-request') {
+    console.log('[ScreenShare] Received ss-request from viewer:', fromUsername);
+    if (window._screenStream) {
+      createScreenShareConnection(fromUsername, true);
+    }
+  } else if (signal.type === 'ss-offer') {
+    console.log('[ScreenShare] Received ss-offer from sharer:', fromUsername);
+    let pc = window._ssConnections[fromUsername];
+    if (!pc) {
+      pc = new RTCPeerConnection(RTC_CONFIG);
+      window._ssConnections[fromUsername] = pc;
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate && window._currentPartyId) {
+          sendScreenShareSignal(fromUsername, { type: 'candidate', candidate: event.candidate });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        console.log('[ScreenShare] Received remote track from:', fromUsername);
+        const stream = event.streams?.[0] || new MediaStream([event.track]);
+        window._ssRemoteStreams[fromUsername] = stream;
+        showScreenShareViewer(fromUsername, stream, false);
+      };
+    }
+
+    await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+
+    // Flush queued ICE candidates
+    if (window._ssIceQueues[fromUsername]) {
+      for (const cand of window._ssIceQueues[fromUsername]) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch(e){}
+      }
+      window._ssIceQueues[fromUsername] = [];
+    }
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await sendScreenShareSignal(fromUsername, { type: 'ss-answer', answer: pc.localDescription });
+
+  } else if (signal.type === 'ss-answer') {
+    console.log('[ScreenShare] Received ss-answer from viewer:', fromUsername);
+    const pc = window._ssConnections[fromUsername];
+    if (pc) {
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+
+      // Flush queued ICE candidates
+      if (window._ssIceQueues[fromUsername]) {
+        for (const cand of window._ssIceQueues[fromUsername]) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch(e){}
+        }
+        window._ssIceQueues[fromUsername] = [];
+      }
+    }
+  } else if (signal.type === 'candidate') {
+    const pc = window._ssConnections[fromUsername];
+    if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+      try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch(e){}
+    } else {
+      if (!window._ssIceQueues[fromUsername]) window._ssIceQueues[fromUsername] = [];
+      window._ssIceQueues[fromUsername].push(signal.candidate);
+    }
+  }
+}
+
+// ─── SCREEN SHARE VIEWER ─────────────────────────────────────
+function showScreenShareViewer(sharerUsername, stream, isOwnStream = false) {
+  let overlay = document.getElementById('screenShareOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id        = 'screenShareOverlay';
+    overlay.className = 'ss-overlay';
+    overlay.innerHTML = `
+      <div class="ss-toolbar" id="ssToolbar">
+        <div class="ss-toolbar-left">
+          <div class="ss-sharer-badge" id="ssSharerBadge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+            </svg>
+            <span id="ssSharerName"></span>
+          </div>
+          <span class="ss-quality-badge" id="ssQualityBadge">HD 60FPS</span>
+          <span class="ss-live-badge">CANLI</span>
+        </div>
+        <div class="ss-toolbar-right">
+          <button class="ss-tool-btn" id="ssMiniToggleBtn" onclick="toggleSSMiniMode()" title="Küçük / Kayan Pencere">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><rect x="11" y="11" width="8" height="8" rx="1"/>
+            </svg>
+          </button>
+          <button class="ss-tool-btn" id="ssPipToggleBtn" onclick="toggleSSPiP()" title="Masaüstü Resim-içinde-Resim (PiP)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="9" width="8" height="6" rx="1" fill="currentColor"/>
+            </svg>
+          </button>
+          <button class="ss-tool-btn" id="ssFsToggleBtn" onclick="toggleSSFullscreen()" title="Tam Ekran">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+          </button>
+          <button class="ss-close-btn" onclick="closeScreenShareViewer()" title="Kapat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ss-video-container">
+        <video id="ssVideo" class="ss-video" autoplay playsinline muted></video>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+  }
+
+  const video = document.getElementById('ssVideo');
+  if (video) {
+    video.muted = true;
+    if (video.srcObject !== stream) video.srcObject = stream;
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        const unlock = () => {
+          video?.play().catch(() => {});
+          document.removeEventListener('click', unlock);
+          document.removeEventListener('touchstart', unlock);
+        };
+        document.addEventListener('click', unlock);
+        document.addEventListener('touchstart', unlock);
+      });
+    }
+  }
+
+  const sharerName = document.getElementById('ssSharerName');
+  if (sharerName) sharerName.textContent = isOwnStream ? 'Ekranınız (Siz)' : sharerUsername;
+
+  window._ssCurrentSharer = sharerUsername;
+}
+
+function closeScreenShareViewer() {
+  const overlay = document.getElementById('screenShareOverlay');
+  if (overlay) {
+    if (document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => {});
+    }
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    overlay.classList.remove('open', 'mini-mode');
+    setTimeout(() => { try { overlay.style.display = 'none'; } catch(e){} }, 300);
+  }
+
+  if (window._ssCurrentSharer && window._ssCurrentSharer !== currentUser?.username && window._ssConnections[window._ssCurrentSharer]) {
+    try { window._ssConnections[window._ssCurrentSharer].close(); } catch(e){}
+    delete window._ssConnections[window._ssCurrentSharer];
+    delete window._ssRemoteStreams[window._ssCurrentSharer];
+  }
+  window._ssCurrentSharer = null;
+}
+
+function toggleSSFullscreen() {
+  const overlay = document.getElementById('screenShareOverlay');
+  const video = document.getElementById('ssVideo');
+  const target = overlay || video;
+  if (!target) return;
+  if (!document.fullscreenElement) {
+    target.requestFullscreen?.().catch(() => {});
+  } else {
+    document.exitFullscreen?.().catch(() => {});
+  }
+}
+
+async function toggleSSPiP() {
+  const video = document.getElementById('ssVideo');
+  if (!video) return;
+  try {
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+    } else if (document.pictureInPictureEnabled && video.readyState >= 2) {
+      await video.requestPictureInPicture();
+    } else {
+      showToast('Picture-in-Picture bu tarayıcıda desteklenmiyor.');
+    }
+  } catch(err) {
+    console.warn('PiP error:', err);
+    showToast('Kayan pencereye geçilemedi.');
+  }
+}
+
+function toggleSSMiniMode() {
+  const overlay = document.getElementById('screenShareOverlay');
+  if (!overlay) return;
+  const isMini = overlay.classList.toggle('mini-mode');
+  showToast(isMini ? 'Küçük kayan pencere moduna geçildi' : 'Tam ekrana geçildi');
+}
+
+// ─── SCREEN SHARE STATE POLLING ──────────────────────────────
+window._prevSharers = [];
+
+function startScreenShareStatePolling(partyId) {
+  const poll = async () => {
+    if (!window._currentPartyId) return;
+    try {
+      const res = await fetch(`/api/parties/${partyId}/screenshare-state`);
+      if (!res.ok) return;
+      const states = await res.json();
+
+      updateScreenShareBadges(states);
+
+      // Check for new sharers in our current channel and notify
+      const currentSharers = Object.keys(states);
+      currentSharers.forEach(username => {
+        if (username !== currentUser?.username && !window._prevSharers.includes(username)) {
+          const st = states[username];
+          if (st && window._currentChannelId && parseInt(st.channelId) === parseInt(window._currentChannelId)) {
+            showToast(`🎥 @${username} yayın başlattı! Yayını izlemek için 'Yayını İzle' butonuna tıklayın.`);
+          }
+        }
+      });
+      window._prevSharers = currentSharers;
+
+      if (window._ssCurrentSharer && !states[window._ssCurrentSharer]) {
+        closeScreenShareViewer();
+        showToast('Ekran paylaşımı sona erdi.');
+      }
+    } catch(e){}
+  };
+
+  window._ssPolling = setInterval(poll, 2000);
+}
+
+window._latestScreenShareStates = {};
+
+function updateScreenShareBadges(states) {
+  window._latestScreenShareStates = states || {};
+  const activeSharers = Object.keys(states || {});
+
+  // 1. Remove badges only for users no longer sharing
+  document.querySelectorAll('.ss-watch-btn, .ss-member-badge').forEach(el => {
+    const sharer = el.getAttribute('data-sharer');
+    if (sharer && !activeSharers.includes(sharer)) {
+      el.remove();
+    }
+  });
+
+  // 2. Add or update badges for active sharers without destroying existing DOM nodes
+  Object.entries(states || {}).forEach(([username, state]) => {
+    const channelId = state.channelId;
+    const chanCard = document.getElementById(`channel-card-${channelId}`);
+    const isSelf = currentUser && username === currentUser.username;
+    const tooltipText = isSelf ? 'Yayınınızı İzle' : `Yayını İzle (@${username})`;
+
+    if (chanCard) {
+      const header = chanCard.querySelector('.sub-channel-header');
+      if (header) {
+        let watchBtn = header.querySelector(`.ss-watch-btn[data-sharer="${username}"]`);
+        if (!watchBtn) {
+          watchBtn = document.createElement('button');
+          watchBtn.className = 'ss-watch-btn icon-only';
+          watchBtn.setAttribute('data-sharer', username);
+          watchBtn.setAttribute('data-tooltip', tooltipText);
+          watchBtn.onclick = (e) => {
+            e.stopPropagation();
+            openStreamViewerForUser(username);
+          };
+          watchBtn.innerHTML = `
+            <span class="ss-watch-dot"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+            </svg>
+          `;
+          header.appendChild(watchBtn);
+        }
+      }
+    }
+
+    const memberCard = document.getElementById(`member-card-${username}`);
+    if (memberCard) {
+      const badgeBox = memberCard.querySelector(`[id="voice-badge-${username}"]`) || memberCard;
+      if (badgeBox) {
+        let mBadge = badgeBox.querySelector(`.ss-member-badge[data-sharer="${username}"]`);
+        if (!mBadge) {
+          mBadge = document.createElement('button');
+          mBadge.className = 'ss-member-badge icon-only';
+          mBadge.setAttribute('data-sharer', username);
+          mBadge.setAttribute('data-tooltip', tooltipText);
+          mBadge.onclick = (e) => {
+            e.stopPropagation();
+            openStreamViewerForUser(username);
+          };
+          mBadge.innerHTML = `
+            <span class="ss-watch-dot"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+            </svg>
+          `;
+          badgeBox.appendChild(mBadge);
+        }
+      }
+    }
+  });
+}
+
+function openStreamViewerForUser(username) {
+  const isSelf = currentUser && username === currentUser.username;
+  if (isSelf) {
+    if (window._screenStream) {
+      showScreenShareViewer(username, window._screenStream, true);
+    } else {
+      showToast('Aktif bir ekran paylaşımınız bulunmuyor.');
+    }
+  } else {
+    const stream = window._ssRemoteStreams[username];
+    showScreenShareViewer(username, stream || null, false);
+    if (!stream) {
+      showToast(`@${username} kullanıcısının yayınına bağlanılıyor...`);
+      sendScreenShareSignal(username, { type: 'ss-request' });
+    }
+  }
+}
+
+// ─── EVENT DELEGATION ────────────────────────────────────────
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.member-voice-settings-btn');
   if (btn) {
     e.preventDefault();
     e.stopPropagation();
     const username = btn.getAttribute('data-username');
-    if (username) {
-      openUserVoiceModal(username);
-    }
+    if (username) openUserVoiceModal(username);
+  }
+});
+
+// Close userVoiceSettingsModal on backdrop click
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('userVoiceSettingsModal');
+  if (modal && modal.classList.contains('open') && e.target === modal) {
+    closeUserVoiceModal();
   }
 });

@@ -8067,4 +8067,369 @@ button:hover,
 .party-focus-overlay.in-active-party ~ .timer-main-stage #soloPartyControlsRow {
   display: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   USER VOICE MODAL — Redesigned (uvm-*)
+   ═══════════════════════════════════════════════════════ */
+#userVoiceSettingsModal.modal-overlay {
+  align-items: center;
+  justify-content: center;
+}
+
+.uvm-card {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: #1a1b1f;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.85);
+  position: relative;
+}
+
+/* Banner */
+.uvm-banner {
+  height: 72px;
+  background: linear-gradient(135deg, #1e2340 0%, #2a1f3d 50%, #1a2040 100%);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 12px 0;
+}
+
+.uvm-close-btn {
+  background: rgba(0,0,0,0.3);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+.uvm-close-btn:hover { background: rgba(255,255,255,0.12); }
+
+.uvm-latency-chip {
+  font-size: 10px;
+  font-weight: 800;
+  font-family: monospace;
+  color: rgba(255,255,255,0.5);
+  background: rgba(0,0,0,0.3);
+  border-radius: 999px;
+  padding: 3px 8px;
+  letter-spacing: 0.5px;
+}
+
+/* Body */
+.uvm-body {
+  padding: 0 16px 16px;
+  position: relative;
+}
+
+/* Avatar */
+.uvm-avatar-wrap {
+  position: relative;
+  display: inline-block;
+  margin-top: -30px;
+  margin-bottom: 8px;
+}
+.uvm-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #2a2b30;
+  border: 3px solid #1a1b1f;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  transition: opacity 0.15s ease;
+}
+.uvm-avatar-wrap:hover .uvm-avatar { opacity: 0.85; }
+.uvm-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.uvm-online-ring {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #3ba55d;
+  border: 2px solid #1a1b1f;
+  display: none;
+}
+.uvm-online-ring.visible { display: block; }
+
+/* Identity */
+.uvm-identity { margin-bottom: 10px; }
+.uvm-username {
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 4px;
+  line-height: 1.2;
+  transition: color 0.15s ease;
+}
+.uvm-username:hover { color: #c9cbe0; }
+
+.uvm-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.uvm-status-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #72767d;
+}
+.uvm-dot { font-size: 11px; color: #4f545c; }
+
+/* Social action row */
+.uvm-social-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.uvm-icon-btn {
+  background: rgba(255,255,255,0.05);
+  border: none;
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b5bac1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+.uvm-icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.uvm-icon-btn.friend-active { color: #3ba55d; }
+.uvm-icon-btn.friend-pending { color: #faa61a; }
+
+/* Divider */
+.uvm-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 0 0 12px;
+}
+
+/* Section label */
+.uvm-section-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #72767d;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.uvm-vol-val {
+  font-family: monospace;
+  color: #fff;
+  font-size: 10px;
+}
+
+.uvm-section { margin-bottom: 12px; }
+
+/* Slider */
+.uvm-slider {
+  width: 100%;
+  accent-color: #5865f2;
+  cursor: pointer;
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Mute button — subtle, no heavy background */
+.uvm-mute-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #b5bac1;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+  width: 100%;
+}
+.uvm-mute-btn:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.uvm-mute-btn.muted { color: #ed4245; border-color: rgba(237,66,69,0.3); }
+.uvm-mute-btn.muted:hover { background: rgba(237,66,69,0.08); }
+
+/* Select inputs */
+.uvm-select {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #e3e5e8;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+.uvm-select:hover { border-color: rgba(255,255,255,0.15); }
+
+/* Danger row */
+.uvm-danger-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.uvm-danger-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #72767d;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+/* Kick: icon grey, hover → red background */
+.uvm-danger-btn.kick:hover {
+  background: rgba(237, 66, 69, 0.15);
+  border-color: rgba(237,66,69,0.3);
+  color: #ed4245;
+}
+/* Ban: icon itself is red always */
+.uvm-danger-btn.ban {
+  color: #ed4245;
+  border-color: rgba(237,66,69,0.25);
+}
+.uvm-danger-btn.ban:hover {
+  background: rgba(237, 66, 69, 0.12);
+}
+
+/* ── Mobile: full-screen overlay ── */
+@media (max-width: 767px) {
+  #userVoiceSettingsModal.modal-overlay {
+    align-items: flex-end !important;
+    justify-content: stretch !important;
+    padding: 0 !important;
+  }
+  .uvm-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 92dvh;
+    overflow-y: auto;
+  }
+  .uvm-close-btn {
+    /* Ensure it's always reachable */
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOOLTIP SYSTEM — data-tooltip attribute
+   ═══════════════════════════════════════════════════════ */
+[data-tooltip] {
+  position: relative;
+}
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  background: #18191c;
+  color: #e3e5e8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 200px;
+  width: max-content;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 999999;
+  /* Default: top */
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+}
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* top */
+[data-tooltip-pos="top"]::after {
+  bottom: calc(100% + 8px);
+  top: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) translateY(4px);
+}
+[data-tooltip-pos="top"]:hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+/* bottom */
+[data-tooltip-pos="bottom"]::after {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) translateY(-4px);
+}
+[data-tooltip-pos="bottom"]:hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+/* left */
+[data-tooltip-pos="left"]::after {
+  right: calc(100% + 8px);
+  left: auto;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%) translateX(4px);
+  max-width: 180px;
+}
+[data-tooltip-pos="left"]:hover::after {
+  transform: translateY(-50%) translateX(0);
+}
+/* right */
+[data-tooltip-pos="right"]::after {
+  left: calc(100% + 8px);
+  right: auto;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%) translateX(-4px);
+  max-width: 160px;
+}
+[data-tooltip-pos="right"]:hover::after {
+  transform: translateY(-50%) translateX(0);
+}
 

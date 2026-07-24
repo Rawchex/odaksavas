@@ -11,9 +11,12 @@ const rateLimit = require('express-rate-limit');
 const SALT_ROUNDS = 10;
 const JWT_SECRET = process.env.JWT_SECRET || 'odaksavasi_super_secret_jwt_key_2026';
 
+// Persistent Data Directory (Useful for Railway Volumes)
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+
 // VAPID keys setup
 let vapidKeys;
-const vapidPath = path.join(__dirname, 'vapidKeys.json');
+const vapidPath = path.join(DATA_DIR, 'vapidKeys.json');
 try {
   if (fs.existsSync(vapidPath)) {
     vapidKeys = require(vapidPath);
@@ -34,7 +37,7 @@ webpush.setVapidDetails(
 const app = express();
 app.set('trust proxy', 1); // Railway runs behind a proxy
 
-const DB_PATH = process.env.DB_PATH || 'odaksavas.db';
+const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'odaksavas.db');
 const db = new sqlite3.Database(DB_PATH);
 
 global.partyVoiceStates = {};
@@ -42,8 +45,14 @@ global.partySignals = {};
 
 
 // Multer security configuration
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'public', 'uploads');
+// Ensure uploads directory exists
+if (!fs.existsSync(UPLOADS_DIR)){
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
 const upload = multer({ 
-  dest: 'public/uploads/',
+  dest: UPLOADS_DIR,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
   fileFilter: (req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
@@ -72,7 +81,10 @@ const authLimiter = rateLimit({
 app.use(limiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
+
+// Serve static files
 app.use(express.static('public'));
+app.use('/uploads', express.static(UPLOADS_DIR)); // Explicitly serve uploads from persistent dir
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Bulletproof route for default avatar in uploads directory
@@ -100,12 +112,14 @@ db.serialize(() => {
     user_limit INTEGER DEFAULT 0,
     position INTEGER DEFAULT 0,
     is_default INTEGER DEFAULT 0,
+    allow_screen_share INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (party_id) REFERENCES parties(id)
   )`);
 
   db.run(`ALTER TABLE party_members ADD COLUMN channel_id INTEGER DEFAULT NULL`, () => {});
   db.run(`ALTER TABLE party_members ADD COLUMN role VARCHAR DEFAULT 'member'`, () => {});
+  db.run(`ALTER TABLE party_channels ADD COLUMN allow_screen_share INTEGER DEFAULT 0`, () => {});
 });
 
 // Database setup
@@ -331,6 +345,16 @@ db.serialize(() => {
       SELECT RAISE(IGNORE);
     END;
   `);
+
+  db.run(`CREATE TABLE IF NOT EXISTS party_bans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    banned_by INTEGER NOT NULL,
+    reason TEXT,
+    created_at DATETIME DEFAULT (datetime('now')),
+    UNIQUE(party_id, user_id)
+  )`);
 });
 
 // Periodic database cleanup for messages and party chats
@@ -1077,7 +1101,7 @@ app.post('/api/parties', auth, (req, res) => {
   db.run('INSERT INTO parties (owner_id, name, is_private) VALUES (?, ?, ?)', 
     [req.user.id, name || 'Yeni Parti', isPrivate ? 1 : 0], function() {
     const partyId = this.lastID;
-    db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [partyId, req.user.id], () => {
+    db.run('INSERT INTO party_members (party_id, user_id, role) VALUES (?, ?, "owner")', [partyId, req.user.id], () => {
       res.json({ partyId });
     });
   });
@@ -1155,11 +1179,16 @@ app.post('/api/parties/invites/:id/reject', auth, (req, res) => {
 function checkPartyManagementPermission(partyId, userId, callback) {
   db.get('SELECT owner_id FROM parties WHERE id = ?', [partyId], (err, party) => {
     if (!party) return callback(null, false, 'Parti bulunamadı');
-    if (party.owner_id === userId) return callback(null, true, 'owner');
+    
+    const isOwner = Boolean(party.owner_id && userId && (parseInt(party.owner_id) === parseInt(userId) || party.owner_id == userId));
+    if (isOwner) {
+      db.run('UPDATE party_members SET role = "owner" WHERE party_id = ? AND user_id = ? AND (role IS NULL OR role = "member")', [partyId, userId]);
+      return callback(null, true, 'owner');
+    }
 
     db.get('SELECT role FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, userId], (err, member) => {
       if (!member) return callback(null, false, 'Üye değilsiniz');
-      const role = member.role || 'member';
+      const role = member ? (member.role || 'member') : 'member';
       const isAllowed = ['owner', 'admin', 'moderator'].includes(role);
       callback(null, isAllowed, role);
     });
@@ -1249,7 +1278,7 @@ app.put('/api/parties/:id/name', auth, (req, res) => {
 
 // Create sub-channel
 app.post('/api/parties/:id/channels', auth, (req, res) => {
-  const { name, userLimit } = req.body;
+  const { name, userLimit, allowScreenShare } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Kanal adı boş olamaz' });
 
   checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
@@ -1258,10 +1287,11 @@ app.post('/api/parties/:id/channels', auth, (req, res) => {
     db.get('SELECT MAX(position) as maxPos FROM party_channels WHERE party_id = ?', [req.params.id], (err, row) => {
       const pos = (row && row.maxPos !== null) ? row.maxPos + 1 : 0;
       const limit = parseInt(userLimit) || 0;
+      const screenShare = allowScreenShare ? 1 : 0;
 
       db.run(
-        'INSERT INTO party_channels (party_id, name, user_limit, position, is_default) VALUES (?, ?, ?, ?, 0)',
-        [req.params.id, name.trim(), limit, pos],
+        'INSERT INTO party_channels (party_id, name, user_limit, position, is_default, allow_screen_share) VALUES (?, ?, ?, ?, 0, ?)',
+        [req.params.id, name.trim(), limit, pos, screenShare],
         function() {
           res.json({ success: true, channelId: this.lastID });
         }
@@ -1272,16 +1302,17 @@ app.post('/api/parties/:id/channels', auth, (req, res) => {
 
 // Edit sub-channel
 app.put('/api/parties/:id/channels/:channelId', auth, (req, res) => {
-  const { name, userLimit } = req.body;
+  const { name, userLimit, allowScreenShare } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Kanal adı boş olamaz' });
 
   checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
     if (!allowed) return res.status(403).json({ error: 'Kanal düzenleme yetkiniz yok' });
 
     const limit = parseInt(userLimit) || 0;
+    const screenShare = allowScreenShare ? 1 : 0;
     db.run(
-      'UPDATE party_channels SET name = ?, user_limit = ? WHERE id = ? AND party_id = ?',
-      [name.trim(), limit, req.params.channelId, req.params.id],
+      'UPDATE party_channels SET name = ?, user_limit = ?, allow_screen_share = ? WHERE id = ? AND party_id = ?',
+      [name.trim(), limit, screenShare, req.params.channelId, req.params.id],
       () => {
         res.json({ success: true });
       }
@@ -1330,6 +1361,15 @@ app.put('/api/parties/:id/channels-reorder', auth, (req, res) => {
   });
 });
 
+// Helper to update memory voice state channelId
+function updateMemoryVoiceChannel(partyId, userId, channelId) {
+  try {
+    if (global.partyVoiceStates && global.partyVoiceStates[partyId] && global.partyVoiceStates[partyId][userId]) {
+      global.partyVoiceStates[partyId][userId].channelId = parseInt(channelId);
+    }
+  } catch(e){}
+}
+
 // Join sub-channel
 app.post('/api/parties/:id/channels/:channelId/join', auth, (req, res) => {
   const partyId = req.params.id;
@@ -1347,6 +1387,7 @@ app.post('/api/parties/:id/channels/:channelId/join', auth, (req, res) => {
       }
 
       db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?', [channelId, partyId, req.user.id], () => {
+        updateMemoryVoiceChannel(partyId, req.user.id, channelId);
         res.json({ success: true, channelId });
       });
     });
@@ -1366,6 +1407,7 @@ app.post('/api/parties/:id/members/:targetUserId/move', auth, (req, res) => {
       if (!chan) return res.status(404).json({ error: 'Hedef kanal bulunamadı' });
 
       db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?', [channelId, partyId, targetUserId], () => {
+        updateMemoryVoiceChannel(partyId, targetUserId, channelId);
         res.json({ success: true, channelId, targetUserId });
       });
     });
@@ -1388,6 +1430,70 @@ app.put('/api/parties/:id/members/:targetUserId/role', auth, (req, res) => {
 
     db.run('UPDATE party_members SET role = ? WHERE party_id = ? AND user_id = ?', [role, partyId, targetUserId], () => {
       res.json({ success: true, role });
+    });
+  });
+});
+
+// Kick member from party
+app.delete('/api/parties/:id/members/:targetUserId/kick', auth, (req, res) => {
+  const partyId = req.params.id;
+  const targetUserId = parseInt(req.params.targetUserId);
+
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, requesterRole) => {
+    if (!allowed) return res.status(403).json({ error: 'Kullanıcı atma yetkiniz yok' });
+
+    // Check target is not owner
+    db.get('SELECT owner_id FROM parties WHERE id = ?', [partyId], (err, party) => {
+      if (party && parseInt(party.owner_id) === targetUserId) {
+        return res.status(403).json({ error: 'Kurucu atılamaz' });
+      }
+      // Moderators can only kick members, not admins
+      if (requesterRole === 'moderator') {
+        db.get('SELECT role FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], (err, tm) => {
+          if (tm && ['admin', 'owner'].includes(tm.role)) {
+            return res.status(403).json({ error: 'Bu kullanıcıyı atma yetkiniz yok' });
+          }
+          db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], () => {
+            db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
+              [partyId, `Bir üye odadan atıldı.`]);
+            res.json({ success: true });
+          });
+        });
+      } else {
+        db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], () => {
+          db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
+            [partyId, `Bir üye odadan atıldı.`]);
+          res.json({ success: true });
+        });
+      }
+    });
+  });
+});
+
+// Ban member from party
+app.post('/api/parties/:id/members/:targetUserId/ban', auth, (req, res) => {
+  const partyId = req.params.id;
+  const targetUserId = parseInt(req.params.targetUserId);
+  const { reason } = req.body || {};
+
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, requesterRole) => {
+    if (!allowed || requesterRole === 'moderator') {
+      return res.status(403).json({ error: 'Banlama için Kurucu veya Yönetici yetkisi gereklidir' });
+    }
+    db.get('SELECT owner_id FROM parties WHERE id = ?', [partyId], (err, party) => {
+      if (party && parseInt(party.owner_id) === targetUserId) {
+        return res.status(403).json({ error: 'Kurucu banlanamaz' });
+      }
+      // Insert ban record
+      db.run('INSERT OR REPLACE INTO party_bans (party_id, user_id, banned_by, reason) VALUES (?, ?, ?, ?)',
+        [partyId, targetUserId, req.user.id, reason || null], () => {
+          // Remove from members
+          db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], () => {
+            db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
+              [partyId, `Bir üye odadan yasaklandı.`]);
+            res.json({ success: true });
+          });
+        });
     });
   });
 });
@@ -1438,36 +1544,41 @@ app.post('/api/parties/:id/messages', auth, (req, res) => {
 app.post('/api/parties/:id/join', auth, (req, res) => {
   db.get('SELECT * FROM parties WHERE id = ?', [req.params.id], (err, party) => {
     if (!party) return res.status(404).json({ error: 'Parti bulunamadı' });
-    
-    // Özel parti ise davet kontrolü
-    if (party.is_private) {
-      db.get('SELECT * FROM party_invites WHERE party_id = ? AND to_user_id = ? AND status = "accepted"',
-        [req.params.id, req.user.id], (err, invite) => {
-        if (!invite) return res.status(403).json({ error: 'Bu parti özel - davet gerekli' });
-        
+
+    // Ban check
+    db.get('SELECT id FROM party_bans WHERE party_id = ? AND user_id = ?', [req.params.id, req.user.id], (err, ban) => {
+      if (ban) return res.status(403).json({ error: 'Bu odaya girme yetkiniz yok (yasaklandınız)' });
+
+      // Özel parti ise davet kontrolü
+      if (party.is_private) {
+        db.get('SELECT * FROM party_invites WHERE party_id = ? AND to_user_id = ? AND status = "accepted"',
+          [req.params.id, req.user.id], (err, invite) => {
+          if (!invite) return res.status(403).json({ error: 'Bu parti özel - davet gerekli' });
+
+          db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [req.params.id, req.user.id], (err) => {
+            if (err) return res.status(400).json({ error: 'Zaten partidesin' });
+            db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
+              [req.params.id, `@${req.user.username} odaya katıldı.`]);
+            res.json({ success: true });
+          });
+        });
+      } else {
         db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [req.params.id, req.user.id], (err) => {
           if (err) return res.status(400).json({ error: 'Zaten partidesin' });
+
           db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
             [req.params.id, `@${req.user.username} odaya katıldı.`]);
+
+          db.get('SELECT owner_id FROM parties WHERE id = ?', [req.params.id], (err, p) => {
+            if (p && p.owner_id !== req.user.id) {
+              db.run('INSERT INTO notifications (user_id, type, from_user_id, party_id) VALUES (?, "party_join", ?, ?)',
+                [p.owner_id, req.user.id, req.params.id]);
+            }
+          });
           res.json({ success: true });
         });
-      });
-    } else {
-      db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [req.params.id, req.user.id], (err) => {
-        if (err) return res.status(400).json({ error: 'Zaten partidesin' });
-        
-        db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
-          [req.params.id, `@${req.user.username} odaya katıldı.`]);
-
-        db.get('SELECT owner_id FROM parties WHERE id = ?', [req.params.id], (err, p) => {
-          if (p && p.owner_id !== req.user.id) {
-            db.run('INSERT INTO notifications (user_id, type, from_user_id, party_id) VALUES (?, "party_join", ?, ?)', 
-              [p.owner_id, req.user.id, req.params.id]);
-          }
-        });
-        res.json({ success: true });
-      });
-    }
+      }
+    });
   });
 });
 
@@ -1583,6 +1694,82 @@ app.get('/api/parties/:id/voice-signals', auth, (req, res) => {
 
 // (duplicate route removed - session start with partyId is handled above)
 
+// --- SCREEN SHARE SIGNALING (reuses in-memory signal queue with type prefix) ---
+global.partyScreenShareStates = {}; // partyId -> { username -> { sharing, channelId, ts } }
+
+// Announce screen share start/stop
+app.post('/api/parties/:id/screenshare-state', auth, (req, res) => {
+  try {
+    const partyId = req.params.id;
+    const { sharing, channelId } = req.body;
+    const username = req.user.username;
+
+    // Verify membership
+    db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
+      if (!member) return res.status(403).json({ error: 'Yetkisiz' });
+
+      if (!global.partyScreenShareStates[partyId]) global.partyScreenShareStates[partyId] = {};
+
+      if (sharing) {
+        // Check if channel allows screen share (Managers always allowed, or if channel allows/is default)
+        db.get('SELECT allow_screen_share, is_default FROM party_channels WHERE id = ? AND party_id = ?', [channelId, partyId], (err, chan) => {
+          const isManager = ['owner', 'admin', 'moderator'].includes(member.role);
+          const isAllowed = isManager || (chan && (chan.allow_screen_share || chan.is_default));
+          if (!isAllowed) {
+            return res.status(403).json({ error: 'Bu kanalda ekran paylaşımı kapalı' });
+          }
+          global.partyScreenShareStates[partyId][username] = { sharing: true, channelId: parseInt(channelId), ts: Date.now() };
+          res.json({ success: true, allowed: true });
+        });
+      } else {
+        delete global.partyScreenShareStates[partyId][username];
+        res.json({ success: true, allowed: false });
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get active screen sharers in a party
+app.get('/api/parties/:id/screenshare-state', auth, (req, res) => {
+  const partyId = req.params.id;
+  db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
+    if (!member) return res.status(403).json({ error: 'Yetkisiz' });
+    const states = global.partyScreenShareStates[partyId] || {};
+    // Cleanup stale (>30s)
+    const now = Date.now();
+    Object.keys(states).forEach(u => { if (now - states[u].ts > 30000) delete states[u]; });
+    res.json(states);
+  });
+});
+
+// Screen share WebRTC signal (reuses partySignals queue with ss_ prefix on type)
+app.post('/api/parties/:id/screenshare-signal', auth, (req, res) => {
+  try {
+    const partyId = req.params.id;
+    const { toUsername, signal } = req.body;
+    const fromUsername = req.user.username;
+
+    if (!global.partySignals) global.partySignals = {};
+    if (!global.partySignals[partyId]) global.partySignals[partyId] = [];
+
+    global.partySignals[partyId].push({
+      fromUsername,
+      toUsername,
+      signal: { ...signal, _ssShare: true },
+      timestamp: Date.now()
+    });
+
+    const now = Date.now();
+    global.partySignals[partyId] = global.partySignals[partyId].filter(s => now - s.timestamp < 60000);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.get('/api/notifications', auth, (req, res) => {
   db.all(`
     SELECT n.*, u.username, u.profile_photo,
@@ -1608,6 +1795,13 @@ app.get('/api/notifications/unread', auth, (req, res) => {
 
 app.post('/api/notifications/read', auth, (req, res) => {
   db.run('UPDATE notifications SET read = 1 WHERE user_id = ?', [req.user.id], () => {
+    res.json({ success: true });
+  });
+});
+
+app.delete('/api/notifications/clear-all', auth, (req, res) => {
+  db.run('DELETE FROM notifications WHERE user_id = ?', [req.user.id], (err) => {
+    if (err) return res.status(500).json({ error: 'Veritabanı hatası' });
     res.json({ success: true });
   });
 });
@@ -2096,11 +2290,14 @@ setInterval(() => {
       )
   `);
 
-  // 2. Delete read messages older than 24 hours
+  // 2. Delete ALL messages and party messages older than 24 hours (privacy/security retention)
   db.run(`
     DELETE FROM messages 
-    WHERE read = 1 
-      AND created_at < datetime('now', '-24 hours')
+    WHERE created_at < datetime('now', '-24 hours')
+  `);
+  db.run(`
+    DELETE FROM party_messages 
+    WHERE created_at < datetime('now', '-24 hours')
   `);
 
   // 3. Delete posts older than 24 hours, along with their engagements
