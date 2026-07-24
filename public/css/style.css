@@ -7942,7 +7942,7 @@ button:hover,
   background: rgba(18, 18, 20, 0.95) !important;
   color: #f2f3f5 !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  padding: 8px 16px !important;
+  padding: 10px 20px !important;
   border-radius: 9999px !important;
   font-size: clamp(11px, 3.2vw, 13px) !important;
   font-weight: 600 !important;
@@ -7958,6 +7958,9 @@ button:hover,
   word-break: break-word !important;
   text-align: center !important;
   line-height: 1.35 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
   transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.25s ease !important;
 }
 
@@ -7965,6 +7968,7 @@ button:hover,
   opacity: 1 !important;
   transform: translateX(-50%) translateY(0) !important;
 }
+
 
 @media (max-width: 768px) {
   /* Mobile: Expanded panel = FULL SCREEN overlay */
@@ -8357,24 +8361,35 @@ button:hover,
 /* ── Mobile Layout ── */
 @media (max-width: 767px) {
   #userVoiceSettingsModal.modal-overlay {
-    align-items: flex-end !important;
+    align-items: center !important;
     justify-content: center !important;
-    padding: 0 !important;
+    padding: 16px !important;
   }
   .uvm-card {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 20px 20px 0 0 !important;
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
-    animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 320px !important;
+    max-width: calc(100vw - 32px) !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+    animation: zoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   }
   .uvm-close-btn {
-    width: 32px !important;
-    height: 32px !important;
+    width: 28px !important;
+    height: 28px !important;
   }
 }
+
+@keyframes zoomIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 
 @keyframes slideUp {
   from {
