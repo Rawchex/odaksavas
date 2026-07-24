@@ -1219,57 +1219,60 @@
   </div>
 
   <!-- ── USER VOICE & ROLE SETTINGS MODAL ── -->
-  <div class="modal-overlay" id="userVoiceSettingsModal" style="z-index:999999; align-items:flex-end;">
-    <div class="uvm-card" id="uvCard">
+  <div class="modal-overlay" id="userVoiceSettingsModal" style="z-index:999999; display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; box-sizing:border-box;">
+    <div class="uvm-card" id="uvCard" style="width:320px; max-width:calc(100vw - 32px); background:#18191c !important; border:1px solid rgba(255,255,255,0.08) !important; border-radius:16px !important; overflow:hidden !important; box-shadow:0 16px 40px rgba(0,0,0,0.6) !important; position:relative !important; box-sizing:border-box !important; text-align:left !important; display:block !important;">
       <!-- Header banner + avatar -->
-      <div class="uvm-banner" id="uvBanner">
-        <button class="uvm-close-btn" onclick="closeUserVoiceModal()" data-tooltip="Kapat" data-tooltip-pos="left">
+      <div class="uvm-banner" id="uvBanner" style="height:80px !important; background:linear-gradient(135deg, #5865f2 0%, #4752c4 100%) !important; position:relative !important; display:flex !important; align-items:flex-start !important; justify-content:space-between !important; padding:12px !important; box-sizing:border-box !important;">
+        <button class="uvm-close-btn" onclick="closeUserVoiceModal()" data-tooltip="Kapat" data-tooltip-pos="left" style="background:rgba(0, 0, 0, 0.4) !important; border:none !important; border-radius:50% !important; width:28px !important; height:28px !important; display:flex !important; align-items:center !important; justify-content:center !important; color:#fff !important; cursor:pointer !important; flex-shrink:0 !important;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        <div class="uvm-latency-chip" id="uvLatency">— ms</div>
+        <div class="uvm-latency-chip" id="uvLatency" style="font-size:11px !important; font-weight:700 !important; font-family:monospace !important; color:#fff !important; background:rgba(0, 0, 0, 0.4) !important; border-radius:12px !important; padding:3px 8px !important; letter-spacing:0.5px !important;">— ms</div>
       </div>
 
-      <div class="uvm-body">
+      <div class="uvm-body" style="padding:16px !important; position:relative !important; background:#111214 !important; text-align:left !important; box-sizing:border-box !important; display:block !important;">
         <!-- Avatar (clickable → profile) -->
-        <div class="uvm-avatar-wrap" onclick="handleUvViewProfile()" style="cursor:pointer;" data-tooltip="Profili Görüntüle" data-tooltip-pos="right">
-          <div id="uvAvatarContainer" class="uvm-avatar"></div>
-          <span class="uvm-online-ring" id="uvOnlineRing"></span>
+        <div class="uvm-avatar-wrap" onclick="handleUvViewProfile()" style="cursor:pointer !important; position:relative !important; display:inline-block !important; margin-top:-46px !important; margin-bottom:12px !important;" data-tooltip="Profili Görüntüle" data-tooltip-pos="right">
+          <div id="uvAvatarContainer" class="uvm-avatar" style="width:68px !important; height:68px !important; border-radius:50% !important; background:#2b2d31 !important; border:4px solid #111214 !important; overflow:hidden !important; display:flex !important; align-items:center !important; justify-content:center !important; font-size:24px !important; font-weight:800 !important; color:#fff !important;"></div>
+          <span class="uvm-online-ring" id="uvOnlineRing" style="position:absolute !important; bottom:4px !important; right:4px !important; width:14px !important; height:14px !important; border-radius:50% !important; background:#23a55a !important; border:3px solid #111214 !important; display:none;"></span>
         </div>
 
         <!-- Identity -->
-        <div class="uvm-identity">
+        <div class="uvm-identity" style="margin-bottom:14px !important;">
           <!-- Username clickable → profile -->
-          <div id="uvUsername" class="uvm-username" onclick="handleUvViewProfile()" style="cursor:pointer;" data-tooltip="Profili Görüntüle" data-tooltip-pos="right">Kullanıcı</div>
-          <div class="uvm-meta">
-            <span id="uvStatusLabel" class="uvm-status-label">Çevrimdışı</span>
-            <span class="uvm-dot">·</span>
+          <div id="uvUsername" class="uvm-username" onclick="handleUvViewProfile()" style="cursor:pointer !important; font-size:18px !important; font-weight:700 !important; color:#f2f3f5 !important; margin-bottom:6px !important; line-height:1.2 !important;" data-tooltip="Profili Görüntüle" data-tooltip-pos="right">Kullanıcı</div>
+          <div class="uvm-meta" style="display:flex !important; align-items:center !important; gap:8px !important;">
+            <span id="uvStatusLabel" class="uvm-status-label" style="font-size:11px !important; font-weight:700 !important; letter-spacing:0.5px !important; color:#949ba4 !important;">Çevrimdışı</span>
+            <span class="uvm-dot" style="font-size:11px !important; color:#4e5058 !important;">·</span>
             <span id="uvRoleBadge" class="role-badge member">ÜYE</span>
           </div>
         </div>
 
         <!-- Social action icons (visible for non-self) -->
-        <div class="uvm-social-row" id="uvSocialRow" style="display:none;">
+        <div class="uvm-social-row" id="uvSocialRow" style="display:none; gap:8px !important; margin-bottom:14px !important;">
           <button class="uvm-icon-btn" id="uvFriendBtn" onclick="handleUvFriendRequest()"
-            data-tooltip="Arkadaş Ekle" data-tooltip-pos="top">
+            data-tooltip="Arkadaş Ekle" data-tooltip-pos="top" style="background:#2b2d31 !important; border:none !important; border-radius:8px !important; flex:1 !important; height:38px !important; display:flex !important; align-items:center !important; justify-content:center !important; color:#dbdee1 !important; cursor:pointer !important; box-sizing:border-box !important;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
           </button>
           <button class="uvm-icon-btn" id="uvDmBtn" onclick="handleUvSendMessage()"
-            data-tooltip="Mesaj Gönder" data-tooltip-pos="top">
+            data-tooltip="Mesaj Gönder" data-tooltip-pos="top" style="background:#2b2d31 !important; border:none !important; border-radius:8px !important; flex:1 !important; height:38px !important; display:flex !important; align-items:center !important; justify-content:center !important; color:#dbdee1 !important; cursor:pointer !important; box-sizing:border-box !important;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </button>
         </div>
 
         <!-- Divider -->
-        <div class="uvm-divider"></div>
+        <div class="uvm-divider" style="height:1px !important; background:#2b2d31 !important; margin:12px 0 !important;"></div>
 
         <!-- Volume control (always visible for non-self) -->
-        <div class="uvm-section" id="uvVolumeSection" style="display:none;">
-          <div class="uvm-section-label">SES DÜZEYİ <span id="uvVolumeVal" class="uvm-vol-val">100%</span></div>
+        <div class="uvm-section" id="uvVolumeSection" style="display:none; margin-bottom:14px !important;">
+          <div class="uvm-section-label" style="font-size:11px !important; font-weight:700 !important; letter-spacing:0.5px !important; color:#949ba4 !important; margin-bottom:8px !important; display:flex !important; justify-content:space-between !important; align-items:center !important;">
+            <span>SES DÜZEYİ</span>
+            <span id="uvVolumeVal" class="uvm-vol-val" style="font-family:monospace !important; color:#fff !important; font-size:11px !important;">100%</span>
+          </div>
           <input type="range" id="uvVolumeSlider" min="0" max="200" value="100"
             oninput="handleUvVolumeChange(this.value)"
-            class="uvm-slider">
+            class="uvm-slider" style="width:100% !important; accent-color:#5865f2 !important; cursor:pointer !important; margin-bottom:10px !important; display:block !important; background:#2b2d31 !important; height:5px !important; border-radius:4px !important;">
           <button class="uvm-mute-btn" id="uvMuteToggleBtn" onclick="handleUvMuteToggle()"
-            data-tooltip="Bu sihirli buton incelemekte olduğunuz kullanıcıyı susturur" data-tooltip-pos="top">
+            data-tooltip="Bu sihirli buton incelemekte olduğunuz kullanıcıyı susturur" data-tooltip-pos="top" style="background:#2b2d31 !important; border:none !important; border-radius:8px !important; color:#dbdee1 !important; padding:8px 12px !important; font-size:13px !important; font-weight:600 !important; cursor:pointer !important; display:flex !important; align-items:center !important; justify-content:center !important; gap:8px !important; width:100% !important; box-sizing:border-box !important;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
               <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -1280,35 +1283,36 @@
         </div>
 
         <!-- Manager Controls -->
-        <div id="uvManagerControls" class="uvm-section" style="display:none;">
-          <div id="uvRoleSelectWrap" style="display:none; margin-bottom:10px;">
-            <div class="uvm-section-label">ROL ATAMA</div>
-            <select id="uvRoleSelect" onchange="handleUvRoleChange(this.value)" class="uvm-select">
+        <div id="uvManagerControls" class="uvm-section" style="display:none; margin-bottom:14px !important;">
+          <div id="uvRoleSelectWrap" style="display:none; margin-bottom:10px !important;">
+            <div class="uvm-section-label" style="font-size:11px !important; font-weight:700 !important; letter-spacing:0.5px !important; color:#949ba4 !important; margin-bottom:8px !important;">ROL ATAMA</div>
+            <select id="uvRoleSelect" onchange="handleUvRoleChange(this.value)" class="uvm-select" style="width:100% !important; background:#111214 !important; border:1px solid #2b2d31 !important; border-radius:8px !important; padding:8px 12px !important; color:#dbdee1 !important; font-size:13px !important; outline:none !important; cursor:pointer !important; box-sizing:border-box !important;">
               <option value="member">Üye</option>
               <option value="moderator">Moderatör</option>
               <option value="admin">Yönetici</option>
             </select>
           </div>
-          <div style="margin-bottom:10px;">
-            <div class="uvm-section-label">ALT KANAL TAŞI</div>
-            <select id="uvChannelSelect" onchange="handleUvChannelMove(this.value)" class="uvm-select"></select>
+          <div style="margin-bottom:10px !important;">
+            <div class="uvm-section-label" style="font-size:11px !important; font-weight:700 !important; letter-spacing:0.5px !important; color:#949ba4 !important; margin-bottom:8px !important;">ALT KANAL TAŞI</div>
+            <select id="uvChannelSelect" onchange="handleUvChannelMove(this.value)" class="uvm-select" style="width:100% !important; background:#111214 !important; border:1px solid #2b2d31 !important; border-radius:8px !important; padding:8px 12px !important; color:#dbdee1 !important; font-size:13px !important; outline:none !important; cursor:pointer !important; box-sizing:border-box !important;"></select>
           </div>
         </div>
 
         <!-- Danger zone: kick / ban -->
-        <div id="uvDangerControls" class="uvm-danger-row" style="display:none;">
+        <div id="uvDangerControls" class="uvm-danger-row" style="display:none; gap:8px !important; margin-top:14px !important; padding-top:14px !important; border-top:1px solid #2b2d31 !important; box-sizing:border-box !important;">
           <button class="uvm-danger-btn kick" id="uvKickBtn" onclick="handleUvKick()"
-            data-tooltip="Odadan At" data-tooltip-pos="top">
+            data-tooltip="Odadan At" data-tooltip-pos="top" style="background:#2b2d31 !important; border:none !important; border-radius:8px !important; flex:1 !important; height:38px !important; display:flex !important; align-items:center !important; justify-content:center !important; cursor:pointer !important; color:#dbdee1 !important; box-sizing:border-box !important;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           </button>
           <button class="uvm-danger-btn ban" id="uvBanBtn" onclick="handleUvBan()"
-            data-tooltip="Kullanıcıyı Yasakla (bir daha giremez)" data-tooltip-pos="top" style="display:none;">
+            data-tooltip="Kullanıcıyı Yasakla (bir daha giremez)" data-tooltip-pos="top" style="display:none; color:#f23f43 !important; background:rgba(242, 63, 67, 0.05) !important; border:1px solid rgba(242, 63, 67, 0.2) !important; border-radius:8px !important; flex:1 !important; height:38px !important; display:flex !important; align-items:center !important; justify-content:center !important; cursor:pointer !important; box-sizing:border-box !important;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
           </button>
         </div>
       </div>
     </div>
   </div><!-- END #userVoiceSettingsModal -->
+
 
 
   <!-- ── CUSTOM CHANNEL & PARTY CONFIG MODAL ── -->
