@@ -836,7 +836,7 @@ function updateTimerUI(state, data = {}) {
       if (soloDisp)  { soloDisp.classList.remove('violated', 'active-pulse'); }
       if (bottomNav) bottomNav.style.display = 'flex';
       if (topMeta)   topMeta.style.display = 'flex';
-      { const pfo = document.getElementById('partyFocusOverlay'); if (pfo) pfo.style.display = 'none'; }
+      { const pfo = document.getElementById('partyFocusOverlay'); if (pfo) pfo.style.display = _currentPartyId ? 'flex' : 'none'; }
       break;
     }
   }
@@ -855,7 +855,7 @@ function startPartyPoll(partyId) {
   clearInterval(_partyPollInterval);
   clearInterval(_partyMessagesPoller);
   
-  // 1. Lobi üyelerini çek (5 sn)
+  // 1. Lobi üyelerini çek (1 sn)
   fetchPartyAndRender(partyId);
   _partyPollInterval = setInterval(() => {
     if (!_currentPartyId) {
@@ -864,7 +864,7 @@ function startPartyPoll(partyId) {
       return;
     }
     fetchPartyAndRender(_currentPartyId);
-  }, 5000);
+  }, 1000);
 
   // 2. Chat mesajlarını çek (3 sn)
   fetchPartyMessages(partyId);
@@ -911,8 +911,16 @@ async function fetchPartyMessages(partyId) {
     const wasNearBottom = container.scrollHeight - container.clientHeight - container.scrollTop < 60;
     const currentMsgCount = container.children.length;
 
-    const key = `party_${partyId}`;
-    container.innerHTML = (data.messages || []).map(m => {
+    const partySystemBanner = `
+      <div class="chat-system-retention-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>Güvenlik ve gizliliğiniz için oda sohbet mesajları 24 saat sonra otomatik olarak silinir.</span>
+      </div>
+    `;
+
+    container.innerHTML = partySystemBanner + (data.messages || []).map(m => {
       if (m.user_id === 0 || !m.username) {
         return `
           <div style="align-self:center; text-align:center; margin:10px 0; font-size:11px; color:#555; font-weight:800; text-transform:uppercase; letter-spacing:1px; width:100%;">
@@ -1025,7 +1033,7 @@ async function fetchPartyAndRender(partyId) {
 
     renderPartyDuel(party);
   } catch (err) {
-    console.error("fetchPartyAndRender error:", err);
+    if (err && err.name !== 'TypeError') console.error("fetchPartyAndRender error:", err);
   }
 }
 
@@ -1041,10 +1049,22 @@ function setGlobalCardSize(size) {
 
 window._currentPartyData = null;
 
+// Role display helper
+function getRoleLabel(role) {
+  const labels = { owner: 'Kurucu', admin: 'Yönetici', moderator: 'Moderatör', member: '' };
+  return labels[role] || '';
+}
+function getRoleColor(role) {
+  const colors = { owner: '#fbbf24', admin: '#c084fc', moderator: '#60a5fa', member: '#80848e' };
+  return colors[role] || '#80848e';
+}
+
 function renderPartyDuel(partyData) {
   const party = (partyData && partyData.members) ? partyData : { members: Array.isArray(partyData) ? partyData : [] };
   const members = party.members || [];
   window._currentPartyData = party;
+  // CRITICAL: Always sync window._currentPartyId with local _currentPartyId
+  if (_currentPartyId) window._currentPartyId = _currentPartyId;
 
   const grid      = document.getElementById('partyDuelGrid');
   const solo      = document.getElementById('timerSolo');
@@ -1054,9 +1074,13 @@ function renderPartyDuel(partyData) {
   const labelEl   = document.getElementById('partyFocusLabel');
   const addChanBtn = document.getElementById('addChannelBtnHeader');
 
-  if (!members.length || !overlay) {
+  if (!members.length || !overlay || !_currentPartyId) {
     if (grid) grid.style.display = 'none';
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) {
+      overlay.classList.remove('in-active-party');
+      overlay.style.display = 'none';
+      overlay.style.setProperty('display', 'none', 'important');
+    }
     return;
   }
 
@@ -1068,8 +1092,14 @@ function renderPartyDuel(partyData) {
 
   // Identify current user's role in party
   const meMember = members.find(m => m.username === currentUser?.username);
-  const myRole = meMember ? meMember.role : (party.owner_id === currentUser?.id ? 'owner' : 'member');
-  const canManage = ['owner', 'admin', 'moderator'].includes(myRole);
+  const isOwner = Boolean(
+    (party.owner_id && currentUser?.id && parseInt(party.owner_id) === parseInt(currentUser.id)) ||
+    (party.owner_name && currentUser?.username && party.owner_name === currentUser.username) ||
+    (meMember && meMember.role === 'owner')
+  );
+  // canManage: server will do final auth check, client is just UI gating
+  const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember?.role));
+  const myDisplayRole = meMember?.role || (isOwner ? 'owner' : 'member');
 
   // Set Party Name Header
   const partyName = party.name || 'Odak Odası';
@@ -1078,20 +1108,27 @@ function renderPartyDuel(partyData) {
   }
 
   if (addChanBtn) {
-    addChanBtn.style.display = canManage ? 'inline-block' : 'none';
+    addChanBtn.style.display = canManage ? 'inline-flex' : 'none';
   }
 
   // Find user's current channel
-  const defaultChanId = party.default_channel_id || (party.channels && party.channels[0] ? party.channels[0].id : null);
+  const defaultChanId = parseInt(party.default_channel_id) || (party.channels && party.channels[0] ? parseInt(party.channels[0].id) : 1);
   if (meMember) {
-    window._currentChannelId = meMember.channel_id || defaultChanId;
+    const serverChanId = meMember.channel_id ? parseInt(meMember.channel_id) : defaultChanId;
+    if (window._currentChannelId && parseInt(window._currentChannelId) !== serverChanId) {
+      console.log('[Party] Server channel updated for me, switching voice to:', serverChanId);
+      window._currentChannelId = serverChanId;
+      if (typeof switchVoiceChannel === 'function') switchVoiceChannel(serverChanId);
+    } else if (!window._currentChannelId) {
+      window._currentChannelId = serverChanId;
+    }
   } else if (!window._currentChannelId) {
     window._currentChannelId = defaultChanId;
   }
 
   // Render Sub-Channels
   const channels = (party.channels && party.channels.length > 0) 
-    ? party.channels 
+    ? party.channels.map(c => ({ ...c, id: parseInt(c.id) || defaultChanId })) 
     : [{ id: defaultChanId, name: 'Genel Odak Odası', user_limit: 0, position: 0, is_default: 1 }];
 
   const maxSecs = members.reduce((max, m) => {
@@ -1115,64 +1152,54 @@ function renderPartyDuel(partyData) {
            ondrop="handleChannelDrop(event, ${chan.id})">
         
         <div class="sub-channel-header" onclick="joinSubChannel(${chan.id})">
-          <div class="sub-channel-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="${isCurrentChannel ? '#4ade80' : 'currentColor'}" stroke-width="2" width="14" height="14"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-            <span style="color:${isCurrentChannel ? '#4ade80' : '#fff'}">${esc(chan.name)}</span>
-            ${isCurrentChannel ? '<span style="font-size:9px; color:#000; background:#4ade80; padding:1px 5px; border-radius:4px; font-weight:900;">BAĞLI</span>' : ''}
+          <div class="sub-channel-title" style="display:flex; align-items:center; gap:8px; min-width:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="${isCurrentChannel ? '#23a55a' : '#80848e'}" stroke-width="2" width="16" height="16"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            <span class="sub-channel-name" style="color:${isCurrentChannel ? '#ffffff' : '#949ba4'}; font-weight:${isCurrentChannel ? '700' : '500'}; font-size:13px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${esc(chan.name)}</span>
+            ${chan.user_limit > 0 ? `<span style="font-size:10px; color:#80848e; font-family:monospace; flex-shrink:0;">${channelMembers.length}/${chan.user_limit}</span>` : ''}
           </div>
 
-          <div style="display:flex; align-items:center; gap:6px;">
-            <span class="sub-channel-badge ${isFull ? 'full' : ''}">
-              ${channelMembers.length}${chan.user_limit > 0 ? `/${chan.user_limit}` : ''}
-            </span>
-
+          <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
             ${canManage ? `
-              <div onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:2px;">
-                ${index > 0 ? `<button onclick="reorderChannel(${chan.id}, -1)" title="Yukarı Taşın" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">▲</button>` : ''}
-                ${index < channels.length - 1 ? `<button onclick="reorderChannel(${chan.id}, 1)" title="Aşağı Taşın" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">▼</button>` : ''}
-                <button onclick="promptEditChannel(${chan.id}, '${esc(chan.name)}', ${chan.user_limit})" title="Kanalı Düzenle" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">✏️</button>
-                ${!chan.is_default ? `<button onclick="promptDeleteChannel(${chan.id})" title="Kanalı Sil" style="background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; padding:2px;">🗑️</button>` : ''}
+              <div onclick="event.stopPropagation();" class="channel-actions" style="display:flex; align-items:center; gap:4px; opacity:0.6;">
+                <button onclick="promptEditChannel(${chan.id}, '${esc(chan.name)}', ${chan.user_limit})" data-tooltip="Kanalı Düzenle" style="background:none; border:none; color:#b5bac1; cursor:pointer; padding:2px; display:inline-flex; align-items:center;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                ${!chan.is_default ? `<button onclick="promptDeleteChannel(${chan.id})" data-tooltip="Kanalı Sil" style="background:none; border:none; color:#b5bac1; cursor:pointer; padding:2px; display:inline-flex; align-items:center;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>` : ''}
               </div>
             ` : ''}
           </div>
         </div>
 
-        <div class="sub-channel-members-list" style="display:flex; flex-direction:column; gap:6px;">
-          ${channelMembers.length === 0 ? '<div style="font-size:11px; color:rgba(255,255,255,0.2); padding:4px 8px; font-style:italic;">Kanalda kimse yok</div>' : ''}
-          ${channelMembers.map(m => {
+        <div class="sub-channel-members-list">
+          ${channelMembers.length === 0 ? `<div style="font-size:11px; color:#4e5058; padding:4px 8px; font-style:italic;">— Boş —</div>` : channelMembers.map(m => {
             const isMe = m.username === currentUser?.username;
             const isActive = m.active_session_id !== null || (isMe && window._activeSession);
             const sessionStartUtc = m.session_start ? new Date(m.session_start.replace(' ', 'T') + 'Z') : null;
             const elapsed = isMe ? _sessionElapsed : (isActive && sessionStartUtc ? Math.floor((Date.now() - sessionStartUtc.getTime()) / 1000) : 0);
-            const pct = isActive ? Math.min(100, (elapsed / maxSecs) * 100) : 0;
-            const roleClass = m.role || 'member';
+            const roleLabel = getRoleLabel(m.role);
+            const roleColor = getRoleColor(m.role);
 
             return `
-              <div class="party-focus-member ${isMe ? 'is-me' : ''} ${canManage ? 'draggable-member' : ''}" 
+              <div class="party-focus-member ${isMe ? 'is-me' : ''} ${canManage ? 'can-drag' : ''}" 
                    id="member-card-${m.username}"
-                   ${canManage ? `draggable="true" ondragstart="handleMemberDragStart(event, ${m.id})"` : ''}
                    onclick="openUserVoiceModal('${esc(m.username)}')"
-                   style="cursor:pointer;">
-                <div style="position:relative; display:flex;">
-                  ${renderAvatar(m, 'avatar avatar-sm')}
-                </div>
-                <div class="party-focus-member-info" style="flex:1;">
-                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                    <span class="party-focus-member-name">
+                   ${canManage ? `draggable="true" ondragstart="handleMemberDragStart(event, ${m.id})"` : ''}>
+                <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; overflow:hidden;">
+                  ${renderAvatar(m, 'avatar avatar-xs')}
+                  <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+                    <span class="party-focus-member-name" style="font-size:13px; color:${isMe ? '#ffffff' : '#dbdee1'}; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
                       ${esc(m.username)}
                     </span>
-                    <span class="role-badge ${roleClass}">
-                      ${roleClass === 'owner' ? 'KURUCU' : (roleClass === 'admin' ? 'YÖNETİCİ' : (roleClass === 'moderator' ? 'MODERATÖR' : 'ÜYE'))}
-                    </span>
-                    ${isMe ? '<span style="font-size:8px; color:#000; background:#fff; padding:2px 5px; border-radius:4px; font-weight:900; vertical-align:middle; line-height:1;">SEN</span>' : ''}
-                    <div id="voice-badge-${m.username}" style="display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"></div>
-                  </div>
-                  <div class="party-focus-member-bar-wrap">
-                    <div class="party-focus-member-bar ${isMe ? 'is-me' : (isActive ? 'live' : '')}" style="width:${pct}%"></div>
+                    ${roleLabel ? `<span style="font-size:10px; color:${roleColor}; font-weight:700; text-transform:uppercase; letter-spacing:0.3px;">${roleLabel}</span>` : ''}
                   </div>
                 </div>
                 
-                <span class="party-focus-member-time ${isMe ? 'is-me' : ''}">${isActive ? fmtTimeClock(elapsed) : '—'}</span>
+                <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:6px;">
+                  <div id="voice-badge-${m.username}"></div>
+                  <span style="font-size:11px; color:#80848e; font-weight:600; white-space:nowrap;">${isActive ? fmtTimeClock(elapsed) : ''}</span>
+                </div>
               </div>
             `;
           }).join('')}
@@ -1181,9 +1208,24 @@ function renderPartyDuel(partyData) {
     `;
   }).join('');
 
-  overlay.style.display = 'block';
+  const soloPartyRow = document.getElementById('soloPartyControlsRow');
+  if (_currentPartyId) {
+    overlay.classList.add('in-active-party');
+    overlay.style.display = 'flex';
+    overlay.style.removeProperty('display');
+    if (soloPartyRow) soloPartyRow.style.display = 'none';
+    const inviteBtn = document.getElementById('timerInvitePartyBtn');
+    if (inviteBtn) inviteBtn.style.display = 'inline-flex';
+  } else {
+    overlay.classList.remove('in-active-party');
+    overlay.style.display = 'none';
+    overlay.style.setProperty('display', 'none', 'important');
+    if (soloPartyRow) soloPartyRow.style.display = 'flex';
+    const inviteBtn = document.getElementById('timerInvitePartyBtn');
+    if (inviteBtn) inviteBtn.style.display = 'none';
+  }
 
-  // Sound Notification logic: Scoped strictly to current user's sub-channel
+  // Sound Notification logic: Scoped strictly to sub-channel entry/exit and switching
   const myChanId = window._currentChannelId || party.default_channel_id;
   const currentMyChannelUsers = new Set(
     (members || [])
@@ -1194,24 +1236,34 @@ function renderPartyDuel(partyData) {
       .map(m => m.username)
   );
 
-  if (window._lastMyChannelUsers !== undefined && window._lastMyChannelId === myChanId) {
-    let playedSound = false;
+  if (window._lastMyChannelId !== undefined) {
+    if (window._lastMyChannelId !== myChanId) {
+      // Current user switched sub-channels!
+      playChannelSound('connect');
+    } else if (window._lastMyChannelUsers !== undefined) {
+      let playedSound = false;
 
-    // Check if anyone joined my channel
-    currentMyChannelUsers.forEach(uname => {
-      if (uname !== currentUser?.username && !window._lastMyChannelUsers.has(uname) && !playedSound) {
-        playChannelSound('connect');
-        playedSound = true;
-      }
-    });
+      // Check if another member joined my sub-channel
+      currentMyChannelUsers.forEach(uname => {
+        if (uname !== currentUser?.username && !window._lastMyChannelUsers.has(uname) && !playedSound) {
+          playChannelSound('connect');
+          playedSound = true;
+        }
+      });
 
-    // Check if anyone left my channel
-    window._lastMyChannelUsers.forEach(uname => {
-      if (uname !== currentUser?.username && !currentMyChannelUsers.has(uname) && !playedSound) {
-        playChannelSound('disconnect');
-        playedSound = true;
+      // Check if another member left my sub-channel
+      if (!playedSound) {
+        window._lastMyChannelUsers.forEach(uname => {
+          if (uname !== currentUser?.username && !currentMyChannelUsers.has(uname) && !playedSound) {
+            playChannelSound('disconnect');
+            playedSound = true;
+          }
+        });
       }
-    });
+    }
+  } else {
+    // Initial join to focus room / sub-channel
+    playChannelSound('connect');
   }
 
   window._lastMyChannelUsers = currentMyChannelUsers;
@@ -1242,9 +1294,21 @@ function playChannelSound(type) {
 window._ccmMode = null; // 'rename_party' | 'add_channel' | 'edit_channel'
 window._ccmTargetChannelId = null;
 
+function updateCcmLimitDisplay(val) {
+  const v = parseInt(val) || 0;
+  const display = document.getElementById('ccmLimitDisplay');
+  if (display) display.textContent = v === 0 ? 'Sınırsız' : `${v} kişi`;
+}
+
 function openChannelConfigModal(mode, options = {}) {
   window._ccmMode = mode;
   window._ccmTargetChannelId = options.channelId || null;
+
+  const partyModal = document.getElementById('partyModal');
+  if (partyModal && partyModal.classList.contains('open')) {
+    window._ccmWasPartyModalOpen = true;
+    if (typeof closePartyModal === 'function') closePartyModal();
+  }
 
   const modal = document.getElementById('channelConfigModal');
   const title = document.getElementById('ccmTitle');
@@ -1262,86 +1326,125 @@ function openChannelConfigModal(mode, options = {}) {
     if (nameInput) nameInput.value = options.currentName || '';
     if (limitWrap) limitWrap.style.display = 'none';
     if (deleteBtn) deleteBtn.style.display = 'none';
+    const ssWrap = document.getElementById('ccmScreenShareWrap');
+    if (ssWrap) ssWrap.style.display = 'none';
   } else if (mode === 'add_channel') {
     if (title) title.textContent = 'Yeni Alt Oda Ekle';
     if (nameLabel) nameLabel.textContent = 'KANAL ADI';
     if (nameInput) nameInput.value = '';
     if (limitWrap) limitWrap.style.display = 'block';
-    if (limitInput) limitInput.value = '0';
+    if (limitInput) { limitInput.min = '0'; limitInput.value = '0'; }
+    updateCcmLimitDisplay(0);
     if (deleteBtn) deleteBtn.style.display = 'none';
+    const ssWrap = document.getElementById('ccmScreenShareWrap');
+    const ssCheck = document.getElementById('ccmScreenShareToggle');
+    if (ssWrap) ssWrap.style.display = 'flex';
+    if (ssCheck) ssCheck.checked = false;
   } else if (mode === 'edit_channel') {
     if (title) title.textContent = 'Alt Odayı Düzenle';
     if (nameLabel) nameLabel.textContent = 'KANAL ADI';
     if (nameInput) nameInput.value = options.currentName || '';
     if (limitWrap) limitWrap.style.display = 'block';
-    if (limitInput) limitInput.value = options.currentLimit || 0;
+    const lv = Math.min(parseInt(options.currentLimit) || 0, 20);
+    if (limitInput) { limitInput.value = lv; }
+    updateCcmLimitDisplay(lv);
     if (deleteBtn) deleteBtn.style.display = options.isDefault ? 'none' : 'inline-block';
+    const ssWrap = document.getElementById('ccmScreenShareWrap');
+    const ssCheck = document.getElementById('ccmScreenShareToggle');
+    if (ssWrap) ssWrap.style.display = 'flex';
+    if (ssCheck) ssCheck.checked = !!(options.allowScreenShare);
   }
 
+  modal.style.display = 'flex';
   modal.classList.add('open');
-  if (nameInput) setTimeout(() => nameInput.focus(), 100);
+  if (nameInput) {
+    setTimeout(() => {
+      nameInput.focus();
+      nameInput.select();
+    }, 100);
+  }
 }
 
 function closeChannelConfigModal() {
   const modal = document.getElementById('channelConfigModal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  }
   window._ccmMode = null;
   window._ccmTargetChannelId = null;
+
+  if (window._ccmWasPartyModalOpen) {
+    window._ccmWasPartyModalOpen = false;
+    if (typeof openPartyModal === 'function') openPartyModal();
+  }
 }
 
 async function submitChannelConfigModal() {
-  if (!window._currentPartyId || !window._ccmMode) return;
+  const partyId = _currentPartyId || window._currentPartyId;
+  if (!partyId || !window._ccmMode) {
+    showToast('Odak odası bulunamadı');
+    return;
+  }
 
   const nameInput = document.getElementById('ccmNameInput');
   const limitInput = document.getElementById('ccmLimitInput');
+  const ssCheck = document.getElementById('ccmScreenShareToggle');
   const name = nameInput ? nameInput.value.trim() : '';
   const userLimit = limitInput ? parseInt(limitInput.value) || 0 : 0;
+  const allowScreenShare = ssCheck ? ssCheck.checked : false;
 
   if (!name) {
     if (typeof showToast === 'function') showToast('Lütfen geçerli bir isim giriniz');
     return;
   }
 
+  const saveBtn = document.getElementById('ccmSaveBtn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Kaydediliyor...'; }
+
   try {
     if (window._ccmMode === 'rename_party') {
-      const res = await fetch(`/api/parties/${window._currentPartyId}/name`, {
+      const res = await fetch(`/api/parties/${partyId}/name`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
       if (res.ok) {
-        showToast('Oda adı güncellendi');
+        showToast('✅ Oda adı güncellendi');
+        if (window._currentPartyData) window._currentPartyData.name = name;
         closeChannelConfigModal();
-        fetchPartyAndRender(window._currentPartyId);
+        fetchPartyAndRender(partyId);
+        if (typeof refreshPartyModal === 'function') refreshPartyModal();
       } else {
         const d = await res.json().catch(() => ({}));
         showToast(d.error || 'Güncellenemedi');
       }
     } else if (window._ccmMode === 'add_channel') {
-      const res = await fetch(`/api/parties/${window._currentPartyId}/channels`, {
+      const res = await fetch(`/api/parties/${partyId}/channels`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, userLimit })
+        body: JSON.stringify({ name, userLimit, allowScreenShare })
       });
       if (res.ok) {
-        showToast('Alt oda eklendi');
-        playChannelSound('connect');
+        showToast('Yeni alt oda oluşturuldu');
         closeChannelConfigModal();
-        fetchPartyAndRender(window._currentPartyId);
+        fetchPartyAndRender(partyId);
+        if (typeof refreshPartyModal === 'function') refreshPartyModal();
       } else {
         const d = await res.json().catch(() => ({}));
-        showToast(d.error || 'Eklenemedi');
+        showToast(d.error || 'Oluşturulamadı');
       }
     } else if (window._ccmMode === 'edit_channel' && window._ccmTargetChannelId) {
-      const res = await fetch(`/api/parties/${window._currentPartyId}/channels/${window._ccmTargetChannelId}`, {
+      const res = await fetch(`/api/parties/${partyId}/channels/${window._ccmTargetChannelId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, userLimit })
+        body: JSON.stringify({ name, userLimit, allowScreenShare })
       });
       if (res.ok) {
-        showToast('Alt oda güncellendi');
+        showToast('✅ Kanal güncellendi');
         closeChannelConfigModal();
-        fetchPartyAndRender(window._currentPartyId);
+        fetchPartyAndRender(partyId);
+        if (typeof refreshPartyModal === 'function') refreshPartyModal();
       } else {
         const d = await res.json().catch(() => ({}));
         showToast(d.error || 'Güncellenemedi');
@@ -1349,21 +1452,26 @@ async function submitChannelConfigModal() {
     }
   } catch (e) {
     console.error('Submit channel config error:', e);
+    showToast('İşlem başarısız');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Kaydet'; }
   }
 }
 
 async function submitChannelDeleteFromModal() {
-  if (!window._currentPartyId || !window._ccmTargetChannelId) return;
+  const partyId = _currentPartyId || window._currentPartyId;
+  if (!partyId || !window._ccmTargetChannelId) return;
 
   try {
-    const res = await fetch(`/api/parties/${window._currentPartyId}/channels/${window._ccmTargetChannelId}`, {
+    const res = await fetch(`/api/parties/${partyId}/channels/${window._ccmTargetChannelId}`, {
       method: 'DELETE'
     });
     if (res.ok) {
       showToast('Alt oda silindi');
       playChannelSound('disconnect');
       closeChannelConfigModal();
-      fetchPartyAndRender(window._currentPartyId);
+      fetchPartyAndRender(partyId);
+      if (typeof refreshPartyModal === 'function') refreshPartyModal();
     } else {
       const d = await res.json().catch(() => ({}));
       showToast(d.error || 'Silinemedi');
@@ -1374,30 +1482,69 @@ async function submitChannelDeleteFromModal() {
 }
 
 function triggerPartyRenameFromHeader() {
-  if (!window._currentPartyId || !window._currentPartyData) return;
-  const me = (window._currentPartyData.members || []).find(m => m.username === currentUser?.username);
-  const canManage = me && ['owner', 'admin', 'moderator'].includes(me.role);
-  if (!canManage) return;
+  const partyId = _currentPartyId || window._currentPartyId;
+  if (!partyId) {
+    if (typeof showToast === 'function') showToast('Herhangi bir odak odasında değilsiniz');
+    return;
+  }
+  const party = window._currentPartyData || {};
+  const members = party.members || [];
+  const meMember = members.find(m => m.username === currentUser?.username);
+  const isOwner = Boolean(
+    (party.owner_id && currentUser?.id && parseInt(party.owner_id) === parseInt(currentUser.id)) ||
+    (party.owner_name && currentUser?.username && party.owner_name === currentUser.username) ||
+    (meMember && meMember.role === 'owner')
+  );
+  // If party data not loaded yet, allow based on partyId existing (server will validate)
+  const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember?.role)) || !party.owner_id;
 
-  const currentName = window._currentPartyData.name || '';
+  if (!canManage) {
+    if (typeof showToast === 'function') showToast('Sadece oda yöneticisi oda adını değiştirebilir');
+    return;
+  }
+
+  const labelEl = document.getElementById('partyFocusLabel');
+  const currentName = party.name || (labelEl ? labelEl.textContent.trim().replace(/\s*✏.*$/, '') : '');
   openChannelConfigModal('rename_party', { currentName });
 }
 
 function promptAddChannel() {
-  if (!window._currentPartyId) return;
+  const partyId = _currentPartyId || window._currentPartyId;
+  if (!partyId) {
+    if (typeof showToast === 'function') showToast('Herhangi bir odak odasında değilsiniz');
+    return;
+  }
+  const party = window._currentPartyData || {};
+  const members = party.members || [];
+  const meMember = members.find(m => m.username === currentUser?.username);
+  const isOwner = Boolean(
+    (party.owner_id && currentUser?.id && parseInt(party.owner_id) === parseInt(currentUser.id)) ||
+    (party.owner_name && currentUser?.username && party.owner_name === currentUser.username) ||
+    (meMember && meMember.role === 'owner')
+  );
+  const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember?.role)) || !party.owner_id;
+
+  if (!canManage) {
+    if (typeof showToast === 'function') showToast('Sadece oda yöneticisi alt oda ekleyebilir');
+    return;
+  }
+
+
   openChannelConfigModal('add_channel');
 }
 
 function promptEditChannel(chanId, currentName, currentLimit) {
-  if (!window._currentPartyId) return;
+  const partyId = _currentPartyId || window._currentPartyId;
+  if (!partyId) { console.error('[Party] promptEditChannel: no partyId'); return; }
   const chan = (window._currentPartyData?.channels || []).find(c => parseInt(c.id) === parseInt(chanId));
-  openChannelConfigModal('edit_channel', { channelId: chanId, currentName, currentLimit, isDefault: chan ? chan.is_default : false });
+  openChannelConfigModal('edit_channel', { channelId: chanId, currentName, currentLimit, isDefault: chan ? chan.is_default : false, allowScreenShare: chan ? !!chan.allow_screen_share : false });
 }
 
 function promptDeleteChannel(chanId) {
-  if (!window._currentPartyId) return;
+  const partyId = _currentPartyId || window._currentPartyId;
+  if (!partyId) { console.error('[Party] promptDeleteChannel: no partyId'); return; }
   const chan = (window._currentPartyData?.channels || []).find(c => parseInt(c.id) === parseInt(chanId));
-  openChannelConfigModal('edit_channel', { channelId: chanId, currentName: chan ? chan.name : '', currentLimit: chan ? chan.user_limit : 0, isDefault: chan ? chan.is_default : false });
+  openChannelConfigModal('edit_channel', { channelId: chanId, currentName: chan ? chan.name : '', currentLimit: chan ? chan.user_limit : 0, isDefault: chan ? chan.is_default : false, allowScreenShare: chan ? !!chan.allow_screen_share : false });
 }
 
 async function reorderChannel(chanId, direction) {
@@ -1437,14 +1584,28 @@ async function joinSubChannel(chanId) {
   const chanName = targetChan ? targetChan.name : 'Kanal';
 
   try {
+    // 1. Join channel on server (updates channel_id in party_members)
     const res = await fetch(`/api/parties/${window._currentPartyId}/channels/${chanId}/join`, {
       method: 'POST'
     });
     if (res.ok) {
+      // 2. Instantly switch voice channel (drops all peer connections, re-establishes)
+      const prev = window._currentChannelId;
       window._currentChannelId = chanId;
+
+      if (typeof switchVoiceChannel === 'function') {
+        await switchVoiceChannel(chanId);
+      }
+
+      if (prev !== null) {
+        playChannelSound('disconnect');
+        setTimeout(() => playChannelSound('connect'), 120);
+      } else {
+        playChannelSound('connect');
+      }
+
       showToast(`"${chanName}" kanalına geçildi`);
       fetchPartyAndRender(window._currentPartyId);
-      if (typeof maintainPeerConnections === 'function') maintainPeerConnections();
     } else {
       const d = await res.json().catch(() => ({}));
       showToast(d.error || 'Kanala katılamadı');
@@ -1454,17 +1615,23 @@ async function joinSubChannel(chanId) {
   }
 }
 
+
 // Drag and Drop Event Handlers
 function handleMemberDragStart(e, memberUserId) {
   e.stopPropagation();
   e.dataTransfer.setData('text/plain', memberUserId.toString());
-  e.target.classList.add('dragging');
-  setTimeout(() => e.target.classList.remove('dragging'), 500);
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.classList.add('dragging');
+  const targetEl = e.currentTarget;
+  setTimeout(() => {
+    if (targetEl) targetEl.classList.remove('dragging');
+  }, 400);
 }
 
 function handleChannelDragOver(e) {
   e.preventDefault();
   e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
   e.currentTarget.classList.add('drag-over');
 }
 
@@ -1494,6 +1661,8 @@ async function handleChannelDrop(e, targetChannelId) {
     });
     if (res.ok) {
       showToast(`Kullanıcı "${chanName}" kanalına taşındı`);
+      // Play disconnect sound as user was moved/left current room
+      playChannelSound('disconnect');
       fetchPartyAndRender(window._currentPartyId);
     } else {
       const d = await res.json().catch(() => ({}));
@@ -1541,6 +1710,23 @@ function setActiveParty(partyId) {
   }
   _currentPartyId = partyId;
   window._currentPartyId = partyId;
+
+  // Immediately make Focus Room Overlay visible
+  const overlay = document.getElementById('partyFocusOverlay');
+  if (overlay) {
+    overlay.classList.add('in-active-party');
+    overlay.style.display = 'flex';
+    overlay.style.removeProperty('display');
+  }
+
+  // Auto switch page to timer if user created/joined room from another tab
+  if (typeof showPage === 'function') {
+    showPage('timer');
+  }
+
+  // Play connect sound effect
+  playChannelSound('connect');
+
   const info = document.getElementById('activePartyInfo');
   const btn  = document.getElementById('timerPartyBtn');
   const chatBtn = document.getElementById('timerChatBtn');
@@ -1549,24 +1735,16 @@ function setActiveParty(partyId) {
   const soloPartyRow = document.getElementById('soloPartyControlsRow');
   if (soloPartyRow) soloPartyRow.style.display = 'none';
   
-  if (info) {
-    info.style.display = 'none';
-  }
+  if (info) info.style.display = 'none';
   if (btn) {
-    btn.style.display = 'block';
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Lobi Yönetimi
-    `;
+    btn.style.display = 'inline-flex';
+    btn.title = 'Oda Yönetimi';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
   }
-  if (chatBtn) {
-    chatBtn.style.display = 'block';
-  }
-  if (leaveBtn) {
-    leaveBtn.style.display = 'flex';
-  }
+  if (chatBtn) chatBtn.style.display = 'block';
+  if (leaveBtn) leaveBtn.style.display = 'flex';
   
-  // Start polling lobi
+  // Start polling room & initialize WebRTC Voice Chat
   startPartyPoll(partyId);
   if (typeof initVoiceChat === 'function') {
     initVoiceChat(partyId);
@@ -1593,15 +1771,17 @@ function clearActiveParty() {
   const overlay = document.getElementById('partyFocusOverlay');
   const soloPartyRow = document.getElementById('soloPartyControlsRow');
 
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) {
+    overlay.classList.remove('in-active-party');
+    overlay.style.display = 'none';
+    overlay.style.setProperty('display', 'none', 'important');
+  }
   if (info) info.style.display = 'none';
   if (soloPartyRow) soloPartyRow.style.display = 'flex';
   if (btn) {
-    btn.style.display  = 'block';
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Odak Odası
-    `;
+    btn.style.display  = 'inline-flex';
+    btn.title = 'Odak Odası';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
   }
   if (chatBtn) chatBtn.style.display = 'none';
   if (leaveBtn) leaveBtn.style.display = 'none';
@@ -1621,7 +1801,7 @@ async function checkActiveParty() {
     const res = await fetch('/api/parties');
     if (!res.ok) return;
     const parties = await res.json();
-    const activeParty = parties.find(p => p.is_member > 0 || p.owner_id === currentUser.id);
+    const activeParty = parties.find(p => p.is_member > 0);
     if (activeParty) {
       setActiveParty(activeParty.id);
     } else {
@@ -1641,11 +1821,7 @@ async function leavePartyFromTimer() {
   try {
     const res = await fetch(`/api/parties/${pid}`);
     if (!res.ok) {
-      if (typeof leaveParty === 'function') {
-        await leaveParty(pid);
-      } else if (typeof clearActiveParty === 'function') {
-        clearActiveParty();
-      }
+      if (typeof clearActiveParty === 'function') clearActiveParty();
       return;
     }
     const party = await res.json();
@@ -1661,9 +1837,6 @@ async function leavePartyFromTimer() {
     }
   } catch (err) {
     console.error('Leave party from timer failed:', err);
-  } finally {
-    if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
-    if (typeof clearActiveParty === 'function') clearActiveParty();
   }
 }
 
@@ -1935,11 +2108,273 @@ function startStatusChipAnimation() {
   }, 4500);
 }
 
+function copyPartyInviteLink() {
+  const partyId = window._currentPartyId;
+  const partyData = window._currentPartyData;
+  if (!partyId) {
+    showToast('Önce bir odak odasına katılmalısınız');
+    return;
+  }
 
+  const code = (partyData && partyData.code) ? partyData.code : partyId;
+  const url = `${window.location.origin}?party=${code}`;
 
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Oda davet bağlantısı kopyalandı!');
+    }).catch(() => {
+      fallbackCopyText(url);
+    });
+  } else {
+    fallbackCopyText(url);
+  }
+}
 
+function fallbackCopyText(text) {
+  const input = document.createElement('input');
+  input.value = text;
+  document.body.appendChild(input);
+  input.select();
+  try {
+    document.execCommand('copy');
+    showToast('Oda davet bağlantısı kopyalandı!');
+  } catch (e) {
+    showToast('Kopyalanamadı');
+  }
+}
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PARTY FOCUS OVERLAY — Global floating panel (always position:fixed)
+// ─────────────────────────────────────────────────────────────────────────────
 
+function _isMobileView() { return window.innerWidth <= 768; }
 
+/**
+ * Place overlay at its stored or default position, always as position:fixed.
+ */
+function _placeOverlayFixed(overlay) {
+  const isMobile = _isMobileView();
+  overlay.style.position = 'fixed';
+  overlay.style.transform = 'none';
 
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem('os_overlay_snap') || 'null'); } catch(e) { return null; }
+  })();
 
+  if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+    const W = window.innerWidth, H = window.innerHeight;
+    const ow = overlay.offsetWidth || 44;
+    const oh = overlay.offsetHeight || 240;
+    overlay.style.left   = `${Math.max(0, Math.min(W - ow, saved.left))}px`;
+    overlay.style.top    = `${Math.max(56, Math.min(H - oh - 8, saved.top))}px`;
+    overlay.style.right  = 'auto';
+    overlay.style.bottom = 'auto';
+    overlay.classList.add('has-drag-pos');
+  } else {
+    // Mobile: bottom-right, Desktop: middle-left
+    if (isMobile) {
+      const W = window.innerWidth;
+      const ow = overlay.offsetWidth || 44;
+      const navBottom = 76 + (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0') || 0);
+      overlay.style.right  = '16px';
+      overlay.style.bottom = `${navBottom + 16}px`;
+      overlay.style.left   = 'auto';
+      overlay.style.top    = 'auto';
+    } else {
+      const top = Math.max(56, Math.round((window.innerHeight - 240) / 2));
+      overlay.style.left   = '12px';
+      overlay.style.top    = `${top}px`;
+      overlay.style.right  = 'auto';
+      overlay.style.bottom = 'auto';
+    }
+    overlay.classList.add('has-drag-pos');
+  }
+}
+
+/**
+ * Snap collapsed widget to nearest vertical edge (left or right).
+ * On mobile: fully flush to edge (0px margin, half-hidden for cleanliness).
+ * On desktop: 12px from edge.
+ */
+function _snapToEdge(overlay) {
+  const isMobile = _isMobileView();
+  const W  = window.innerWidth;
+  const H  = window.innerHeight;
+  const MARGIN = isMobile ? 0 : 12;
+
+  // Current center x
+  const rect = overlay.getBoundingClientRect();
+  const cx   = rect.left + rect.width / 2;
+
+  const snapRight = cx > W / 2; // snap to right edge?
+  const left = snapRight ? (W - rect.width - MARGIN) : MARGIN;
+
+  // Clamp top
+  const NAV_TOP    = 56;  // header/top nav height
+  const NAV_BOTTOM = 76;  // bottom nav height
+  let top = Math.max(NAV_TOP, Math.min(H - rect.height - NAV_BOTTOM, rect.top));
+
+  overlay.style.transition = 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), top 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s, bottom 0.3s';
+  overlay.style.left   = `${left}px`;
+  overlay.style.top    = `${top}px`;
+  overlay.style.right  = 'auto';
+  overlay.style.bottom = 'auto';
+  overlay.classList.add('has-drag-pos');
+
+  try { localStorage.setItem('os_overlay_snap', JSON.stringify({ left, top })); } catch(e){}
+  
+  // Update chevron instantly during snap
+  updatePartyOverlayCollapseBtn();
+
+  setTimeout(() => { overlay.style.transition = ''; }, 320);
+}
+
+function togglePartyFocusOverlay() {
+  const overlay = document.getElementById('partyFocusOverlay');
+  if (!overlay) return;
+
+  const isCollapsed = overlay.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    // ── EXPAND ──
+    // Clear all inline position coordinates so CSS styling rules take over
+    overlay.classList.remove('collapsed', 'has-drag-pos');
+    overlay.style.position = '';
+    overlay.style.left = '';
+    overlay.style.top = '';
+    overlay.style.right = '';
+    overlay.style.bottom = '';
+    overlay.style.transform = '';
+    try { localStorage.setItem('os_focus_overlay_collapsed', '0'); } catch(e){}
+  } else {
+    // ── COLLAPSE ──
+    overlay.classList.add('collapsed');
+    // Load last snap coordinates or snap to middle-left default
+    _placeOverlayFixed(overlay);
+    try { localStorage.setItem('os_focus_overlay_collapsed', '1'); } catch(e){}
+  }
+
+  updatePartyOverlayCollapseBtn();
+}
+
+function updatePartyOverlayCollapseBtn() {
+  const overlay = document.getElementById('partyFocusOverlay');
+  const btn     = document.getElementById('partyOverlayCollapseBtn');
+  if (!overlay || !btn) return;
+  const isCollapsed = overlay.classList.contains('collapsed');
+  btn.setAttribute('data-tooltip', isCollapsed ? 'Paneli Genişlet' : 'Paneli Daralt');
+
+  let chevronSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><polyline points="15 18 9 12 15 6"/></svg>`; // default pointing left (<)
+
+  if (isCollapsed) {
+    const rect = overlay.getBoundingClientRect();
+    const isOnRightSide = (rect.left + rect.width / 2) > (window.innerWidth / 2);
+    if (isOnRightSide) {
+      // Snapped to right edge: expand chevron should point LEFT (<)
+      chevronSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><polyline points="15 18 9 12 15 6"/></svg>`;
+    } else {
+      // Snapped to left edge: expand chevron should point RIGHT (>)
+      chevronSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><polyline points="9 18 15 12 9 6"/></svg>`;
+    }
+  }
+
+  btn.innerHTML = chevronSvg;
+}
+
+function initDraggablePartyOverlay() {
+  const overlay = document.getElementById('partyFocusOverlay');
+  if (!overlay) return;
+
+  // ── Restore previous collapsed/position state ──
+  const wasCollapsed = localStorage.getItem('os_focus_overlay_collapsed') === '1';
+  if (wasCollapsed) {
+    overlay.classList.add('collapsed');
+    _placeOverlayFixed(overlay);
+    updatePartyOverlayCollapseBtn();
+  }
+
+  // ── Drag state ──
+  let dragging = false;
+  let startX   = 0, startY = 0;
+  let initLeft = 0, initTop = 0;
+  let moved    = false;
+
+  function dragStart(clientX, clientY, target, pointerId) {
+    // Only drag when collapsed
+    if (!overlay.classList.contains('collapsed')) return;
+    // Don't start drag on button clicks
+    if (target.closest('button')) return;
+
+    dragging = true;
+    moved    = false;
+
+    // Lock pointer to overlay for seamless touch dragging
+    try { overlay.setPointerCapture(pointerId); } catch(e) {}
+
+    overlay.classList.add('is-dragging', 'has-drag-pos');
+
+    // Compute current pixel position from getBoundingClientRect (works even if right/bottom are set)
+    const rect = overlay.getBoundingClientRect();
+    initLeft   = rect.left;
+    initTop    = rect.top;
+    startX     = clientX;
+    startY     = clientY;
+
+    // Switch to left/top coords for drag math
+    overlay.style.position  = 'fixed';
+    overlay.style.left      = `${initLeft}px`;
+    overlay.style.top       = `${initTop}px`;
+    overlay.style.right     = 'auto';
+    overlay.style.bottom    = 'auto';
+    overlay.style.transform = 'none';
+  }
+
+  function dragMove(clientX, clientY) {
+    if (!dragging) return;
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+
+    const W  = window.innerWidth;
+    const H  = window.innerHeight;
+    const ow = overlay.offsetWidth;
+    const oh = overlay.offsetHeight;
+
+    const nx = Math.max(0, Math.min(W - ow, initLeft + dx));
+    const ny = Math.max(56, Math.min(H - oh - 8, initTop + dy));
+    overlay.style.left = `${nx}px`;
+    overlay.style.top  = `${ny}px`;
+  }
+
+  function dragEnd(pointerId) {
+    if (!dragging) return;
+    dragging = false;
+    try { overlay.releasePointerCapture(pointerId); } catch(e) {}
+    overlay.classList.remove('is-dragging');
+    if (moved) {
+      _snapToEdge(overlay);
+    }
+  }
+
+  // ── Pointer Events (handles mouse and touch seamlessly via pointer capture) ──
+  overlay.addEventListener('pointerdown', (e) => {
+    // Only drag with left mouse button, or touch/pen
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragStart(e.clientX, e.clientY, e.target, e.pointerId);
+  });
+
+  // pointermove/up/cancel fire on overlay because of setPointerCapture
+  overlay.addEventListener('pointermove', (e) => {
+    if (dragging) {
+      e.preventDefault();
+      dragMove(e.clientX, e.clientY);
+    }
+  }, { passive: false });
+
+  overlay.addEventListener('pointerup',     (e) => dragEnd(e.pointerId));
+  overlay.addEventListener('pointercancel', (e) => dragEnd(e.pointerId));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  try { initDraggablePartyOverlay(); } catch(e) { console.error('initDraggablePartyOverlay error:', e); }
+});
