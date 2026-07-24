@@ -972,7 +972,7 @@ function openProfilePostSlider(startIndex, isOwn, isRepost) {
     sheet.style.height = '100dvh';
     sheet.style.maxHeight = '100dvh';
     sheet.style.borderRadius = '0';
-    sheet.style.paddingTop = '50px'; // make room for header
+    sheet.style.paddingTop = 'calc(64px + env(safe-area-inset-top, 16px))';
     
     wrapper.appendChild(sheet);
     container.appendChild(wrapper);
@@ -1014,3 +1014,52 @@ document.addEventListener('click', (e) => {
     openProfileSettings();
   }
 });
+
+async function deleteOwnAccount() {
+  const passwordInput = document.getElementById('deleteAccountPassword');
+  const confirmInput  = document.getElementById('deleteAccountConfirmText');
+  
+  if (!passwordInput || !confirmInput) return;
+  const password    = passwordInput.value;
+  const confirmText = confirmInput.value;
+
+  if (!password) {
+    showToast('Lütfen şifrenizi girin.');
+    return;
+  }
+  if (confirmText !== 'ONAYLIYORUM') {
+    showToast('Onaylamak için büyük harflerle ONAYLIYORUM yazmalısınız.');
+    return;
+  }
+
+  if (!confirm('Hesabınızı ve tüm verilerinizi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
+    return;
+  }
+
+  const btn = document.getElementById('settingsDeleteBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/me', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, confirmText })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Hesabınız başarıyla silindi.');
+      closeProfileSettingsModal();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else {
+      showToast(data.error || 'Hesap silinirken hata oluştu.');
+      if (btn) btn.disabled = false;
+    }
+  } catch(e) {
+    console.error('Delete account error:', e);
+    showToast('Sunucu bağlantı hatası.');
+    if (btn) btn.disabled = false;
+  }
+}
+

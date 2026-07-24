@@ -1208,9 +1208,31 @@
         </div>
       </div>
 
+      <!-- Danger Zone - Delete Account -->
+      <div style="margin-top:40px; border-top:1px solid rgba(239,68,68,0.2); padding-top:32px; box-sizing:border-box;">
+        <h3 style="font-size:14px; font-weight:800; color:#ef4444; margin:0 0 8px; letter-spacing:0.5px;">TEHLİKELİ BÖLGE</h3>
+        <p style="font-size:12px; color:var(--text-3); margin:0 0 16px; line-height:1.5;">
+          Hesabınızı silmek geri alınamaz bir işlemdir. Profiliniz, oturum kayıtlarınız, arkadaşlıklarınız, mesajlarınız ve tüm verileriniz kalıcı olarak veritabanından temizlenir.
+        </p>
+        <div style="display:flex; flex-direction:column; gap:16px; background:rgba(239,68,68,0.03); border:1px solid rgba(239,68,68,0.1); padding:20px; border-radius:12px; box-sizing:border-box;">
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label style="font-size:11px; font-weight:700; color:#ef4444; text-transform:uppercase; letter-spacing:0.5px;">Şifreniz</label>
+            <input type="password" id="deleteAccountPassword" placeholder="Hesap şifreniz"
+              style="width:100%; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label style="font-size:11px; font-weight:700; color:#ef4444; text-transform:uppercase; letter-spacing:0.5px;">Onaylama Kelimesi</label>
+            <input type="text" id="deleteAccountConfirmText" placeholder="Büyük harflerle ONAYLIYORUM yazın"
+              style="width:100%; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+          </div>
+          <button onclick="deleteOwnAccount()" id="settingsDeleteBtn"
+            style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid #ef4444; color:#fff; background:#ef4444; cursor:pointer; transition:background 0.15s ease;">HESABIMI KALICI OLARAK SİL</button>
+        </div>
+      </div>
+
       <!-- Account Actions Section -->
       <div
-        style="margin-top:40px; border-top:1px solid rgba(255,255,255,0.08); padding-top:32px; padding-bottom:40px; display:flex; flex-direction:column; gap:12px;">
+        style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:20px; padding-bottom:40px; display:flex; flex-direction:column; gap:12px;">
         <button class="mono-btn-secondary" onclick="logout()"
           style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid var(--danger); color:var(--danger); background:none; transition: all 0.2s ease;">ÇIKIŞ
           YAP</button>

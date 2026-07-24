@@ -579,6 +579,48 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// Delete account and all user data
+app.delete('/api/me', auth, (req, res) => {
+  const { password, confirmText } = req.body;
+  if (!password || confirmText !== 'ONAYLIYORUM') {
+    return res.status(400).json({ error: 'Lütfen şifrenizi girin ve ONAYLIYORUM yazarak onaylayın.' });
+  }
+
+  // Get user to verify password
+  db.get('SELECT * FROM users WHERE id = ?', [req.user.id], (err, user) => {
+    if (err || !user) return res.status(500).json({ error: 'Sunucu hatası' });
+
+    bcrypt.compare(password, user.password, (err, isMatch) => {
+      if (err || !isMatch) return res.status(400).json({ error: 'Girdiğiniz şifre hatalı.' });
+
+      db.serialize(() => {
+        // Delete all related records
+        db.run('DELETE FROM sessions WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM party_members WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM friendships WHERE user_id = ? OR friend_id = ?', [req.user.id, req.user.id]);
+        db.run('DELETE FROM posts WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM comments WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM comment_likes WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM notifications WHERE user_id = ? OR from_user_id = ?', [req.user.id, req.user.id]);
+        db.run('DELETE FROM party_messages WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM party_bans WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM chat_group_members WHERE user_id = ?', [req.user.id]);
+        db.run('DELETE FROM web_push_subscriptions WHERE user_id = ?', [req.user.id]);
+        
+        // Finally delete the user
+        db.run('DELETE FROM users WHERE id = ?', [req.user.id], (err) => {
+          if (err) return res.status(500).json({ error: 'Hesap silinirken hata oluştu.' });
+          
+          res.clearCookie('token');
+          res.clearCookie('username');
+          res.json({ success: true });
+        });
+      });
+    });
+  });
+});
+
+
 // Sessions
 app.post('/api/sessions/start', auth, (req, res) => {
   const partyId = req.body.partyId || null;
