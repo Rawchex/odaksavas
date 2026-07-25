@@ -84,8 +84,10 @@ function renderMyProfile(user) {
       : `<div class="profile-post-grid">${reposts.map(p => renderPostGridItem(p, false, true)).join('')}</div>`;
   }
 
+  const isOnline = user.is_online !== undefined ? Boolean(user.is_online) : true;
   const statusColors = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af' };
-  const userStatusColor = statusColors[user.status || 'online'] || statusColors.online;
+  let userStatusColor = isOnline ? (statusColors[user.status || 'online'] || statusColors.online) : '#9ca3af';
+  if (user.status === 'invisible') userStatusColor = '#9ca3af';
 
   content.innerHTML = `
     <div class="profile-insta-header">

@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS party_channels (
   user_limit INTEGER DEFAULT 0,
   position INTEGER DEFAULT 0,
   is_default INTEGER DEFAULT 0,
+  allow_screen_share INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (party_id) REFERENCES parties(id)
 );

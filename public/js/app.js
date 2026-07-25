@@ -15,12 +15,17 @@ window._violationFired  = false;
 window._blurTimer       = null;
 
 // ============================================================
-// PAGE VISIBILITY API — instant on iOS when screen locks / app switch
+// PAGE VISIBILITY API — instant on iOS when screen locks / app switch & Auth Revalidation
 // ============================================================
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && window._activeSession && !window._violationFired) {
-    window._violationFired = true;
-    if (typeof handleViolation === 'function') handleViolation('EKRAN KAPANDI');
+  if (document.hidden) {
+    if (window._activeSession && !window._violationFired) {
+      window._violationFired = true;
+      if (typeof handleViolation === 'function') handleViolation('EKRAN KAPANDI');
+    }
+  } else {
+    // Re-validate user authentication when returning to app to prevent user session bleed/caching
+    checkAuth(true);
   }
 });
 
@@ -56,22 +61,53 @@ window.addEventListener('focus', () => {
   }
 
   await checkAuth();
+
+  // Handle URL invite code link (?join=CODE)
+  const urlParams = new URLSearchParams(window.location.search);
+  const joinCode = urlParams.get('join');
+  if (joinCode) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    fetch('/api/parties/join-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: joinCode })
+    }).then(r => r.json()).then(d => {
+      if (d.success) {
+        setTimeout(() => {
+          showToast('Davet bağlantısı ile odaya katıldınız!');
+          if (typeof openPartyUI === 'function') openPartyUI(d.partyId);
+        }, 1000);
+      }
+    }).catch(() => {});
+  }
 })();
 
 // ============================================================
 // AUTH
 // ============================================================
-async function checkAuth() {
+async function checkAuth(silent = false) {
   try {
-    const res = await fetch('/api/me');
+    const res = await fetch('/api/me', { cache: 'no-store' });
     if (res.ok) {
-      currentUser = await res.json();
-      showMainApp();
+      const user = await res.json();
+      if (currentUser && currentUser.id !== user.id) {
+        // User mismatch detected (e.g., another user logged in on backend), force fresh reload
+        currentUser = user;
+        location.reload();
+        return;
+      }
+      currentUser = user;
+      if (!silent) showMainApp();
     } else {
-      showLogin();
+      if (currentUser) {
+        currentUser = null;
+        location.reload();
+      } else {
+        showLogin();
+      }
     }
   } catch {
-    showLogin();
+    if (!silent) showLogin();
   }
 }
 
@@ -354,6 +390,17 @@ function showPage(name) {
     document.body.classList.remove('chat-active');
   }
 
+  // Auto-collapse party overlay when leaving timer page
+  const overlay = document.getElementById('partyFocusOverlay');
+  if (overlay && overlay.classList.contains('in-active-party')) {
+    if (name !== 'timer') {
+      // Collapse and float if not already collapsed
+      if (!overlay.classList.contains('collapsed') && typeof togglePartyFocusOverlay === 'function') {
+        togglePartyFocusOverlay();
+      }
+    }
+  }
+
   const oldPage = document.querySelector('.page.active');
   const newPage = document.getElementById(name + 'Page');
   
@@ -561,10 +608,24 @@ async function deleteNotif(e, id) {
   }
 }
 
-async function markAllRead() {
+async function markAllNotificationsRead() {
   await fetch('/api/notifications/read', { method: 'POST' });
-  document.getElementById('notifDot').classList.remove('show');
-  loadNotifications();
+  const dot = document.getElementById('notifDot');
+  if (dot) dot.classList.remove('show');
+  if (typeof loadNotifications === 'function') loadNotifications();
+  if (typeof showToast === 'function') showToast('Tüm bildirimler okundu olarak işaretlendi');
+}
+
+async function clearAllNotifications() {
+  try {
+    const res = await fetch('/api/notifications/clear-all', { method: 'DELETE' });
+    if (res.ok) {
+      const dot = document.getElementById('notifDot');
+      if (dot) dot.classList.remove('show');
+      if (typeof loadNotifications === 'function') loadNotifications();
+      if (typeof showToast === 'function') showToast('Tüm bildirimler temizlendi');
+    }
+  } catch(e){}
 }
 
 // Notification polling every 30s
@@ -871,23 +932,25 @@ function renderAvatar(user, classes = 'avatar avatar-sm') {
   // Handle status dot
   let statusDot = '';
   if (user && user.username) {
-    const isOnline = user.is_online || (user.status && user.status !== 'offline');
-    let color = '#555'; // default offline / invisible
-    if (isOnline) {
-      if (user.status === 'online' || !user.status) color = '#00e676';
-      else if (user.status === 'away') color = '#fbbf24';
-      else if (user.status === 'dnd') color = '#ef4444';
+    const isOnline = Boolean(user.is_online) || (user.is_online === undefined && user.status && user.status !== 'offline' && user.status !== 'invisible');
+    let color = '#747f8d'; // offline / invisible gray
+    if (isOnline && user.status !== 'invisible') {
+      const st = user.status || 'online';
+      if (st === 'online') color = '#23a55a';      // Çevrimiçi (yeşil)
+      else if (st === 'away') color = '#faa61a';    // Uzakta (sarı)
+      else if (st === 'dnd') color = '#f23f43';     // Rahatsız Etme (kırmızı)
+      else if (st === 'offline') color = '#747f8d'; // Çevrimdışı (gri)
     }
 
     // Determine dot size based on avatar classes
     let dotSize = 8;
     let borderSize = 2;
-    if (classes.includes('avatar-xs')) { dotSize = 6; borderSize = 1.5; }
+    if (classes.includes('avatar-xs')) { dotSize = 7; borderSize = 1.5; }
     else if (classes.includes('avatar-md')) { dotSize = 10; borderSize = 2; }
     else if (classes.includes('avatar-lg')) { dotSize = 14; borderSize = 2.5; }
     else if (classes.includes('avatar-xl')) { dotSize = 16; borderSize = 3; }
 
-    statusDot = `<div class="status-online-dot" style="background:${color}; width:${dotSize}px; height:${dotSize}px; border-radius:50%; position:absolute; bottom:-1px; right:-1px; border:${borderSize}px solid #000; z-index:2;"></div>`;
+    statusDot = `<div class="status-online-dot" style="background:${color}; width:${dotSize}px; height:${dotSize}px; border-radius:50%; position:absolute; bottom:-1px; right:-1px; border:${borderSize}px solid #111214; z-index:2;" title="${isOnline && user.status !== 'invisible' ? (user.status || 'online') : 'offline'}"></div>`;
   }
 
   return `<div class="${classes}" style="position:relative; display:inline-flex;">${avatarHtml}${statusDot}</div>`;
@@ -897,8 +960,16 @@ function renderAvatar(user, classes = 'avatar avatar-sm') {
 // TOAST
 // ============================================================
 function showToast(msg, duration = 2400) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.className = 'toast';
+    document.body.appendChild(t);
+  }
+  // Clean all emojis automatically
+  const cleanMsg = (msg || '').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1FA00}-\u{1FAFF}]/gu, '').trim();
+  t.textContent = cleanMsg;
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), duration);
@@ -1132,3 +1203,134 @@ function updatePresenceUI() {
   }
 }
 
+// ─── DISCORD-STYLE FLOATING TOOLTIP ENGINE ─────────────────────
+(function initDiscordTooltipEngine() {
+  let activeTarget = null;
+
+  function showTooltip(target) {
+    const tooltipEl = document.getElementById('discordTooltip');
+    const tooltipText = document.getElementById('discordTooltipText');
+    if (!tooltipEl || !tooltipText) return;
+
+    let text = target.getAttribute('data-tooltip') || target.getAttribute('title');
+    if (!text || !text.trim()) return;
+
+    if (target.hasAttribute('title')) {
+      target.setAttribute('data-tooltip', text.trim());
+      target.removeAttribute('title');
+    }
+
+    activeTarget = target;
+    tooltipText.textContent = text.trim();
+
+    tooltipEl.style.display = 'block';
+    tooltipEl.style.opacity = '1';
+    tooltipEl.style.visibility = 'visible';
+
+    const rect = target.getBoundingClientRect();
+    const ttRect = tooltipEl.getBoundingClientRect();
+
+    const isCollapsedOverlay = !!target.closest('.party-focus-overlay.collapsed');
+    const overlayEl = target.closest('.party-focus-overlay');
+    
+    let preferRight = target.getAttribute('data-tooltip-pos') === 'right' || isCollapsedOverlay;
+    let preferLeft = false;
+
+    if (isCollapsedOverlay && overlayEl) {
+      const overRect = overlayEl.getBoundingClientRect();
+      // If collapsed overlay is on the right side of the screen, show tooltip on the left
+      if (overRect.left + overRect.width / 2 > window.innerWidth / 2) {
+        preferRight = false;
+        preferLeft = true;
+      }
+    }
+
+    let top, left;
+
+    if (preferRight) {
+      top = rect.top + (rect.height / 2) - (ttRect.height / 2);
+      left = rect.right + 10;
+      tooltipEl.classList.add('tooltip-right');
+      tooltipEl.classList.remove('tooltip-bottom', 'tooltip-left');
+    } else if (preferLeft) {
+      top = rect.top + (rect.height / 2) - (ttRect.height / 2);
+      left = rect.left - ttRect.width - 10;
+      tooltipEl.classList.add('tooltip-left');
+      tooltipEl.classList.remove('tooltip-bottom', 'tooltip-right');
+    } else {
+      top = rect.top - ttRect.height - 8;
+      left = rect.left + (rect.width / 2) - (ttRect.width / 2);
+      tooltipEl.classList.remove('tooltip-right', 'tooltip-left');
+
+      if (top < 8) {
+        top = rect.bottom + 8;
+        tooltipEl.classList.add('tooltip-bottom');
+      } else {
+        tooltipEl.classList.remove('tooltip-bottom');
+      }
+      left = Math.max(8, Math.min(window.innerWidth - ttRect.width - 8, left));
+    }
+
+    const svgArrow = document.getElementById('discordTooltipArrow');
+    if (svgArrow) {
+      const pathEl = svgArrow.querySelector('path');
+      if (preferRight) {
+        svgArrow.setAttribute('viewBox', '0 0 8 16');
+        svgArrow.setAttribute('width', '7');
+        svgArrow.setAttribute('height', '14');
+        if (pathEl) pathEl.setAttribute('d', 'M8 0 C8 4 6 6 1 8 C6 10 8 12 8 16 Z');
+      } else if (preferLeft) {
+        svgArrow.setAttribute('viewBox', '0 0 8 16');
+        svgArrow.setAttribute('width', '7');
+        svgArrow.setAttribute('height', '14');
+        if (pathEl) pathEl.setAttribute('d', 'M0 0 C0 4 2 6 7 8 C2 10 0 12 0 16 Z');
+      } else if (top > rect.top) { // bottom position
+        svgArrow.setAttribute('viewBox', '0 0 16 8');
+        svgArrow.setAttribute('width', '14');
+        svgArrow.setAttribute('height', '7');
+        if (pathEl) pathEl.setAttribute('d', 'M0 8 C4 8 6 6 8 1 C10 6 12 8 16 8 Z');
+      } else { // top position
+        svgArrow.setAttribute('viewBox', '0 0 16 8');
+        svgArrow.setAttribute('width', '14');
+        svgArrow.setAttribute('height', '7');
+        if (pathEl) pathEl.setAttribute('d', 'M0 0 C4 0 6 2 8 7 C10 2 12 0 16 0 Z');
+      }
+    }
+
+    tooltipEl.style.top = `${top}px`;
+    tooltipEl.style.left = `${left}px`;
+    tooltipEl.classList.add('visible');
+  }
+
+  function hideTooltip() {
+    const tooltipEl = document.getElementById('discordTooltip');
+    activeTarget = null;
+    if (tooltipEl) {
+      tooltipEl.classList.remove('visible');
+      tooltipEl.style.display = 'none';
+      tooltipEl.style.opacity = '0';
+      tooltipEl.style.visibility = 'hidden';
+    }
+  }
+
+  document.addEventListener('mouseover', (e) => {
+    const target = e.target.closest('[data-tooltip], [title]');
+    if (target) {
+      showTooltip(target);
+    } else if (activeTarget && !e.target.closest('#discordTooltip')) {
+      hideTooltip();
+    }
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    if (activeTarget) {
+      const rel = e.relatedTarget;
+      if (!rel || (!activeTarget.contains(rel) && activeTarget !== rel)) {
+        hideTooltip();
+      }
+    }
+  });
+
+  document.addEventListener('click', () => hideTooltip());
+  window.addEventListener('scroll', () => hideTooltip(), { passive: true });
+})();

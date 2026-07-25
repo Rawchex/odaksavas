@@ -108,12 +108,25 @@ async function buildLobbyTabHtml() {
     const detailRes = await fetch(`/api/parties/${activeParty.id}`);
     if (!detailRes.ok) throw new Error('Oda bilgisi alınamadı');
     const party = await detailRes.json();
-    const isOwner = party.owner_id === currentUser.id;
+    const isOwner = Boolean(
+      (party.owner_id && currentUser?.id && parseInt(party.owner_id) === parseInt(currentUser.id)) ||
+      (party.owner_name && currentUser?.username && party.owner_name === currentUser.username)
+    );
+    const meMember = party.members.find(m => m.username === currentUser?.username);
+    const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember.role));
 
     html += `
       <div class="mono-header">AKTİF LOBİNİZ</div>
       <div class="mono-card active-room">
-        <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:6px;text-transform:uppercase">${esc(party.name)}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <div style="font-size:16px;font-weight:900;color:#fff;text-transform:uppercase;word-break:break-word">${esc(party.name)}</div>
+          ${canManage ? `
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button onclick="triggerPartyRenameFromHeader()" class="mono-btn-secondary" style="font-size:11px;padding:4px 8px;margin:0;border-radius:8px;" data-tooltip="Oda Adını Değiştir">✏️ Düzenle</button>
+              <button onclick="promptAddChannel()" class="mono-btn-secondary" style="font-size:11px;padding:4px 8px;margin:0;border-radius:8px;" data-tooltip="Alt Kanal Oluştur">+ Kanal</button>
+            </div>
+          ` : ''}
+        </div>
         <div style="font-size:11px;color:#888;margin-bottom:16px">Kurucu: ${esc(party.owner_name)} · ${party.members.length} Üye</div>
         
         <div class="mono-sub-header" style="margin-top:0">ÜYE ODAK DURUMLARI</div>
@@ -122,25 +135,37 @@ async function buildLobbyTabHtml() {
             const isActive = m.active_session_id !== null;
             const isMe = m.username === currentUser.username;
             return `
-              <div style="display:flex;align-items:center;justify-content:space-between;background:#050505;padding:10px 14px;border-radius:10px;border:1px solid #111">
+              <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);padding:10px 14px;border-radius:10px;">
                 <div style="display:flex;align-items:center;gap:10px">
                   ${renderAvatar(m, 'avatar avatar-sm')}
-                  <span style="font-size:13px;font-weight:600;color:#fff;cursor:${isMe ? 'default' : 'pointer'}" ${isMe ? '' : `onclick="closePartyModal(); openUserPage('${esc(m.username)}')"`}>${esc(m.username)} ${isMe ? '<span style="font-size:10px;color:#333;font-weight:400"> siz</span>' : ''}</span>
+                  <span style="font-size:13px;font-weight:600;color:#fff;cursor:${isMe ? 'default' : 'pointer'}" ${isMe ? '' : `onclick="closePartyModal(); openUserPage('${esc(m.username)}')"`}>${esc(m.username)} ${isMe ? '<span style="font-size:10px;color:var(--text-3);font-weight:400"> (sen)</span>' : ''}</span>
                 </div>
-                <span style="font-size:10px;font-weight:700;letter-spacing:1px;color:${isActive ? '#fff' : '#2a2a2a'}">${isActive ? '● odakta' : 'boşta'}</span>
+                <span style="font-size:10px;font-weight:700;letter-spacing:1px;color:${isActive ? 'var(--live)' : 'var(--text-3)'}">${isActive ? '● odakta' : 'boşta'}</span>
               </div>
             `;
           }).join('')}
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="timer-start-btn" style="font-size:13px;padding:14px" onclick="startSessionInParty(${party.id}); closePartyModal()">
+          <button class="timer-start-btn" style="font-size:13px;padding:12px;max-width:100%;" onclick="startSessionInParty(${party.id}); closePartyModal()">
             Birlikte Odaklan
           </button>
+
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button class="mono-btn-secondary" style="flex:1;font-size:11px;padding:8px 10px;margin:0;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:6px;" onclick="copyPartyInviteCode('${party.invite_code || party.id}')">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+              <span>Davet Bağlantısını Kopyala (${party.invite_code || party.id})</span>
+            </button>
+            ${canManage ? `
+              <button class="mono-btn-secondary" style="font-size:11px;padding:8px 10px;margin:0;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;" onclick="regeneratePartyInviteCode(${party.id})" data-tooltip="Yeni Davet Kodu Üret" title="Yeni Davet Kodu Üret">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              </button>
+            ` : ''}
+          </div>
           
           <div class="mono-sub-header" style="margin-top:16px">ARKADAŞLARINI DAVET ET</div>
           <input class="mono-input" id="lobbyInviteSearchInput" placeholder="Arkadaş veya kullanıcı ara..." style="margin-bottom:8px" oninput="handleLobbyInviteSearch(this.value)">
-          <div id="lobbyInviteFriendsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; border:1px solid #1a1a1a; padding:4px; background:#020202">
+          <div id="lobbyInviteFriendsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:6px; background:rgba(0,0,0,0.2); border-radius:12px;">
             <div id="lobbyInviteFriendsItems"></div>
             <div id="lobbyInviteOtherResults"></div>
           </div>
@@ -154,14 +179,20 @@ async function buildLobbyTabHtml() {
   } else {
     html += `
       <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
-        <button class="timer-start-btn" style="font-size:13px;padding:14px" id="btnShowCreateParty" onclick="togglePartyCreateForm(true)">+ Yeni Oda Oluştur</button>
+        <div style="display:flex;gap:8px;">
+          <button class="timer-start-btn" style="flex:1;font-size:12px;padding:12px;max-width:100%;" id="btnShowCreateParty" onclick="togglePartyCreateForm(true)">+ Yeni Oda Oluştur</button>
+          <button class="mono-btn-secondary" style="flex:1;font-size:12px;padding:12px;max-width:100%;margin:0;border-radius:10px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:6px;" onclick="promptJoinByCode()">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+            <span>Kod İle Katıl</span>
+          </button>
+        </div>
         
-        <div id="inlinePartyCreateForm" style="display:none;flex-direction:column;gap:12px;background:#050505;padding:16px;border:1px solid var(--border-soft)">
+        <div id="inlinePartyCreateForm" style="display:none;flex-direction:column;gap:12px;background:var(--card2);padding:16px;border-radius:14px;">
           <div style="font-weight:800;color:#fff;font-size:12px">LOBİ OLUŞTUR</div>
           <input class="mono-input" id="inlineCreatePartyName" placeholder="Lobi Adı (Örn: Gececi Tayfa)" style="margin:0">
           
           <div style="font-size:10px;color:#888;margin-top:4px">DAVET EDİLECEK ARKADAŞLAR</div>
-          <div id="lobbyCreateFriendsList" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; border:1px solid #111; padding:4px; background:#020202"></div>
+          <div id="lobbyCreateFriendsList" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; padding:6px; background:rgba(0,0,0,0.2); border-radius:10px;"></div>
           
           <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#ccc;cursor:pointer">
             <input type="checkbox" id="inlineCreatePartyPrivate"> Gizli Lobi (Sadece davetle)
@@ -643,7 +674,8 @@ async function joinParty(partyId) {
 }
 
 async function leaveParty(partyId) {
-  if (!(await window.showConfirm('Lobiden ayrılmak istiyor musun?'))) return;
+  const confirmed = await window.showConfirm('Lobiden ayrılmak istiyor musun?');
+  if (!confirmed) return false;
   try {
     const res = await fetch(`/api/parties/${partyId}/leave`, { method: 'POST' });
     if (res.ok) {
@@ -653,15 +685,16 @@ async function leaveParty(partyId) {
     }
   } catch (e) {
     console.warn('leaveParty request error:', e);
-  } finally {
-    if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
-    if (typeof clearActiveParty === 'function') clearActiveParty();
-    refreshPartyModal();
   }
+  if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+  if (typeof clearActiveParty === 'function') clearActiveParty();
+  refreshPartyModal();
+  return true;
 }
 
 async function deleteParty(partyId) {
-  if (!(await window.showConfirm('Lobiyi silmek istiyor musun?'))) return;
+  const confirmed = await window.showConfirm('Lobiyi silmek istiyor musun?');
+  if (!confirmed) return false;
   try {
     const res = await fetch(`/api/parties/${partyId}/leave`, { method: 'POST' });
     if (res.ok) {
@@ -671,11 +704,11 @@ async function deleteParty(partyId) {
     }
   } catch (e) {
     console.warn('deleteParty request error:', e);
-  } finally {
-    if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
-    if (typeof clearActiveParty === 'function') clearActiveParty();
-    refreshPartyModal();
   }
+  if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+  if (typeof clearActiveParty === 'function') clearActiveParty();
+  refreshPartyModal();
+  return true;
 }
 
 // submitInlineInvite has been replaced with simplified quick select handlers
@@ -702,4 +735,54 @@ async function startSessionInParty(partyId) {
   if (typeof setActiveParty === 'function') setActiveParty(partyId);
   showPage('timer');
   showToast('Lobi seçildi. ODAĞA BAŞLA\'ya bas!');
+}
+
+// --- INVITE CODE HELPERS ---
+async function copyPartyInviteCode(code) {
+  const url = `${window.location.origin}/?join=${code}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast(`Davet bağlantısı kopyalandı! (Kod: ${code})`);
+  } catch {
+    if (typeof window.showPrompt === 'function') window.showPrompt('Davet Bağlantınız:', url);
+  }
+}
+
+async function promptJoinByCode() {
+  const code = await window.showPrompt('Odaya katılmak için 8 haneli Davet Kodunu girin:');
+  if (!code || !code.trim()) return;
+
+  try {
+    const res = await fetch('/api/parties/join-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code.trim() })
+    });
+    const d = await res.json();
+    if (res.ok) {
+      showToast('Odaya katıldınız!');
+      refreshPartyModal();
+      if (typeof openPartyUI === 'function') openPartyUI(d.partyId);
+    } else {
+      showToast(d.error || 'Katılım başarısız');
+    }
+  } catch {
+    showToast('Bağlantı hatası');
+  }
+}
+
+async function regeneratePartyInviteCode(partyId) {
+  if (!(await window.showConfirm('Mevcut davet bağlantısı geçersiz kılınacak ve yeni bir kod oluşturulacak. Onaylıyor musunuz?'))) return;
+  try {
+    const res = await fetch(`/api/parties/${partyId}/regenerate-invite`, { method: 'POST' });
+    const d = await res.json();
+    if (res.ok) {
+      showToast(`Yeni davet kodu üretildi: ${d.inviteCode}`);
+      refreshPartyModal();
+    } else {
+      showToast(d.error || 'Kod yenilenemedi');
+    }
+  } catch {
+    showToast('Bağlantı hatası');
+  }
 }

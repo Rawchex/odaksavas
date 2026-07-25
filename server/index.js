@@ -82,10 +82,32 @@ app.use(limiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 
+// Anti-Caching Middleware for API routes to prevent user state leakage across proxies/CDN/browsers
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 // Serve static files
 app.use(express.static('public'));
 app.use('/uploads', express.static(UPLOADS_DIR)); // Explicitly serve uploads from persistent dir
 app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// Health Check endpoint for Railway / Uptime Monitor
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
+// Process Error Safety (Prevent server crashes on unhandled errors)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER WARN] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER ERROR] Uncaught Exception:', err);
+});
 
 // Bulletproof route for default avatar in uploads directory
 app.get('/uploads/default-avatar.png', (req, res) => {
@@ -275,6 +297,17 @@ db.serialize(() => {
   db.run('ALTER TABLE messages ADD COLUMN group_id INTEGER', () => {}); // for group chats
   db.run('ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT "online"', () => {});
   db.run('ALTER TABLE messages ADD COLUMN is_share INTEGER DEFAULT 0', () => {});
+  db.run('ALTER TABLE parties ADD COLUMN invite_code TEXT', () => {
+    // Fill empty invite codes for existing parties
+    db.all('SELECT id FROM parties WHERE invite_code IS NULL OR invite_code = ""', (err, rows) => {
+      if (rows && rows.length > 0) {
+        rows.forEach(r => {
+          const code = Array.from({length: 8}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 56)]).join('');
+          db.run('UPDATE parties SET invite_code = ? WHERE id = ?', [code, r.id]);
+        });
+      }
+    });
+  });
   db.run('ALTER TABLE sessions ADD COLUMN party_id INTEGER', () => {});
   db.run('ALTER TABLE sessions ADD COLUMN feeling TEXT', () => {});
   db.run('ALTER TABLE sessions ADD COLUMN category TEXT', () => {});
@@ -507,7 +540,8 @@ app.post('/api/change-password', auth, async (req, res) => {
 });
 
 app.get('/api/me', auth, (req, res) => {
-  res.json(req.user);
+  const { password_hash, ...safeUser } = req.user;
+  res.json(safeUser);
 });
 
 // Arama endpoint'i (kullanıcı adında arama)
@@ -574,8 +608,8 @@ app.patch('/api/me/status', auth, (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  res.clearCookie('token');
-  res.clearCookie('username');
+  res.clearCookie('token', { path: '/', httpOnly: true, sameSite: 'Lax' });
+  res.clearCookie('username', { path: '/', sameSite: 'Lax' });
   res.json({ success: true });
 });
 
@@ -636,45 +670,61 @@ app.post('/api/sessions/end/:id', auth, upload.none(), (req, res) => {
   // Support both JSON body (normal stop) and FormData (sendBeacon on page close)
   const violation = req.body.violation === true || req.body.violation === 'true';
   
-  db.get('SELECT * FROM sessions WHERE id = ? AND user_id = ?', [id, req.user.id], (err, session) => {
-    if (!session) return res.status(404).json({ error: 'Session bulunamadi' });
+  // Strict check: Only query active sessions belonging to this user
+  db.get('SELECT * FROM sessions WHERE id = ? AND user_id = ? AND status = "active"', [id, req.user.id], (err, session) => {
+    if (!session) {
+      return res.status(400).json({ error: 'Aktif bir seans bulunamadı veya seans zaten sonlandırılmış.' });
+    }
     
     const now = new Date();
     const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
-    const duration = Math.floor((now - start) / 1000);
+    let rawDuration = Math.floor((now - start) / 1000);
+    
+    // Bounds checking: Prevent negative duration or absurdly high numbers (Cap at 12 hours = 43200s)
+    if (isNaN(rawDuration) || rawDuration < 0) rawDuration = 0;
+    const duration = Math.min(rawDuration, 43200);
     const status = violation ? 'violated' : 'completed';
     
-    db.run('UPDATE sessions SET end_time = datetime("now"), duration = ?, status = ? WHERE id = ?', [duration, status, id], () => {
-      if (duration >= 1) {
-        if (!violation) {
-          // 1 sec = 1 XP
-          const baseXP = duration;
-          
-          // Bonuses: Every 60s (+5), Every 30 mins (+60), Every 1 hour (+360)
-          const minBonus = Math.floor(duration / 60) * 5;
-          const halfHourBonus = Math.floor(duration / 1800) * 60;
-          const hourBonus = Math.floor(duration / 3600) * 360;
-          
-          const bonus = minBonus + halfHourBonus + hourBonus;
-          const xpGained = baseXP + bonus;
-
-          const newTotalXp = req.user.xp + xpGained;
-          const newLevel = Math.floor((1 + Math.sqrt(1 + 0.08 * newTotalXp)) / 2);
-          const totalFocus = (req.user.total_focus_time || 0) + duration;
-          
-          db.run('UPDATE users SET xp = ?, level = ?, total_focus_time = ? WHERE id = ?', [newTotalXp, newLevel, totalFocus, req.user.id], () => {
-            res.json({ duration, xpGained, bonusGained: bonus, newLevel, status, total_focus_time: totalFocus });
-          });
-        } else {
-          // Violated but duration >= 3, update total_focus_time but no XP
-          const totalFocus = (req.user.total_focus_time || 0) + duration;
-          db.run('UPDATE users SET total_focus_time = ? WHERE id = ?', [totalFocus, req.user.id], () => {
-            res.json({ duration, xpGained: 0, bonusGained: 0, newLevel: req.user.level, status, total_focus_time: totalFocus });
-          });
+    // Atomic Update: Only update if status is still 'active' (Race condition & multi-device double submission protection)
+    db.run('UPDATE sessions SET end_time = datetime("now"), duration = ?, status = ? WHERE id = ? AND status = "active"', 
+      [duration, status, id], 
+      function(err) {
+        if (err || this.changes === 0) {
+          // If 0 rows updated, another concurrent request closed it micro-seconds ago!
+          return res.status(400).json({ error: 'Seans zaten başka bir cihazdan kapatılmış.' });
         }
-      } else {
-        res.json({ duration, status, xpGained: 0, bonusGained: 0, total_focus_time: req.user.total_focus_time || 0 });
-      }
+
+        if (duration >= 1) {
+          if (!violation) {
+            // 1 sec = 1 XP
+            const baseXP = duration;
+            
+            // Bonuses: Every 60s (+5), Every 30 mins (+60), Every 1 hour (+360)
+            const minBonus = Math.floor(duration / 60) * 5;
+            const halfHourBonus = Math.floor(duration / 1800) * 60;
+            const hourBonus = Math.floor(duration / 3600) * 360;
+            
+            const bonus = minBonus + halfHourBonus + hourBonus;
+            const xpGained = baseXP + bonus;
+
+            const newTotalXp = (req.user.xp || 0) + xpGained;
+            const newLevel = Math.floor((1 + Math.sqrt(1 + 0.08 * newTotalXp)) / 2);
+            const totalFocus = (req.user.total_focus_time || 0) + duration;
+            
+            db.run('UPDATE users SET xp = ?, level = ?, total_focus_time = ? WHERE id = ?', 
+              [newTotalXp, newLevel, totalFocus, req.user.id], () => {
+              res.json({ duration, xpGained, bonusGained: bonus, newLevel, status, total_focus_time: totalFocus });
+            });
+          } else {
+            // Violated, update total_focus_time but no XP
+            const totalFocus = (req.user.total_focus_time || 0) + duration;
+            db.run('UPDATE users SET total_focus_time = ? WHERE id = ?', [totalFocus, req.user.id], () => {
+              res.json({ duration, xpGained: 0, bonusGained: 0, newLevel: req.user.level, status, total_focus_time: totalFocus });
+            });
+          }
+        } else {
+          res.json({ duration, status, xpGained: 0, bonusGained: 0, total_focus_time: req.user.total_focus_time || 0 });
+        }
     });
   });
 });
@@ -721,7 +771,12 @@ app.get('/api/sessions/similar/:id', auth, (req, res) => {
 
 // Leaderboard
 app.get('/api/leaderboard', auth, (req, res) => {
-  db.all('SELECT id, username, profile_photo, total_focus_time, level, xp, status FROM users ORDER BY total_focus_time DESC LIMIT 100', (err, users) => {
+  db.all(`
+    SELECT id, username, profile_photo, total_focus_time, level, xp, status,
+      (last_seen IS NOT NULL AND last_seen > datetime('now', '-2 minutes')) as is_online 
+    FROM users 
+    ORDER BY total_focus_time DESC LIMIT 100
+  `, (err, users) => {
     res.json(users || []);
   });
 });
@@ -750,7 +805,9 @@ app.get('/api/users/search', auth, (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json([]);
   db.all(
-    `SELECT id, username, profile_photo, level, status FROM users
+    `SELECT id, username, profile_photo, level, status,
+       (last_seen IS NOT NULL AND last_seen > datetime('now', '-2 minutes')) as is_online 
+     FROM users
      WHERE username LIKE ?
      ORDER BY username ASC LIMIT 10`,
     [`%${q}%`],
@@ -760,7 +817,12 @@ app.get('/api/users/search', auth, (req, res) => {
 
 // Profile
 app.get('/api/users/:username', auth, (req, res) => {
-  db.get('SELECT * FROM users WHERE username = ?', [req.params.username], (err, user) => {
+  db.get(`
+    SELECT u.*, 
+      (u.last_seen IS NOT NULL AND u.last_seen > datetime('now', '-2 minutes')) as is_online 
+    FROM users u 
+    WHERE u.username = ?
+  `, [req.params.username], (err, user) => {
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     
     // Find friendship relation first
@@ -839,8 +901,9 @@ app.get('/api/users/:username', auth, (req, res) => {
                     const finalWeight = isLocked ? null : user.weight;
                     const finalCv = isLocked ? null : user.cv;
 
+                    const { password_hash, ...safeUser } = user;
                     res.json({
-                      ...user,
+                      ...safeUser,
                       bio: finalBio,
                       height: finalHeight,
                       weight: finalWeight,
@@ -1060,6 +1123,51 @@ app.delete('/api/posts/:id/repost', auth, (req, res) => {
   });
 });
 
+// DELETE Post (IDOR Protected: Only post owner can delete)
+app.delete('/api/posts/:id', auth, (req, res) => {
+  const postId = req.params.id;
+  db.get('SELECT user_id FROM posts WHERE id = ?', [postId], (err, post) => {
+    if (!post) return res.status(404).json({ error: 'Gönderi bulunamadı' });
+    if (post.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Bu gönderiyi silme yetkiniz yok' });
+    }
+
+    db.serialize(() => {
+      db.run('DELETE FROM likes WHERE post_id = ?', [postId]);
+      db.run('DELETE FROM comments WHERE post_id = ?', [postId]);
+      db.run('DELETE FROM reposts WHERE post_id = ?', [postId]);
+      db.run('DELETE FROM posts WHERE id = ? AND user_id = ?', [postId, req.user.id], (err) => {
+        if (err) return res.status(500).json({ error: 'Gönderi silinemedi' });
+        res.json({ success: true });
+      });
+    });
+  });
+});
+
+// DELETE Comment (IDOR Protected: Comment owner OR post owner can delete)
+app.delete('/api/comments/:id', auth, (req, res) => {
+  const commentId = req.params.id;
+  db.get(`
+    SELECT c.user_id as comment_owner, p.user_id as post_owner 
+    FROM comments c 
+    JOIN posts p ON c.post_id = p.id 
+    WHERE c.id = ?
+  `, [commentId], (err, row) => {
+    if (!row) return res.status(404).json({ error: 'Yorum bulunamadı' });
+    if (row.comment_owner !== req.user.id && row.post_owner !== req.user.id) {
+      return res.status(403).json({ error: 'Bu yorumu silme yetkiniz yok' });
+    }
+
+    db.serialize(() => {
+      db.run('DELETE FROM comment_likes WHERE comment_id = ?', [commentId]);
+      db.run('DELETE FROM comments WHERE id = ? OR parent_id = ?', [commentId, commentId], (err) => {
+        if (err) return res.status(500).json({ error: 'Yorum silinemedi' });
+        res.json({ success: true });
+      });
+    });
+  });
+});
+
 app.post('/api/comments/:id/like', auth, (req, res) => {
   db.run('INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
     if (err) {
@@ -1137,14 +1245,62 @@ app.delete('/api/friends/:id', auth, (req, res) => {
   });
 });
 
+function generateInviteCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // Party API - YENİDEN: ÖZEL PARTİLER + DAVETLER
 app.post('/api/parties', auth, (req, res) => {
   const { name, isPrivate } = req.body;
-  db.run('INSERT INTO parties (owner_id, name, is_private) VALUES (?, ?, ?)', 
-    [req.user.id, name || 'Yeni Parti', isPrivate ? 1 : 0], function() {
+  const inviteCode = generateInviteCode();
+  db.run('INSERT INTO parties (owner_id, name, is_private, invite_code) VALUES (?, ?, ?, ?)', 
+    [req.user.id, name || 'Yeni Parti', isPrivate ? 1 : 0, inviteCode], function() {
     const partyId = this.lastID;
     db.run('INSERT INTO party_members (party_id, user_id, role) VALUES (?, ?, "owner")', [partyId, req.user.id], () => {
-      res.json({ partyId });
+      res.json({ partyId, inviteCode });
+    });
+  });
+});
+
+// Davet Kodu İle Odaya Katılma
+app.post('/api/parties/join-code', auth, (req, res) => {
+  const { code } = req.body;
+  if (!code || !code.trim()) return res.status(400).json({ error: 'Davet kodu girilmelidir' });
+  const cleanCode = code.trim();
+
+  db.get('SELECT * FROM parties WHERE invite_code = ? OR id = ?', [cleanCode, parseInt(cleanCode) || 0], (err, party) => {
+    if (!party) return res.status(404).json({ error: 'Geçersiz davet kodu veya oda bulunamadı' });
+
+    // Ban check
+    db.get('SELECT id FROM party_bans WHERE party_id = ? AND user_id = ?', [party.id, req.user.id], (err, ban) => {
+      if (ban) return res.status(403).json({ error: 'Bu odaya girme yetkiniz yok (yasaklandınız)' });
+
+      db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [party.id, req.user.id], (err) => {
+        if (err && party.owner_id !== req.user.id) {
+          return res.json({ success: true, partyId: party.id });
+        }
+        db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
+          [party.id, `@${req.user.username} davet kodu ile odaya katıldı.`]);
+        res.json({ success: true, partyId: party.id });
+      });
+    });
+  });
+});
+
+// Davet Kodunu Sıfırlama / Yenileme
+app.post('/api/parties/:id/regenerate-invite', auth, (req, res) => {
+  const partyId = req.params.id;
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed) => {
+    if (!allowed) return res.status(403).json({ error: 'Davet kodunu yenileme yetkiniz yok' });
+
+    const newCode = generateInviteCode();
+    db.run('UPDATE parties SET invite_code = ? WHERE id = ?', [newCode, partyId], () => {
+      res.json({ success: true, inviteCode: newCode });
     });
   });
 });
@@ -1369,6 +1525,7 @@ app.delete('/api/parties/:id/channels/:channelId', auth, (req, res) => {
 
     db.get('SELECT * FROM party_channels WHERE id = ? AND party_id = ?', [req.params.channelId, req.params.id], (err, chan) => {
       if (!chan) return res.status(404).json({ error: 'Kanal bulunamadı' });
+      if (chan.is_default) return res.status(400).json({ error: 'Varsayılan ana odak kanalı silinemez!' });
 
       // Find default channel
       db.get('SELECT id FROM party_channels WHERE party_id = ? AND is_default = 1 LIMIT 1', [req.params.id], (err, defChan) => {
@@ -1591,11 +1748,16 @@ app.post('/api/parties/:id/join', auth, (req, res) => {
     db.get('SELECT id FROM party_bans WHERE party_id = ? AND user_id = ?', [req.params.id, req.user.id], (err, ban) => {
       if (ban) return res.status(403).json({ error: 'Bu odaya girme yetkiniz yok (yasaklandınız)' });
 
-      // Özel parti ise davet kontrolü
-      if (party.is_private) {
-        db.get('SELECT * FROM party_invites WHERE party_id = ? AND to_user_id = ? AND status = "accepted"',
+      const isOwner = party.owner_id === req.user.id;
+
+      // Özel parti ise davet veya kurucu kontrolü
+      if (party.is_private && !isOwner) {
+        db.get('SELECT * FROM party_invites WHERE party_id = ? AND to_user_id = ? AND (status = "accepted" OR status = "pending")',
           [req.params.id, req.user.id], (err, invite) => {
           if (!invite) return res.status(403).json({ error: 'Bu parti özel - davet gerekli' });
+
+          // Auto accept pending invite on join
+          db.run('UPDATE party_invites SET status = "accepted" WHERE id = ?', [invite.id]);
 
           db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [req.params.id, req.user.id], (err) => {
             if (err) return res.status(400).json({ error: 'Zaten partidesin' });
@@ -1606,17 +1768,15 @@ app.post('/api/parties/:id/join', auth, (req, res) => {
         });
       } else {
         db.run('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)', [req.params.id, req.user.id], (err) => {
-          if (err) return res.status(400).json({ error: 'Zaten partidesin' });
+          if (err && !isOwner) return res.status(400).json({ error: 'Zaten partidesin' });
 
           db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
             [req.params.id, `@${req.user.username} odaya katıldı.`]);
 
-          db.get('SELECT owner_id FROM parties WHERE id = ?', [req.params.id], (err, p) => {
-            if (p && p.owner_id !== req.user.id) {
-              db.run('INSERT INTO notifications (user_id, type, from_user_id, party_id) VALUES (?, "party_join", ?, ?)',
-                [p.owner_id, req.user.id, req.params.id]);
-            }
-          });
+          if (party.owner_id !== req.user.id) {
+            db.run('INSERT INTO notifications (user_id, type, from_user_id, party_id) VALUES (?, "party_join", ?, ?)',
+              [party.owner_id, req.user.id, req.params.id]);
+          }
           res.json({ success: true });
         });
       }
@@ -1625,18 +1785,26 @@ app.post('/api/parties/:id/join', auth, (req, res) => {
 });
 
 app.post('/api/parties/:id/leave', auth, (req, res) => {
-  db.get('SELECT owner_id FROM parties WHERE id = ?', [req.params.id], (err, party) => {
+  const partyId = req.params.id;
+  db.get('SELECT owner_id FROM parties WHERE id = ?', [partyId], (err, party) => {
     if (!party) return res.status(404).json({ error: 'Parti bulunamadı' });
     
     if (party.owner_id === req.user.id) {
-      db.run('DELETE FROM party_members WHERE party_id = ?', [req.params.id]);
-      db.run('DELETE FROM parties WHERE id = ?', [req.params.id], () => {
-        res.json({ success: true, deleted: true });
+      db.serialize(() => {
+        db.run('DELETE FROM party_members WHERE party_id = ?', [partyId]);
+        db.run('DELETE FROM party_channels WHERE party_id = ?', [partyId]);
+        db.run('DELETE FROM party_invites WHERE party_id = ?', [partyId]);
+        db.run('DELETE FROM party_messages WHERE party_id = ?', [partyId]);
+        db.run('DELETE FROM party_bans WHERE party_id = ?', [partyId]);
+        db.run('DELETE FROM parties WHERE id = ?', [partyId], () => {
+          if (global.partyVoiceStates) delete global.partyVoiceStates[partyId];
+          res.json({ success: true, deleted: true });
+        });
       });
     } else {
-      db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [req.params.id, req.user.id], () => {
+      db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], () => {
         db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
-          [req.params.id, `@${req.user.username} odadan ayrıldı.`]);
+          [partyId, `@${req.user.username} odadan ayrıldı.`]);
         res.json({ success: true });
       });
     }
@@ -1649,34 +1817,44 @@ app.post('/api/parties/:id/leave', auth, (req, res) => {
 app.post('/api/parties/:id/voice-state', auth, (req, res) => {
   try {
     const partyId = req.params.id;
-    const { micMuted, deafened, pingMs, channelId } = req.body;
-    const userId = req.user.id;
-    const username = req.user.username;
+    
+    // Check if requester is actual member of party
+    db.get('SELECT id FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
+      if (!member) return res.status(403).json({ error: 'Oda üyesi değilsiniz' });
 
-    if (!global.partyVoiceStates) global.partyVoiceStates = {};
-    if (!global.partyVoiceStates[partyId]) {
-      global.partyVoiceStates[partyId] = {};
-    }
+      const { micMuted, deafened, pingMs, channelId } = req.body;
+      const userId = req.user.id;
+      const username = req.user.username;
 
-    // Update current user state
-    global.partyVoiceStates[partyId][userId] = {
-      username,
-      micMuted: !!micMuted,
-      deafened: !!deafened,
-      channelId: channelId ? parseInt(channelId) : null,
-      pingMs: parseInt(pingMs) || 0,
-      lastSeen: Date.now()
-    };
-
-    // Cleanup users that haven't sent state in 15 seconds
-    const now = Date.now();
-    Object.keys(global.partyVoiceStates[partyId]).forEach(uid => {
-      if (now - global.partyVoiceStates[partyId][uid].lastSeen > 15000) {
-        delete global.partyVoiceStates[partyId][uid];
+      if (!global.partyVoiceStates) global.partyVoiceStates = {};
+      if (!global.partyVoiceStates[partyId]) {
+        global.partyVoiceStates[partyId] = {};
       }
-    });
 
-    res.json({ members: global.partyVoiceStates[partyId] });
+      // Update current user state
+      global.partyVoiceStates[partyId][userId] = {
+        username,
+        micMuted: !!micMuted,
+        deafened: !!deafened,
+        channelId: channelId ? parseInt(channelId) : null,
+        pingMs: parseInt(pingMs) || 0,
+        lastSeen: Date.now()
+      };
+
+      // Cleanup users that haven't sent state in 15 seconds
+      const now = Date.now();
+      Object.keys(global.partyVoiceStates[partyId]).forEach(uid => {
+        if (now - global.partyVoiceStates[partyId][uid].lastSeen > 15000) {
+          delete global.partyVoiceStates[partyId][uid];
+        }
+      });
+
+      res.json({ members: global.partyVoiceStates[partyId] });
+    });
+  } catch(e) {
+    res.status(500).json({ error: 'Ses durumu güncellenemedi' });
+  }
+});
   } catch (err) {
     console.error('[Server Voice] Error in /voice-state:', err);
     res.status(500).json({ error: 'Voice state update failed', details: err.message });

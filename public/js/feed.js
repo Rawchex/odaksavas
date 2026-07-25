@@ -63,7 +63,32 @@ function renderFeed() {
     return;
   }
 
-  list.innerHTML = _feedPosts.map(p => renderPostCard(p)).join('');
+  let html = '';
+  const adCardHtml = `
+    <article class="post-card feed-ad-card" style="text-align:center; padding:16px; background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.12); border-radius:12px; margin-bottom:16px;">
+      <div style="font-size:10px; font-weight:700; color:var(--text-3, #777); margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">SPONSORLU / REKLAM</div>
+      <!-- Google AdSense Unit -->
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-format="fluid"
+           data-ad-layout-key="-fb+5w+4e-db+86"
+           data-ad-client="ca-pub-4259190146952385"
+           data-ad-slot="auto"></ins>
+      <script>
+           (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
+    </article>
+  `;
+
+  _feedPosts.forEach((post, index) => {
+    html += renderPostCard(post);
+    // Her 4 gönderiden sonra bir AdSense reklam alanı yerleştir
+    if ((index + 1) % 4 === 0 && index < _feedPosts.length - 1) {
+      html += adCardHtml;
+    }
+  });
+
+  list.innerHTML = html;
 }
 
 // ============================================================

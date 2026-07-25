@@ -148,6 +148,25 @@ async function openDirectChat(username, isGroup = 0, id = null) {
     }
   }
 
+function updateDeviceIndicator(deviceType, username, lastSeen, status) {
+  const subtitle = document.getElementById('chatDeviceSubtitle');
+  if (!subtitle) return;
+
+  const isOnline = lastSeen ? (new Date(lastSeen) > new Date(Date.now() - 2 * 60 * 1000)) : false;
+  const statusColorMap = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af', offline: '#9ca3af' };
+  const color = isOnline ? (statusColorMap[status] || '#4ade80') : '#9ca3af';
+
+  const icon = deviceType === 'mobile' ? '📱 Mobil' : '💻 Masaüstü';
+  const text = isOnline ? 'Çevrimiçi' : (lastSeen ? `Son Görülme: ${typeof fmtDate === 'function' ? fmtDate(lastSeen) : lastSeen}` : 'Çevrimdışı');
+
+  subtitle.innerHTML = `
+    <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:${color};font-weight:600;">
+      <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;"></span>
+      ${icon} • ${text}
+    </span>
+  `;
+}
+
   // Load messages
   await refreshChatMessages();
   
@@ -209,9 +228,17 @@ async function refreshChatMessages() {
     const idsMatch = _lastRenderedMsgIds.length === currentFingerprints.length &&
                      _lastRenderedMsgIds.every((fp, i) => fp === currentFingerprints[i]);
 
+    const systemBanner = `
+      <div class="chat-system-retention-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>Güvenlik ve gizliliğiniz için mesajlar 24 saat sonra otomatik olarak silinir.</span>
+      </div>
+    `;
+
     if (!idsMatch) {
-      // Build HTML — same rendering logic as before
-      container.innerHTML = messages.map(m => renderMessageBubble(m, key, lastReadMsgId)).join('');
+      container.innerHTML = systemBanner + messages.map(m => renderMessageBubble(m, key, lastReadMsgId)).join('');
       _lastRenderedMsgIds = currentFingerprints;
       _lastReadReceiptMsgId = lastReadMsgId;
 

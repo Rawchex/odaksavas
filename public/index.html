@@ -12,6 +12,7 @@
   <meta name="description" content="Odak Savaşı — Rekabetçi odak zamanlayıcı. Arkadaşlarınla çalış, öne geç.">
   <title>Odak Savaşı</title>
   <link rel="stylesheet" href="/css/style.css?v=8.0.0">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4259190146952385" crossorigin="anonymous"></script>
 </head>
 
 <body>
@@ -1467,22 +1468,68 @@
   <script src="/js/voice.js?v=2.1.8"></script>
 
   <script>
-  // ─── GLOBAL MODAL BACKDROP CLICK HANDLER ─────────────────────
-  // Closes any .modal-overlay.open when clicking the backdrop (not the inner sheet)
-  document.addEventListener('click', function(e) {
-    const openModals = document.querySelectorAll('.modal-overlay.open');
-    openModals.forEach(function(modal) {
-      if (e.target === modal) {
-        // Find a close button or dispatch a close function
-        const closeBtn = modal.querySelector('.modal-close, .modal-close-btn');
-        if (closeBtn) {
-          closeBtn.click();
-        } else {
-          // Fallback: remove open class
-          modal.classList.remove('open');
-        }
+  // ─── UNIVERSAL MOBILE MODAL BACKDROP & ESCAPE HANDLER ─────────────
+  function closeAllActiveModals() {
+    // 1. Class based modals (.open)
+    document.querySelectorAll('.modal-overlay.open, .post-modal-overlay.open, .img-fullscreen.open').forEach(modal => {
+      modal.classList.remove('open');
+    });
+
+    // 2. Display style based modals
+    const displayModals = [
+      'userVoiceSettingsModal', 
+      'channelConfigModal', 
+      'screenSharePromptModal', 
+      'settingsModal', 
+      'feedCommentsModal',
+      'partyModal',
+      'userProfileModal',
+      'postModalOverlay',
+      'sharePostModal'
+    ];
+    
+    displayModals.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('open');
+        el.style.display = 'none';
       }
     });
+
+    // Restore body scroll lock for mobile
+    document.body.style.overflow = '';
+  }
+
+  // Handle backdrop clicks (both desktop click & mobile touchstart)
+  ['click', 'touchend'].forEach(eventType => {
+    document.addEventListener(eventType, function(e) {
+      const modalOverlays = document.querySelectorAll('.modal-overlay, .post-modal-overlay, .img-fullscreen');
+      modalOverlays.forEach(function(modal) {
+        const isVisible = modal.classList.contains('open') || window.getComputedStyle(modal).display !== 'none';
+        if (isVisible && e.target === modal) {
+          // Prevent ghost clicks on iOS
+          const now = Date.now();
+          if (modal._lastTouch && now - modal._lastTouch < 300) return;
+          modal._lastTouch = now;
+
+          // Try specific close button first
+          const closeBtn = modal.querySelector('.modal-close, .modal-close-btn, .uvm-close-btn, .post-modal-close');
+          if (closeBtn && typeof closeBtn.click === 'function') {
+            closeBtn.click();
+          } else {
+            // Universal close fallback
+            closeAllActiveModals();
+          }
+        }
+      });
+    });
+  });
+
+  // ESC key handler for desktop & mobile keyboards
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeAllActiveModals();
+    }
   });
   </script>
 </body>

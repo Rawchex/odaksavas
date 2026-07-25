@@ -757,16 +757,18 @@ async function openUserVoiceModal(username) {
     }
 
     // ── Online ring ──
+    const isOnline = user.is_online !== undefined ? Boolean(user.is_online) : false;
+    const effectiveStatus = (isOnline && user.status !== 'invisible') ? (user.status || 'online') : 'offline';
+
     const ring = document.getElementById('uvOnlineRing');
     if (ring) {
-      const statusColorMap = { online: '#3ba55d', away: '#faa61a', dnd: '#ed4245', invisible: null, offline: null };
-      const status = user.status || 'offline';
-      const color  = statusColorMap[status];
+      const statusColorMap = { online: '#23a55a', away: '#faa61a', dnd: '#ed4245', invisible: null, offline: null };
+      const color  = statusColorMap[effectiveStatus];
       if (color) {
         ring.style.background = color;
-        ring.classList.add('visible');
+        ring.style.display = 'block';
       } else {
-        ring.classList.remove('visible');
+        ring.style.display = 'none';
       }
     }
 
@@ -778,9 +780,8 @@ async function openUserVoiceModal(username) {
     if (statusLabel) {
       const statusTextMap  = { online: 'Çevrimiçi', away: 'Uzakta', dnd: 'Rahatsız Etme', invisible: 'Çevrimdışı', offline: 'Çevrimdışı' };
       const statusColorMap = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af', offline: '#9ca3af' };
-      const status = user.status || 'offline';
-      statusLabel.textContent  = statusTextMap[status] || 'Çevrimdışı';
-      statusLabel.style.color  = statusColorMap[status] || '#9ca3af';
+      statusLabel.textContent  = statusTextMap[effectiveStatus] || 'Çevrimdışı';
+      statusLabel.style.color  = statusColorMap[effectiveStatus] || '#9ca3af';
     }
 
     // ── Latency ──
