@@ -1104,7 +1104,12 @@ function renderPartyDuel(partyData) {
   // Set Party Name Header
   const partyName = party.name || 'Odak Odası';
   if (labelEl) {
-    labelEl.innerHTML = `${esc(partyName)} ${canManage ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="margin-left:4px; opacity:0.6;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' : ''}`;
+    labelEl.innerHTML = `${esc(partyName)} ${canManage ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="margin-left:4px; opacity:0.6; flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' : ''}`;
+    if (partyName.length > 14) {
+      labelEl.classList.add('is-long-title');
+    } else {
+      labelEl.classList.remove('is-long-title');
+    }
   }
 
   if (addChanBtn) {

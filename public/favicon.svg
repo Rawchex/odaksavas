@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="blunkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5865f2" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <filter id="blunkGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Dark background container -->
+  <rect width="512" height="512" rx="128" fill="#0b0c0e" />
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#111214" stroke="url(#blunkGrad)" stroke-width="12" stroke-opacity="0.4" />
+  
+  <!-- Glowing Lightning Bolt Icon -->
+  <path d="M 285 48 L 135 272 L 255 272 L 225 464 L 375 240 L 255 240 Z" 
+        fill="url(#blunkGrad)" 
+        filter="url(#blunkGlow)" />
+</svg>

@@ -112,8 +112,13 @@ async function checkAuth(silent = false) {
 }
 
 function showLogin() {
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('mainApp').style.display    = 'none';
+  const loginEl = document.getElementById('loginScreen');
+  if (loginEl) {
+    loginEl.classList.add('active');
+    loginEl.style.setProperty('display', 'flex', 'important');
+  }
+  const mainAppEl = document.getElementById('mainApp');
+  if (mainAppEl) mainAppEl.style.display = 'none';
   // Focus input
   setTimeout(() => {
     const inp = document.getElementById('usernameInput');
@@ -121,78 +126,52 @@ function showLogin() {
   }, 100);
 }
 
-let currentAuthMode = 'login'; // 'login' or 'register'
+function openRegisterModal() {
+  hideAuthAlert('registerAlertBox');
+  const modal = document.getElementById('registerModal');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+  const inp = document.getElementById('regUsernameInput');
+  if (inp) inp.focus();
+}
 
-function showAuthAlert(msg, type = 'error') {
-  const alertBox = document.getElementById('authAlertBox');
+function closeRegisterModal() {
+  const modal = document.getElementById('registerModal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  hideAuthAlert('registerAlertBox');
+}
+
+function showAuthAlert(msg, targetId = 'authAlertBox', type = 'error') {
+  const alertBox = document.getElementById(targetId);
   if (!alertBox) return;
   alertBox.textContent = msg;
   alertBox.className = `auth-alert-box ${type === 'success' ? 'success' : ''}`;
   alertBox.style.display = 'block';
 }
 
-function hideAuthAlert() {
-  const alertBox = document.getElementById('authAlertBox');
+function hideAuthAlert(targetId = 'authAlertBox') {
+  const alertBox = document.getElementById(targetId);
   if (alertBox) alertBox.style.display = 'none';
 }
 
-function setAuthMode(mode) {
-  currentAuthMode = mode;
-  hideAuthAlert();
-
-  const tabLogin = document.getElementById('tabLoginBtn');
-  const tabReg = document.getElementById('tabRegisterBtn');
-  const emailWrap = document.getElementById('emailWrap');
-  const confirmWrap = document.getElementById('confirmPasswordWrap');
-  const submitBtn = document.getElementById('authSubmitBtn');
-  const promptLink = document.getElementById('authPromptLink');
-
-  if (mode === 'register') {
-    if (tabLogin) tabLogin.classList.remove('active');
-    if (tabReg) tabReg.classList.add('active');
-    if (emailWrap) emailWrap.style.display = 'flex';
-    if (confirmWrap) confirmWrap.style.display = 'flex';
-    if (submitBtn) submitBtn.textContent = 'KAYIT OL';
-    if (promptLink) {
-      promptLink.innerHTML = 'Zaten bir hesabın var mı? <span style="color:#5865f2;text-decoration:underline;">Giriş yap!</span>';
-    }
-  } else {
-    if (tabReg) tabReg.classList.remove('active');
-    if (tabLogin) tabLogin.classList.add('active');
-    if (emailWrap) emailWrap.style.display = 'none';
-    if (confirmWrap) confirmWrap.style.display = 'none';
-    if (submitBtn) submitBtn.textContent = 'GİRİŞ YAP';
-    if (promptLink) {
-      promptLink.innerHTML = 'Henüz bir hesabın yok mu? <span style="color:#5865f2;text-decoration:underline;">Buradan kayıt ol!</span>';
-    }
-  }
-}
-
-function toggleAuthModePrompt() {
-  setAuthMode(currentAuthMode === 'login' ? 'register' : 'login');
-}
-
-function submitAuthForm() {
-  if (currentAuthMode === 'register') {
-    register();
-  } else {
-    login();
-  }
-}
-
 async function login() {
-  hideAuthAlert();
+  hideAuthAlert('authAlertBox');
   const inp = document.getElementById('usernameInput');
   const passInp = document.getElementById('passwordInput');
   const username = inp ? inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') : '';
   const password = passInp ? passInp.value : '';
 
   if (!username) {
-    showAuthAlert('Lütfen kullanıcı adınızı girin.');
+    showAuthAlert('Lütfen kullanıcı adınızı girin.', 'authAlertBox');
     return;
   }
 
-  const btn = document.getElementById('authSubmitBtn');
+  const btn = document.getElementById('loginSubmitBtn');
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'LÜTFEN BEKLEYİN...';
@@ -225,14 +204,11 @@ async function login() {
         }, 1200);
       }
     } else {
-      showAuthAlert(d.error || 'Kullanıcı adı veya şifre hatalı.');
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'GİRİŞ YAP';
-      }
+      showAuthAlert(d.error || 'Kullanıcı adı veya şifre hatalı.', 'authAlertBox');
     }
   } catch {
-    showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.');
+    showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.', 'authAlertBox');
+  } finally {
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'GİRİŞ YAP';
@@ -241,11 +217,11 @@ async function login() {
 }
 
 async function register() {
-  hideAuthAlert();
-  const inp = document.getElementById('usernameInput');
-  const emailInp = document.getElementById('emailInput');
-  const passInp = document.getElementById('passwordInput');
-  const confirmInp = document.getElementById('confirmPasswordInput');
+  hideAuthAlert('registerAlertBox');
+  const inp = document.getElementById('regUsernameInput');
+  const emailInp = document.getElementById('regEmailInput');
+  const passInp = document.getElementById('regPasswordInput');
+  const confirmInp = document.getElementById('regConfirmPasswordInput');
 
   const username = inp ? inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') : '';
   const email = emailInp ? emailInp.value.trim() : '';
@@ -253,19 +229,19 @@ async function register() {
   const confirmPassword = confirmInp ? confirmInp.value : '';
 
   if (!username || username.length < 3) {
-    showAuthAlert('Kullanıcı adı en az 3 karakter olmalı ve özel karakter içermemelidir.');
+    showAuthAlert('Kullanıcı adı en az 3 karakter olmalı ve özel karakter içermemelidir.', 'registerAlertBox');
     return;
   }
   if (!password || password.length < 6) {
-    showAuthAlert('Şifreniz en az 6 karakter olmalıdır.');
+    showAuthAlert('Şifreniz en az 6 karakter olmalıdır.', 'registerAlertBox');
     return;
   }
   if (password !== confirmPassword) {
-    showAuthAlert('Girdiğiniz şifreler birbiriyle eşleşmiyor! Lütfen kontrol edin.');
+    showAuthAlert('Girdiğiniz şifreler birbiriyle eşleşmiyor! Lütfen kontrol edin.', 'registerAlertBox');
     return;
   }
 
-  const btn = document.getElementById('authSubmitBtn');
+  const btn = document.getElementById('regSubmitBtn');
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'LÜTFEN BEKLEYİN...';
@@ -281,17 +257,15 @@ async function register() {
 
     if (res.ok) {
       currentUser = d;
+      closeRegisterModal();
       showMainApp();
       showToast('BLUNK dünyasına hoş geldin!');
     } else {
-      showAuthAlert(d.error || 'Kayıt gerçekleştirilemedi.');
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'KAYIT OL';
-      }
+      showAuthAlert(d.error || 'Kayıt gerçekleştirilemedi.', 'registerAlertBox');
     }
   } catch {
-    showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.');
+    showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.', 'registerAlertBox');
+  } finally {
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'KAYIT OL';
@@ -299,14 +273,115 @@ async function register() {
   }
 }
 
-// Interactive Mouse Parallax for BLUNK Auth Background
-document.addEventListener('mousemove', (e) => {
-  const bg = document.getElementById('blunkParallaxBg');
-  if (!bg) return;
-  const x = (e.clientX / window.innerWidth - 0.5) * 30;
-  const y = (e.clientY / window.innerHeight - 0.5) * 30;
-  bg.style.transform = `rotate(-12deg) scale(1.1) translate(${x}px, ${y}px)`;
-});
+// ─── HIGH-PERFORMANCE INTERACTIVE BLUNK CANVAS PARTICLES & MOUSE EFFECT ───
+(function initBlunkCanvasEngine() {
+  const canvas = document.getElementById('blunkCanvasBg');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let width, height;
+  let mouse = { x: -1000, y: -1000, targetX: -1000, targetY: -1000 };
+
+  function resize() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  window.addEventListener('mousemove', (e) => {
+    mouse.targetX = e.clientX;
+    mouse.targetY = e.clientY;
+
+    const bg = document.getElementById('blunkParallaxBg');
+    if (bg) {
+      const x = (e.clientX / window.innerWidth - 0.5) * 45;
+      const y = (e.clientY / window.innerHeight - 0.5) * 45;
+      bg.style.transform = `rotate(-12deg) scale(1.1) translate(${x}px, ${y}px)`;
+    }
+  });
+
+  // Floating BLUNK Particle Class
+  class Particle {
+    constructor() {
+      this.reset(true);
+    }
+    reset(initial = false) {
+      this.x = Math.random() * width;
+      this.y = initial ? Math.random() * height : height + 50;
+      this.vx = (Math.random() - 0.5) * 0.4;
+      this.vy = -(0.3 + Math.random() * 0.5);
+      this.size = 14 + Math.random() * 26;
+      this.alpha = 0.04 + Math.random() * 0.08;
+      this.baseAlpha = this.alpha;
+      this.angle = (Math.random() - 0.5) * 0.4;
+      this.text = 'BLUNK';
+      this.glow = 0;
+    }
+    update() {
+      this.x += this.vx;
+      this.y += this.vy;
+
+      // Mouse interactive reaction (Repulsion + Glow)
+      const dx = this.x - mouse.x;
+      const dy = this.y - mouse.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = 180;
+
+      if (dist < minDist) {
+        const force = (minDist - dist) / minDist;
+        const angle = Math.atan2(dy, dx);
+        this.x += Math.cos(angle) * force * 3;
+        this.y += Math.sin(angle) * force * 3;
+        this.alpha = Math.min(0.4, this.baseAlpha + force * 0.35);
+        this.glow = force * 15;
+      } else {
+        this.alpha += (this.baseAlpha - this.alpha) * 0.05;
+        this.glow += (0 - this.glow) * 0.05;
+      }
+
+      if (this.y < -60 || this.x < -100 || this.x > width + 100) {
+        this.reset(false);
+      }
+    }
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+
+      ctx.font = `900 ${this.size}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      if (this.glow > 0.5) {
+        ctx.shadowColor = 'rgba(88, 101, 242, 0.8)';
+        ctx.shadowBlur = this.glow;
+        ctx.fillStyle = `rgba(168, 85, 247, ${this.alpha})`;
+      } else {
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+      }
+
+      ctx.fillText(this.text, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  const particles = Array.from({ length: 32 }, () => new Particle());
+
+  function animate() {
+    ctx.clearRect(0, 0, width, height);
+
+    mouse.x += (mouse.targetX - mouse.x) * 0.1;
+    mouse.y += (mouse.targetY - mouse.y) * 0.1;
+
+    particles.forEach(p => {
+      p.update();
+      p.draw();
+    });
+
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
 
 async function logout() {
   if (window._activeSession) {
@@ -321,8 +396,13 @@ async function logout() {
 }
 
 function showMainApp() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display    = 'block';
+  const loginEl = document.getElementById('loginScreen');
+  if (loginEl) {
+    loginEl.classList.remove('active');
+    loginEl.style.setProperty('display', 'none', 'important');
+  }
+  const mainAppEl = document.getElementById('mainApp');
+  if (mainAppEl) mainAppEl.style.display = 'block';
 
   // Show violation note if any
   if (sessionStorage.getItem('os_show_violation_note')) {
