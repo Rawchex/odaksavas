@@ -40,6 +40,11 @@ app.set('trust proxy', 1); // Railway runs behind a proxy
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'odaksavas.db');
 const db = new sqlite3.Database(DB_PATH);
 
+// Safe DB Schema Migration for BLUNK features
+db.serialize(() => {
+  db.run("ALTER TABLE users ADD COLUMN email TEXT", () => {});
+});
+
 global.partyVoiceStates = {};
 global.partySignals = {};
 
@@ -500,22 +505,31 @@ app.post('/api/login', authLimiter, (req, res) => {
   });
 });
 
-// Yeni kayıt
+// Yeni kayıt (BLUNK Auth)
 app.post('/api/register', authLimiter, async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre gerekli' });
-  if (password.length < 6) return res.status(400).json({ error: 'Şifre en az 6 karakter olmalı' });
+  const { username, password, email } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre gereklidir.' });
+  if (password.length < 6) return res.status(400).json({ error: 'Şifreniz en az 6 karakter olmalıdır.' });
   const clean = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-  if (!clean) return res.status(400).json({ error: 'Geçersiz kullanıcı adı' });
+  if (!clean || clean.length < 3) return res.status(400).json({ error: 'Kullanıcı adı en az 3 karakter olmalıdır.' });
+
+  const cleanEmail = email && typeof email === 'string' ? email.trim().toLowerCase() : null;
 
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
-  db.run('INSERT INTO users (username, password_hash) VALUES (?, ?)', [clean, hash], function(err) {
-    if (err) return res.status(400).json({ error: 'Bu kullanıcı adı zaten alınmış' });
+  db.run('INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)', [clean, hash, cleanEmail], function(err) {
+    if (err) {
+      if (err.message && err.message.includes('email')) {
+        return res.status(400).json({ error: 'Bu e-posta adresi zaten kullanılıyor.' });
+      }
+      return res.status(400).json({ error: 'Bu kullanıcı adı zaten alınmış.' });
+    }
     db.get('SELECT * FROM users WHERE id = ?', [this.lastID], (err, user) => {
+      if (err || !user) return res.status(500).json({ error: 'Kullanıcı oluşturulurken bir hata oluştu.' });
       const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
       res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
       res.cookie('username', clean, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
-      res.json(user);
+      const { password_hash, ...safeUser } = user;
+      res.json(safeUser);
     });
   });
 });

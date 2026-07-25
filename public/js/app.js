@@ -121,22 +121,82 @@ function showLogin() {
   }, 100);
 }
 
+let currentAuthMode = 'login'; // 'login' or 'register'
+
+function showAuthAlert(msg, type = 'error') {
+  const alertBox = document.getElementById('authAlertBox');
+  if (!alertBox) return;
+  alertBox.textContent = msg;
+  alertBox.className = `auth-alert-box ${type === 'success' ? 'success' : ''}`;
+  alertBox.style.display = 'block';
+}
+
+function hideAuthAlert() {
+  const alertBox = document.getElementById('authAlertBox');
+  if (alertBox) alertBox.style.display = 'none';
+}
+
+function setAuthMode(mode) {
+  currentAuthMode = mode;
+  hideAuthAlert();
+
+  const tabLogin = document.getElementById('tabLoginBtn');
+  const tabReg = document.getElementById('tabRegisterBtn');
+  const emailWrap = document.getElementById('emailWrap');
+  const confirmWrap = document.getElementById('confirmPasswordWrap');
+  const submitBtn = document.getElementById('authSubmitBtn');
+  const promptLink = document.getElementById('authPromptLink');
+
+  if (mode === 'register') {
+    if (tabLogin) tabLogin.classList.remove('active');
+    if (tabReg) tabReg.classList.add('active');
+    if (emailWrap) emailWrap.style.display = 'flex';
+    if (confirmWrap) confirmWrap.style.display = 'flex';
+    if (submitBtn) submitBtn.textContent = 'KAYIT OL';
+    if (promptLink) {
+      promptLink.innerHTML = 'Zaten bir hesabın var mı? <span style="color:#5865f2;text-decoration:underline;">Giriş yap!</span>';
+    }
+  } else {
+    if (tabReg) tabReg.classList.remove('active');
+    if (tabLogin) tabLogin.classList.add('active');
+    if (emailWrap) emailWrap.style.display = 'none';
+    if (confirmWrap) confirmWrap.style.display = 'none';
+    if (submitBtn) submitBtn.textContent = 'GİRİŞ YAP';
+    if (promptLink) {
+      promptLink.innerHTML = 'Henüz bir hesabın yok mu? <span style="color:#5865f2;text-decoration:underline;">Buradan kayıt ol!</span>';
+    }
+  }
+}
+
+function toggleAuthModePrompt() {
+  setAuthMode(currentAuthMode === 'login' ? 'register' : 'login');
+}
+
+function submitAuthForm() {
+  if (currentAuthMode === 'register') {
+    register();
+  } else {
+    login();
+  }
+}
+
 async function login() {
+  hideAuthAlert();
   const inp = document.getElementById('usernameInput');
   const passInp = document.getElementById('passwordInput');
-  const username = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-  const password = passInp?.value;
+  const username = inp ? inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') : '';
+  const password = passInp ? passInp.value : '';
 
   if (!username) {
-    inp.classList.add('error');
-    inp.placeholder = 'Kullanıcı adı gir!';
-    setTimeout(() => { inp.classList.remove('error'); inp.placeholder = 'Kullanıcı adın'; }, 2000);
+    showAuthAlert('Lütfen kullanıcı adınızı girin.');
     return;
   }
 
-  const btn = document.getElementById('loginBtn');
-  btn.disabled = true;
-  btn.textContent = '...';
+  const btn = document.getElementById('authSubmitBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'LÜTFEN BEKLEYİN...';
+  }
 
   try {
     const res = await fetch('/api/login', {
@@ -145,15 +205,13 @@ async function login() {
       body: JSON.stringify({ username, password })
     });
     const d = await res.json().catch(() => ({}));
-    
+
     if (res.ok) {
       currentUser = d;
       showMainApp();
-      
-      // Auto migrate users without passwords
       if (d.needsPassword) {
         setTimeout(async () => {
-          const newPass = await window.showPrompt('Hesabınızın güvenliği için lütfen bir şifre belirleyin (en az 6 karakter):');
+          const newPass = await window.showPrompt('Hesabınızın güvenliği için bir şifre belirleyin (en az 6 karakter):');
           if (newPass && newPass.length >= 6) {
             const migrateRes = await fetch('/api/change-password', {
               method: 'POST',
@@ -162,66 +220,93 @@ async function login() {
             });
             if (migrateRes.ok) {
               showToast('Şifreniz başarıyla kaydedildi!');
-            } else {
-              showToast('Şifre kaydedilemedi. Profilden sonra deneyebilirsiniz.');
             }
           }
         }, 1200);
       }
     } else {
-      if (d.needPassword) {
-        showToast('Şifre girmelisiniz!');
-      } else {
-        showToast(d.error || 'Giriş başarısız');
+      showAuthAlert(d.error || 'Kullanıcı adı veya şifre hatalı.');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'GİRİŞ YAP';
       }
+    }
+  } catch {
+    showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.');
+    if (btn) {
       btn.disabled = false;
       btn.textContent = 'GİRİŞ YAP';
     }
-  } catch {
-    showToast('Sunucuya ulaşılamıyor');
-    btn.disabled = false;
-    btn.textContent = 'GİRİŞ YAP';
   }
 }
 
 async function register() {
+  hideAuthAlert();
   const inp = document.getElementById('usernameInput');
+  const emailInp = document.getElementById('emailInput');
   const passInp = document.getElementById('passwordInput');
-  const username = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-  const password = passInp?.value;
+  const confirmInp = document.getElementById('confirmPasswordInput');
 
-  if (!username || !password || password.length < 6) {
-    showToast('Kullanıcı adı ve en az 6 karakterli şifre girin!');
+  const username = inp ? inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') : '';
+  const email = emailInp ? emailInp.value.trim() : '';
+  const password = passInp ? passInp.value : '';
+  const confirmPassword = confirmInp ? confirmInp.value : '';
+
+  if (!username || username.length < 3) {
+    showAuthAlert('Kullanıcı adı en az 3 karakter olmalı ve özel karakter içermemelidir.');
+    return;
+  }
+  if (!password || password.length < 6) {
+    showAuthAlert('Şifreniz en az 6 karakter olmalıdır.');
+    return;
+  }
+  if (password !== confirmPassword) {
+    showAuthAlert('Girdiğiniz şifreler birbiriyle eşleşmiyor! Lütfen kontrol edin.');
     return;
   }
 
-  const btn = document.getElementById('registerBtn');
-  btn.disabled = true;
-  btn.textContent = '...';
+  const btn = document.getElementById('authSubmitBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'LÜTFEN BEKLEYİN...';
+  }
 
   try {
     const res = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, email, password })
     });
     const d = await res.json().catch(() => ({}));
 
     if (res.ok) {
       currentUser = d;
       showMainApp();
-      showToast('Kayıt başarılı!');
+      showToast('BLUNK dünyasına hoş geldin!');
     } else {
-      showToast(d.error || 'Kayıt başarısız');
+      showAuthAlert(d.error || 'Kayıt gerçekleştirilemedi.');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'KAYIT OL';
+      }
+    }
+  } catch {
+    showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.');
+    if (btn) {
       btn.disabled = false;
       btn.textContent = 'KAYIT OL';
     }
-  } catch {
-    showToast('Sunucuya ulaşılamıyor');
-    btn.disabled = false;
-    btn.textContent = 'KAYIT OL';
   }
 }
+
+// Interactive Mouse Parallax for BLUNK Auth Background
+document.addEventListener('mousemove', (e) => {
+  const bg = document.getElementById('blunkParallaxBg');
+  if (!bg) return;
+  const x = (e.clientX / window.innerWidth - 0.5) * 30;
+  const y = (e.clientY / window.innerHeight - 0.5) * 30;
+  bg.style.transform = `rotate(-12deg) scale(1.1) translate(${x}px, ${y}px)`;
+});
 
 async function logout() {
   if (window._activeSession) {
