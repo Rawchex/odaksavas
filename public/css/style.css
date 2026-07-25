@@ -8532,4 +8532,80 @@ button:hover,
     font-size: 20px !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   DISCORD-STYLE ODAK ODASI (PARTY) MODAL SYSTEM
+   ═══════════════════════════════════════════════════════ */
+#partyModal .modal-sheet {
+  width: 92vw !important;
+  max-width: 940px !important;
+  height: 85vh !important;
+  max-height: 850px !important;
+  background: #111214 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.9) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 768px) {
+  #partyModal .modal-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 88dvh !important;
+    max-height: 88dvh !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+}
+
+/* Discord Glass Action Buttons (Düz arkaplansız / subtle hover) */
+.discord-action-btn {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #dbdee1 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 10px 16px !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.discord-action-btn:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+.discord-action-btn.primary {
+  background: #5865f2 !important;
+  border-color: #5865f2 !important;
+  color: #ffffff !important;
+}
+.discord-action-btn.primary:hover {
+  background: #4752c4 !important;
+  border-color: #4752c4 !important;
+  box-shadow: 0 4px 16px rgba(88, 101, 242, 0.4) !important;
+}
+.discord-action-btn.danger {
+  background: rgba(242, 63, 67, 0.1) !important;
+  border-color: rgba(242, 63, 67, 0.25) !important;
+  color: #f23f43 !important;
+}
+.discord-action-btn.danger:hover {
+  background: rgba(242, 63, 67, 0.2) !important;
+  border-color: #f23f43 !important;
+  color: #ffffff !important;
+}
+.discord-action-btn.icon-only {
+  padding: 10px !important;
+  width: 38px !important;
+  height: 38px !important;
+}
 

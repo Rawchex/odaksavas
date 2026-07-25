@@ -61,12 +61,27 @@ async function refreshPartyModal() {
   if (!content) return;
 
   let html = `
-    <div class="grid-controls-bar" style="border:1px solid #1a1a1a; margin-bottom:16px; padding: 4px; border-radius:10px;">
-      <div class="grid-size-btn-group">
-        <div class="grid-size-btn ${_currentPartyTab === 'lobby' ? 'active' : ''}" onclick="switchPartyTab('lobby')">Odalar</div>
-        <div class="grid-size-btn ${_currentPartyTab === 'friends' ? 'active' : ''}" onclick="switchPartyTab('friends')">Arkadaşlar</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.08); background:#18191c; flex-shrink:0;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="font-size:16px; font-weight:800; color:#fff; letter-spacing:0.5px; display:flex; align-items:center; gap:8px;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#5865f2" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>ODAK ODALARI</span>
+        </div>
+        <div style="height:18px; width:1px; background:rgba(255,255,255,0.12);"></div>
+        <div style="display:flex; gap:8px;">
+          <button class="discord-action-btn ${_currentPartyTab === 'lobby' ? 'primary' : ''}" style="padding:6px 14px; font-size:12px;" onclick="switchPartyTab('lobby')" data-tooltip="Odalar & Aktif Lobi" data-tooltip-pos="bottom">
+            Odalar
+          </button>
+          <button class="discord-action-btn ${_currentPartyTab === 'friends' ? 'primary' : ''}" style="padding:6px 14px; font-size:12px;" onclick="switchPartyTab('friends')" data-tooltip="Arkadaş Listeniz & Davet Et" data-tooltip-pos="bottom">
+            Arkadaşlar
+          </button>
+        </div>
       </div>
+      <button onclick="closePartyModal()" class="discord-action-btn icon-only" data-tooltip="Kapat (ESC)" data-tooltip-pos="left" style="border-radius:50%; width:32px; height:32px; padding:0;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
+    <div style="flex:1; overflow-y:auto; padding:24px; box-sizing:border-box;">
   `;
 
   try {
@@ -76,8 +91,10 @@ async function refreshPartyModal() {
       html += await buildFriendsTabHtml();
     }
   } catch (err) {
-    html += `<div style="text-align:center;padding:20px;color:red;font-size:11px">HATA OLUŞTU: ${err.message}</div>`;
+    html += `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">HATA OLUŞTU: ${err.message}</div>`;
   }
+
+  html += `</div>`; // Close scrollable body
 
   content.innerHTML = html;
 
@@ -116,61 +133,61 @@ async function buildLobbyTabHtml() {
     const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember.role));
 
     html += `
-      <div class="mono-header">AKTİF LOBİNİZ</div>
-      <div class="mono-card active-room">
+      <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">AKTİF LOBİNİZ</div>
+      <div style="background:#1e1f22; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:20px; margin-bottom:24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
-          <div style="font-size:16px;font-weight:900;color:#fff;text-transform:uppercase;word-break:break-word">${esc(party.name)}</div>
+          <div style="font-size:18px;font-weight:900;color:#fff;text-transform:uppercase;word-break:break-word">${esc(party.name)}</div>
           ${canManage ? `
-            <div style="display:flex;gap:6px;flex-shrink:0">
-              <button onclick="triggerPartyRenameFromHeader()" class="mono-btn-secondary" style="font-size:11px;padding:4px 8px;margin:0;border-radius:8px;" data-tooltip="Oda Adını Değiştir">✏️ Düzenle</button>
-              <button onclick="promptAddChannel()" class="mono-btn-secondary" style="font-size:11px;padding:4px 8px;margin:0;border-radius:8px;" data-tooltip="Alt Kanal Oluştur">+ Kanal</button>
+            <div style="display:flex;gap:8px;flex-shrink:0">
+              <button onclick="triggerPartyRenameFromHeader()" class="discord-action-btn" style="font-size:12px;padding:6px 12px;" data-tooltip="Oda Adını Değiştir" data-tooltip-pos="top">✏️ Düzenle</button>
+              <button onclick="promptAddChannel()" class="discord-action-btn" style="font-size:12px;padding:6px 12px;" data-tooltip="Alt Ses Kanalı Oluştur" data-tooltip-pos="top">+ Kanal</button>
             </div>
           ` : ''}
         </div>
-        <div style="font-size:11px;color:#888;margin-bottom:16px">Kurucu: ${esc(party.owner_name)} · ${party.members.length} Üye</div>
+        <div style="font-size:12px;color:#949ba4;margin-bottom:20px">Kurucu: <strong style="color:#f2f3f5">@${esc(party.owner_name)}</strong> · ${party.members.length} Üye</div>
         
-        <div class="mono-sub-header" style="margin-top:0">ÜYE ODAK DURUMLARI</div>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+        <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">ÜYE ODAK DURUMLARI</div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-bottom:24px;">
           ${party.members.map(m => {
             const isActive = m.active_session_id !== null;
             const isMe = m.username === currentUser.username;
             return `
-              <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);padding:10px 14px;border-radius:10px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;background:#111214;border:1px solid rgba(255,255,255,0.06);padding:10px 14px;border-radius:12px;">
                 <div style="display:flex;align-items:center;gap:10px">
                   ${renderAvatar(m, 'avatar avatar-sm')}
-                  <span style="font-size:13px;font-weight:600;color:#fff;cursor:${isMe ? 'default' : 'pointer'}" ${isMe ? '' : `onclick="closePartyModal(); openUserPage('${esc(m.username)}')"`}>${esc(m.username)} ${isMe ? '<span style="font-size:10px;color:var(--text-3);font-weight:400"> (sen)</span>' : ''}</span>
+                  <span style="font-size:13px;font-weight:700;color:#fff;cursor:${isMe ? 'default' : 'pointer'}" ${isMe ? '' : `onclick="closePartyModal(); openUserPage('${esc(m.username)}')"`}>${esc(m.username)} ${isMe ? '<span style="font-size:10px;color:#949ba4;font-weight:400"> (sen)</span>' : ''}</span>
                 </div>
-                <span style="font-size:10px;font-weight:700;letter-spacing:1px;color:${isActive ? 'var(--live)' : 'var(--text-3)'}">${isActive ? '● odakta' : 'boşta'}</span>
+                <span style="font-size:10px;font-weight:800;letter-spacing:0.5px;color:${isActive ? '#23a55a' : '#949ba4'}">${isActive ? '● ODAKTA' : 'BOŞTA'}</span>
               </div>
             `;
           }).join('')}
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="timer-start-btn" style="font-size:13px;padding:12px;max-width:100%;" onclick="startSessionInParty(${party.id}); closePartyModal()">
-            Birlikte Odaklan
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <button class="discord-action-btn primary" style="font-size:14px;padding:14px;width:100%;font-weight:800;" onclick="startSessionInParty(${party.id}); closePartyModal()" data-tooltip="Odadaki arkadaşlarınla birlikte odağa başla" data-tooltip-pos="top">
+            🚀 Birlikte Odaklan
           </button>
 
-          <div style="display:flex;gap:6px;margin-top:6px;">
-            <button class="mono-btn-secondary" style="flex:1;font-size:11px;padding:8px 10px;margin:0;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:6px;" onclick="copyPartyInviteCode('${party.invite_code || party.id}')">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="discord-action-btn" style="flex:1;font-size:12px;padding:10px 14px;" onclick="copyPartyInviteCode('${party.invite_code || party.id}')" data-tooltip="Oda davet bağlantısını pano kopyala" data-tooltip-pos="top">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
               <span>Davet Bağlantısını Kopyala (${party.invite_code || party.id})</span>
             </button>
             ${canManage ? `
-              <button class="mono-btn-secondary" style="font-size:11px;padding:8px 10px;margin:0;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;" onclick="regeneratePartyInviteCode(${party.id})" data-tooltip="Yeni Davet Kodu Üret" title="Yeni Davet Kodu Üret">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              <button class="discord-action-btn icon-only" onclick="regeneratePartyInviteCode(${party.id})" data-tooltip="Yeni Davet Kodu Üret (Eski link geçersiz olur)" data-tooltip-pos="left">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
               </button>
             ` : ''}
           </div>
           
-          <div class="mono-sub-header" style="margin-top:16px">ARKADAŞLARINI DAVET ET</div>
-          <input class="mono-input" id="lobbyInviteSearchInput" placeholder="Arkadaş veya kullanıcı ara..." style="margin-bottom:8px" oninput="handleLobbyInviteSearch(this.value)">
-          <div id="lobbyInviteFriendsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:6px; background:rgba(0,0,0,0.2); border-radius:12px;">
+          <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-top:16px;">ARKADAŞLARINI DAVET ET</div>
+          <input class="mono-input" id="lobbyInviteSearchInput" placeholder="Arkadaş veya kullanıcı adı ara..." style="margin-bottom:8px" oninput="handleLobbyInviteSearch(this.value)">
+          <div id="lobbyInviteFriendsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:6px; background:#111214; border:1px solid rgba(255,255,255,0.06); border-radius:12px;">
             <div id="lobbyInviteFriendsItems"></div>
             <div id="lobbyInviteOtherResults"></div>
           </div>
 
-          <button class="${isOwner ? 'mono-btn-danger' : 'mono-btn-secondary'}" style="margin-top:12px" onclick="${isOwner ? 'deleteParty' : 'leaveParty'}(${party.id})">
+          <button class="discord-action-btn ${isOwner ? 'danger' : ''}" style="margin-top:12px; width:100%;" onclick="${isOwner ? 'deleteParty' : 'leaveParty'}(${party.id})" data-tooltip="${isOwner ? 'Odayı kalıcı olarak siler' : 'Lobiden ayrılırsınız'}" data-tooltip-pos="top">
             ${isOwner ? 'LOBİYİ SİL' : 'LOBİDEN AYRIL'}
           </button>
         </div>
@@ -178,35 +195,38 @@ async function buildLobbyTabHtml() {
     `;
   } else {
     html += `
-      <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;gap:8px;">
-          <button class="timer-start-btn" style="flex:1;font-size:12px;padding:12px;max-width:100%;" id="btnShowCreateParty" onclick="togglePartyCreateForm(true)">+ Yeni Oda Oluştur</button>
-          <button class="mono-btn-secondary" style="flex:1;font-size:12px;padding:12px;max-width:100%;margin:0;border-radius:10px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:6px;" onclick="promptJoinByCode()">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+      <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:12px;">
+          <button class="discord-action-btn primary" style="flex:1;font-size:13px;padding:12px;" id="btnShowCreateParty" onclick="togglePartyCreateForm(true)" data-tooltip="Kendi özel oda veya lobinizi kurun" data-tooltip-pos="top">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Yeni Oda Oluştur</span>
+          </button>
+          <button class="discord-action-btn" style="flex:1;font-size:13px;padding:12px;" onclick="promptJoinByCode()" data-tooltip="8 haneli davet kodu veya bağlantısı ile katıl" data-tooltip-pos="top">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
             <span>Kod İle Katıl</span>
           </button>
         </div>
         
-        <div id="inlinePartyCreateForm" style="display:none;flex-direction:column;gap:12px;background:var(--card2);padding:16px;border-radius:14px;">
-          <div style="font-weight:800;color:#fff;font-size:12px">LOBİ OLUŞTUR</div>
+        <div id="inlinePartyCreateForm" style="display:none;flex-direction:column;gap:12px;background:#1e1f22;border:1px solid rgba(255,255,255,0.08);padding:20px;border-radius:16px;">
+          <div style="font-weight:800;color:#fff;font-size:13px">LOBİ OLUŞTUR</div>
           <input class="mono-input" id="inlineCreatePartyName" placeholder="Lobi Adı (Örn: Gececi Tayfa)" style="margin:0">
           
-          <div style="font-size:10px;color:#888;margin-top:4px">DAVET EDİLECEK ARKADAŞLAR</div>
-          <div id="lobbyCreateFriendsList" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; padding:6px; background:rgba(0,0,0,0.2); border-radius:10px;"></div>
+          <div style="font-size:10px;color:#949ba4;margin-top:4px;font-weight:700;">DAVET EDİLECEK ARKADAŞLAR</div>
+          <div id="lobbyCreateFriendsList" style="max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:8px; background:#111214; border:1px solid rgba(255,255,255,0.06); border-radius:10px;"></div>
           
-          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#ccc;cursor:pointer">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#dbdee1;cursor:pointer">
             <input type="checkbox" id="inlineCreatePartyPrivate"> Gizli Lobi (Sadece davetle)
           </label>
-          <div style="display:flex;gap:8px">
-            <button class="mono-btn-primary" onclick="submitCreateParty()">OLUŞTUR</button>
-            <button class="mono-btn-secondary" onclick="togglePartyCreateForm(false)">İPTAL</button>
+          <div style="display:flex;gap:10px">
+            <button class="discord-action-btn primary" onclick="submitCreateParty()" data-tooltip="Odayı oluştur ve başlat" data-tooltip-pos="top">OLUŞTUR</button>
+            <button class="discord-action-btn" onclick="togglePartyCreateForm(false)">İPTAL</button>
           </div>
         </div>
       </div>
 
-      <div class="mono-sub-header">GENEL ODALARI ARA</div>
-      <div style="margin-bottom:16px">
-        <input class="mono-input" id="partySearchInModal" placeholder="Oda adı yazın..." oninput="filterPartiesModal()">
+      <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">GENEL ODALARI ARA</div>
+      <div style="margin-bottom:20px">
+        <input class="mono-input" id="partySearchInModal" placeholder="Oda adı veya kurucu yazın..." oninput="filterPartiesModal()">
       </div>
 
       <div id="partyModalList">
@@ -243,15 +263,15 @@ async function buildLobbyTabHtml() {
 function buildPublicPartiesListHtml(parties) {
   const filtered = parties.filter(p => p.owner_id !== currentUser.id && p.is_member === 0);
   if (!filtered.length) {
-    return `<div style="text-align:center;padding:24px;font-size:11px;color:#444;font-weight:700">AKTİF GENEL LOBİ YOK</div>`;
+    return `<div style="text-align:center;padding:24px;font-size:12px;color:#949ba4;font-weight:600">AKTİF GENEL LOBİ YOK</div>`;
   }
   return filtered.map(p => `
-    <div class="mono-card" style="display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1e1f22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;margin-bottom:8px;">
       <div style="flex:1">
-        <div style="font-size:14px;font-weight:800;color:#fff">${esc(p.name)}</div>
-        <div style="font-size:10px;color:#555;margin-top:2px">Kurucu: ${esc(p.owner_name)} · ${p.member_count} üye</div>
+        <div style="font-size:15px;font-weight:800;color:#fff">${esc(p.name)}</div>
+        <div style="font-size:11px;color:#949ba4;margin-top:2px">Kurucu: <strong style="color:#f2f3f5">@${esc(p.owner_name)}</strong> · ${p.member_count} üye</div>
       </div>
-      <button class="mono-btn-secondary" style="width:auto;padding:8px 16px;font-size:10px" onclick="joinParty(${p.id})">KATIL</button>
+      <button class="discord-action-btn primary" style="padding:6px 14px;font-size:12px" onclick="joinParty(${p.id})" data-tooltip="${esc(p.name)} odasına katıl" data-tooltip-pos="left">KATIL</button>
     </div>
   `).join('');
 }
@@ -322,32 +342,32 @@ async function buildFriendsTabHtml() {
   }
 
   html += `
-    <div class="mono-sub-header">ARKADAŞ LİSTESİ (${friends.length})</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; margin-top:16px;">ARKADAŞ LİSTESİ (${friends.length})</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
       ${friends.length === 0
-        ? `<div style="text-align:center;padding:24px;font-size:11px;color:#444;font-weight:700">ARKADAŞ LİSTENİZ BOŞ</div>`
+        ? `<div style="text-align:center;padding:24px;font-size:12px;color:#949ba4;font-weight:600">ARKADAŞ LİSTENİZ BOŞ</div>`
         : friends.map(f => {
             const activeParty = _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id);
             const inviteBtn = activeParty
-              ? `<button class="mono-btn-secondary" style="width:auto;padding:6px 12px;font-size:9px" onclick="event.stopPropagation();inviteFriendToParty(${activeParty.id}, '${esc(f.username)}')">LOBİYE DAVET ET</button>`
+              ? `<button class="discord-action-btn primary" style="padding:6px 12px;font-size:11px" onclick="event.stopPropagation();inviteFriendToParty(${activeParty.id}, '${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısını aktif lobiye çağır" data-tooltip-pos="left">Lobiye Davet Et</button>`
               : '';
             const onlineDot = f.is_online
-              ? `<div style="background:#00e676;width:8px;height:8px;border-radius:50%;position:absolute;bottom:0;right:0;border:2px solid #000"></div>`
-              : `<div style="background:#555;width:8px;height:8px;border-radius:50%;position:absolute;bottom:0;right:0;border:2px solid #000"></div>`;
-            const dmBtn = `<button class="mono-btn-secondary" style="width:auto;padding:6px 12px;font-size:9px" onclick="event.stopPropagation();closePartyModal();showPage('messages');openDirectChat('${esc(f.username)}')">MESAJ</button>`;
+              ? `<div style="background:#23a55a;width:10px;height:10px;border-radius:50%;position:absolute;bottom:-1px;right:-1px;border:2px solid #111214"></div>`
+              : `<div style="background:#80848e;width:10px;height:10px;border-radius:50%;position:absolute;bottom:-1px;right:-1px;border:2px solid #111214"></div>`;
+            const dmBtn = `<button class="discord-action-btn" style="padding:6px 12px;font-size:11px" onclick="event.stopPropagation();closePartyModal();showPage('messages');openDirectChat('${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısına direkt mesaj gönder" data-tooltip-pos="top">Mesaj</button>`;
             return `
-              <div class="mono-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="closePartyModal();openUserModal('${esc(f.username)}')">
-                <div style="display:flex;align-items:center;gap:10px">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1e1f22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;cursor:pointer" onclick="closePartyModal();openUserModal('${esc(f.username)}')">
+                <div style="display:flex;align-items:center;gap:12px">
                   <div style="position:relative">
                     ${renderAvatar(f, 'avatar avatar-sm')}
                     ${onlineDot}
                   </div>
                   <div>
-                    <div style="font-weight:800;color:#fff">${esc(f.username)}</div>
-                    <div style="font-size:10px;color:#555">Lvl ${f.level || 1} · ${f.is_online ? '<span style="color:#00e676">Çevrimiçi</span>' : 'Çevrimdışı'}</div>
+                    <div style="font-weight:800;color:#fff;font-size:14px">@${esc(f.username)}</div>
+                    <div style="font-size:11px;color:#949ba4;margin-top:2px;">Lvl ${f.level || 1} · ${f.is_online ? '<span style="color:#23a55a;font-weight:700">Çevrimiçi</span>' : 'Çevrimdışı'}</div>
                   </div>
                 </div>
-                <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+                <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
                   ${dmBtn}
                   ${inviteBtn}
                 </div>
@@ -515,14 +535,14 @@ function renderLobbyInviteFriends() {
   container.innerHTML = filteredFriends.map(f => {
     const isMember = memberUsernames.has(f.username);
     const btnHtml = isMember
-      ? `<span style="font-size:10px;color:#555;font-weight:700">GRUPTA</span>`
-      : `<button class="mono-btn-secondary" style="width:auto;padding:6px 12px;font-size:9px" onclick="inviteFriendToParty(${_lobbyActiveParty.id}, '${esc(f.username)}')">DAVET ET</button>`;
+      ? `<span style="font-size:11px;color:#23a55a;font-weight:800;letter-spacing:0.5px;">✓ GRUPTA</span>`
+      : `<button class="discord-action-btn primary" style="padding:4px 10px;font-size:11px;" onclick="inviteFriendToParty(${_lobbyActiveParty.id}, '${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısını odaya davet et" data-tooltip-pos="left">Davet Et</button>`;
       
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;background:#050505;padding:6px 10px;border:1px solid #111">
-        <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#1e1f22;padding:8px 12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
+        <div style="display:flex;align-items:center;gap:10px">
           ${renderAvatar(f, 'avatar avatar-xs')}
-          <span style="font-size:12px;font-weight:700;color:#fff">${esc(f.username)}</span>
+          <span style="font-size:13px;font-weight:700;color:#fff">@${esc(f.username)}</span>
         </div>
         <div>
           ${btnHtml}
