@@ -18,16 +18,22 @@ async function openPartyModal() {
   const content = document.getElementById('partyModalContent');
   if (!modal) return;
 
+  modal.style.display = 'flex';
   modal.classList.add('open');
-  content.innerHTML = '<div class="loading-row">YÜKLENİYOR...</div>';
+  document.body.style.overflow = 'hidden';
+
+  if (content) {
+    content.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#949ba4;font-size:13px;font-weight:700;">YÜKLENİYOR...</div>';
+  }
 
   await refreshPartyModal();
 
   // Poll active states periodically
   if (_partyRefreshInt) clearInterval(_partyRefreshInt);
   _partyRefreshInt = setInterval(() => {
-    if (!modal.classList.contains('open')) {
+    if (!modal.classList.contains('open') || modal.style.display === 'none') {
       clearInterval(_partyRefreshInt);
+      _partyRefreshInt = null;
       return;
     }
 
@@ -49,7 +55,11 @@ async function openPartyModal() {
 
 function closePartyModal() {
   const modal = document.getElementById('partyModal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  }
+  document.body.style.overflow = '';
   if (_partyRefreshInt) {
     clearInterval(_partyRefreshInt);
     _partyRefreshInt = null;
