@@ -731,6 +731,11 @@ window._modalFriendStatus  = null; // 'none'|'pending_sent'|'pending_received'|'
 
 async function openUserVoiceModal(username) {
   try {
+    const partyModal = document.getElementById('partyModal');
+    if (partyModal && partyModal.classList.contains('open')) {
+      window._openedUserVoiceFromPartyModal = true;
+      if (typeof closePartyModal === 'function') closePartyModal();
+    }
     window._modalActiveUser = username;
     const modal = document.getElementById('userVoiceSettingsModal');
     if (!modal) return;
@@ -932,6 +937,13 @@ function closeUserVoiceModal() {
   window._modalActiveUser    = null;
   window._modalActiveUserObj = null;
   window._modalFriendStatus  = null;
+
+  if (window._openedUserVoiceFromPartyModal) {
+    window._openedUserVoiceFromPartyModal = false;
+    if (typeof openPartyModal === 'function') {
+      openPartyModal();
+    }
+  }
 }
 
 function handleUvVolumeChange(val) {
@@ -954,6 +966,7 @@ function handleUvMuteToggle() {
 function handleUvViewProfile() {
   const username = window._modalActiveUser;
   if (!username) return;
+  window._openedUserVoiceFromPartyModal = false;
   closeUserVoiceModal();
   if (typeof openUserPage === 'function') openUserPage(username);
 }

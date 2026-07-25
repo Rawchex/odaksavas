@@ -6648,21 +6648,15 @@ a {
    PIXEL-PERFECT ALIGNMENT & DISCORD LAYOUT OVERRIDES
    ============================================================ */
 
-/* 1. DISABLE ALL LIFT / SCALE ANIMATIONS ON HOVER */
-*,
-*:hover,
-button:hover,
+/* 1. DISABLE LIFT ANIMATIONS ON SPECIFIC ELEMENTS ONLY */
 .timer-start-btn:hover,
 .timer-stop-btn:hover,
 .timer-secondary-row button:hover,
 .sub-channel-card:hover,
 .sub-channel-header:hover,
 .party-focus-member:hover,
-.mono-card:hover,
-.mono-btn-primary:hover,
-.mono-btn-secondary:hover {
+.mono-card:hover {
   transform: none !important;
-  box-shadow: none !important;
 }
 
 /* 2. DISCORD VOICE CHANNEL SIDEBAR & MEMBER LIST ALIGNMENT */
@@ -8516,57 +8510,170 @@ button:hover,
   }
 }
 
-/* Discord Glass Action Buttons (Düz arkaplansız / subtle hover) */
+/* Discord Desktop Action Buttons System */
 .discord-action-btn {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background-color: #4e5058 !important;
+  background: #4e5058 !important;
+  border: 1px solid #4e5058 !important;
   color: #ffffff !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   padding: 10px 18px !important;
-  border-radius: 10px !important;
+  border-radius: 8px !important;
   cursor: pointer !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   gap: 8px !important;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  opacity: 1 !important;
-  visibility: visible !important;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+  text-decoration: none !important;
+  outline: none !important;
+  user-select: none !important;
+  line-height: 1.2 !important;
 }
+
+.discord-action-btn *,
+.discord-action-btn span,
+.discord-action-btn div,
+.discord-action-btn label {
+  color: #ffffff !important;
+}
+
 .discord-action-btn svg {
-  stroke: currentColor !important;
+  stroke: #ffffff !important;
+  color: #ffffff !important;
   flex-shrink: 0 !important;
 }
+
 .discord-action-btn:hover {
-  background: rgba(255, 255, 255, 0.16) !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
+  background-color: #6d6f78 !important;
+  background: #6d6f78 !important;
+  border-color: #6d6f78 !important;
   color: #ffffff !important;
-  transform: translateY(-1px);
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
 }
+
+.discord-action-btn:hover *,
+.discord-action-btn:hover span {
+  color: #ffffff !important;
+}
+
+.discord-action-btn:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Primary Button (Discord Blurple) */
 .discord-action-btn.primary {
+  background-color: #5865f2 !important;
   background: #5865f2 !important;
   border-color: #5865f2 !important;
   color: #ffffff !important;
 }
-.discord-action-btn.primary:hover {
-  background: #4752c4 !important;
-  border-color: #4752c4 !important;
-  box-shadow: 0 4px 16px rgba(88, 101, 242, 0.4) !important;
-}
-.discord-action-btn.danger {
-  background: rgba(242, 63, 67, 0.15) !important;
-  border-color: rgba(242, 63, 67, 0.35) !important;
-  color: #f23f43 !important;
-}
-.discord-action-btn.danger:hover {
-  background: rgba(242, 63, 67, 0.3) !important;
-  border-color: #f23f43 !important;
+
+.discord-action-btn.primary *,
+.discord-action-btn.primary span {
   color: #ffffff !important;
 }
+
+.discord-action-btn.primary svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+
+.discord-action-btn.primary:hover {
+  background-color: #4752c4 !important;
+  background: #4752c4 !important;
+  border-color: #4752c4 !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5) !important;
+  transform: translateY(-1.5px) !important;
+}
+
+.discord-action-btn.primary:active {
+  background-color: #3c45a5 !important;
+  background: #3c45a5 !important;
+}
+
+/* Danger Button (Red) */
+.discord-action-btn.danger {
+  background-color: #da373c !important;
+  background: #da373c !important;
+  border-color: #da373c !important;
+  color: #ffffff !important;
+}
+
+.discord-action-btn.danger *,
+.discord-action-btn.danger span {
+  color: #ffffff !important;
+}
+
+.discord-action-btn.danger:hover {
+  background-color: #a1282c !important;
+  background: #a1282c !important;
+  border-color: #a1282c !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(218, 55, 60, 0.5) !important;
+  transform: translateY(-1.5px) !important;
+}
+
 .discord-action-btn.icon-only {
-  padding: 10px !important;
+  padding: 0 !important;
   width: 38px !important;
   height: 38px !important;
+  min-width: 38px !important;
+  flex-shrink: 0 !important;
+  border-radius: 8px !important;
+}
+
+/* Discord Invite Link Widget Box */
+.discord-invite-box {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  width: 100% !important;
+  background: #111214 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 8px !important;
+  border-radius: 10px !important;
+}
+
+.discord-invite-input-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex: 1 !important;
+  background: #1e1f22 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  padding: 4px 6px 4px 12px !important;
+}
+
+.discord-invite-input-wrap svg {
+  color: #949ba4 !important;
+  stroke: #949ba4 !important;
+  flex-shrink: 0 !important;
+}
+
+.discord-invite-input {
+  flex: 1 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: #f2f3f5 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  font-family: monospace, sans-serif !important;
+  letter-spacing: 0.5px !important;
+  width: 100% !important;
+}
+
+.discord-invite-copy-btn {
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+  flex-shrink: 0 !important;
 }
 
