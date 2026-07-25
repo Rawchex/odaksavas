@@ -1855,11 +1855,6 @@ app.post('/api/parties/:id/voice-state', auth, (req, res) => {
     res.status(500).json({ error: 'Ses durumu güncellenemedi' });
   }
 });
-  } catch (err) {
-    console.error('[Server Voice] Error in /voice-state:', err);
-    res.status(500).json({ error: 'Voice state update failed', details: err.message });
-  }
-});
 
 app.post('/api/parties/:id/voice-signal', auth, (req, res) => {
   try {
