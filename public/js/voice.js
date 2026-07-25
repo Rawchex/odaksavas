@@ -993,15 +993,13 @@ async function handleUvFriendRequest() {
 
 async function handleUvSendMessage() {
   const username = window._modalActiveUser;
-  if (!username || window._modalFriendStatus !== 'friends') return;
+  if (!username) return;
   closeUserVoiceModal();
-  if (typeof navigateTo === 'function') {
-    navigateTo('messages');
-    // Give messages page a moment to render before opening the DM
-    setTimeout(() => {
-      if (typeof openDmWithUser === 'function') openDmWithUser(username);
-      else if (typeof selectConversation === 'function') selectConversation(username);
-    }, 200);
+  if (typeof showPage === 'function') showPage('messages');
+  if (typeof openDirectChat === 'function') {
+    openDirectChat(username);
+  } else if (typeof openDmWithUser === 'function') {
+    openDmWithUser(username);
   }
 }
 
