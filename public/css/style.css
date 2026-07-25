@@ -8401,86 +8401,12 @@ button:hover,
 }
 
 /* ═══════════════════════════════════════════════════════
-   TOOLTIP SYSTEM — data-tooltip attribute
+   TOOLTIP SYSTEM — Single JS Engine (#discordTooltip)
    ═══════════════════════════════════════════════════════ */
-[data-tooltip] {
-  position: relative;
-}
-[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  background: #18191c;
-  color: #e3e5e8;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: normal;
-  word-break: break-word;
-  max-width: 200px;
-  width: max-content;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  z-index: 999999;
-  /* Default: top */
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-}
-[data-tooltip]:hover::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-/* top */
-[data-tooltip-pos="top"]::after {
-  bottom: calc(100% + 8px);
-  top: auto;
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%) translateY(4px);
-}
-[data-tooltip-pos="top"]:hover::after {
-  transform: translateX(-50%) translateY(0);
-}
-/* bottom */
-[data-tooltip-pos="bottom"]::after {
-  top: calc(100% + 8px);
-  bottom: auto;
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%) translateY(-4px);
-}
-[data-tooltip-pos="bottom"]:hover::after {
-  transform: translateX(-50%) translateY(0);
-}
-/* left */
-[data-tooltip-pos="left"]::after {
-  right: calc(100% + 8px);
-  left: auto;
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%) translateX(4px);
-  max-width: 180px;
-}
-[data-tooltip-pos="left"]:hover::after {
-  transform: translateY(-50%) translateX(0);
-}
-/* right */
-[data-tooltip-pos="right"]::after {
-  left: calc(100% + 8px);
-  right: auto;
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%) translateX(-4px);
-  max-width: 160px;
-}
-[data-tooltip-pos="right"]:hover::after {
-  transform: translateY(-50%) translateX(0);
+[data-tooltip]::after,
+[data-tooltip]::before {
+  display: none !important;
+  content: none !important;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -8563,12 +8489,12 @@ button:hover,
 
 /* Discord Glass Action Buttons (Düz arkaplansız / subtle hover) */
 .discord-action-btn {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: #dbdee1 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
   font-size: 13px !important;
-  font-weight: 600 !important;
-  padding: 10px 16px !important;
+  font-weight: 700 !important;
+  padding: 10px 18px !important;
   border-radius: 10px !important;
   cursor: pointer !important;
   display: inline-flex !important;
@@ -8576,10 +8502,16 @@ button:hover,
   justify-content: center !important;
   gap: 8px !important;
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.discord-action-btn svg {
+  stroke: currentColor !important;
+  flex-shrink: 0 !important;
 }
 .discord-action-btn:hover {
-  background: rgba(255, 255, 255, 0.09) !important;
-  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
   color: #ffffff !important;
   transform: translateY(-1px);
 }
@@ -8594,12 +8526,12 @@ button:hover,
   box-shadow: 0 4px 16px rgba(88, 101, 242, 0.4) !important;
 }
 .discord-action-btn.danger {
-  background: rgba(242, 63, 67, 0.1) !important;
-  border-color: rgba(242, 63, 67, 0.25) !important;
+  background: rgba(242, 63, 67, 0.15) !important;
+  border-color: rgba(242, 63, 67, 0.35) !important;
   color: #f23f43 !important;
 }
 .discord-action-btn.danger:hover {
-  background: rgba(242, 63, 67, 0.2) !important;
+  background: rgba(242, 63, 67, 0.3) !important;
   border-color: #f23f43 !important;
   color: #ffffff !important;
 }
