@@ -1805,33 +1805,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-  const statusText = document.getElementById('ssVideoStatus');
-  const video = document.getElementById('ssVideo');
-  if (video) {
-    if (!video._pipEventsInit) {
-      video._pipEventsInit = true;
-      video.addEventListener('enterpictureinpicture', () => {
-        const overlay = document.getElementById('screenShareOverlay');
-        if (overlay) overlay.style.display = 'none';
-      });
-      video.addEventListener('leavepictureinpicture', () => {
-        const overlay = document.getElementById('screenShareOverlay');
-        if (overlay) overlay.style.display = 'flex';
-      });
-    }
-
-    if (stream) {
-      if (statusText) statusText.style.display = 'none';
-      attachStreamToVideo(video, stream, isOwnStream);
-    } else if (statusText) {
-      statusText.style.display = 'block';
-      statusText.textContent = `🎥 @${sharerUsername} kullanıcısının yayınına bağlanılıyor...`;
-    }
-  }
-
-  window._ssCurrentSharer = sharerUsername;
-}
-
 window._ssAudioContext = null;
 window._ssGainNode = null;
 
