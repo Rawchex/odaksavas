@@ -1694,55 +1694,54 @@ function showScreenShareViewer(sharerUsername, stream, isOwnStream = false) {
       <div class="ss-toolbar" id="ssToolbar" title="Pencereyi sürüklemek için tıklayıp tutun">
         <div class="ss-toolbar-left">
           <div class="ss-sharer-badge" id="ssSharerBadge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
-              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
-            </svg>
-            <span id="ssSharerName"></span>
+            <span class="ss-live-dot" title="CANLI"></span>
+            <span id="ssSharerName" class="ss-sharer-name"></span>
           </div>
-          <span class="ss-quality-badge" id="ssQualityBadge">HD 60FPS</span>
-          <span class="ss-live-badge">CANLI</span>
+          <span class="ss-quality-badge" id="ssQualityBadge">HD</span>
         </div>
         <div class="ss-toolbar-right">
-          <button class="ss-tool-btn" id="ssSnapshotBtn" onclick="takeSSSnapshot()" data-tooltip="📸 Kare Yakala & İndir (Snapshot)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <button class="ss-tool-btn" id="ssSnapshotBtn" onclick="takeSSSnapshot()" data-tooltip="📸 Kare Yakala & İndir">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
               <circle cx="12" cy="13" r="4"/>
             </svg>
           </button>
           
-          <div class="ss-volume-control" style="display: flex; align-items: center; gap: 5px; background: #232436; padding: 2px 8px; border-radius: 6px; border: 1px solid #363852;" title="Yayın Ses Seviyesi & Gain Boost (%0 - %200)">
-            <button class="ss-tool-btn" id="ssVolumeBtn" onclick="toggleSSAudioMute()" data-tooltip="Ses Aç/Kapat" style="width:20px; height:20px; padding:0;">
-              <svg id="ssVolumeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <div class="ss-volume-container" style="position: relative;">
+            <button class="ss-tool-btn" id="ssVolumeBtn" onclick="toggleSSVolumePopover(event)" data-tooltip="Ses Seviyesi & Gain (%0 - %200)">
+              <svg id="ssVolumeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
               </svg>
             </button>
-            <input type="range" id="ssVolumeSlider" min="0" max="200" value="100" oninput="setSSVolume(this.value)" style="width: 60px; height: 4px; accent-color: #8b92ff; cursor: pointer;">
-            <span id="ssVolumeValue" style="color: #8b92ff; font-size: 10px; font-weight: 800; min-width: 30px;">100%</span>
+            <div id="ssVolumePopover" class="ss-volume-popover">
+              <input type="range" id="ssVolumeSlider" min="0" max="200" value="100" oninput="setSSVolume(this.value)" style="width: 80px; height: 4px; accent-color: #8b92ff; cursor: pointer;">
+              <span id="ssVolumeValue" style="color: #8b92ff; font-size: 11px; font-weight: 800; min-width: 32px; text-align: right;">100%</span>
+            </div>
           </div>
 
-          <button class="ss-tool-btn" id="ssMiniToggleBtn" onclick="toggleSSMiniMode()" data-tooltip="Küçük / Kayan Pencere Modu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <button class="ss-tool-btn" id="ssMiniToggleBtn" onclick="toggleSSMiniMode()" data-tooltip="Küçük / Kayan Pencere">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <rect x="3" y="3" width="18" height="18" rx="2"/><rect x="11" y="11" width="8" height="8" rx="1"/>
             </svg>
           </button>
-          <button class="ss-tool-btn" id="ssFitToggleBtn" onclick="toggleSSFitMode()" data-tooltip="Oran: Sığdır / Ekranı Kapla">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <button class="ss-tool-btn" id="ssFitToggleBtn" onclick="toggleSSFitMode()" data-tooltip="Sığdır / Kapla">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
             </svg>
           </button>
-          <button class="ss-tool-btn" id="ssPipToggleBtn" onclick="toggleSSPiP()" data-tooltip="Masaüstü Resim-içinde-Resim (PiP)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <button class="ss-tool-btn" id="ssPipToggleBtn" onclick="toggleSSPiP()" data-tooltip="Resim-içinde-Resim (PiP)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="9" width="8" height="6" rx="1" fill="currentColor"/>
             </svg>
           </button>
-          <button class="ss-tool-btn" id="ssFsToggleBtn" onclick="toggleSSFullscreen()" data-tooltip="Tam Ekran Modu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <button class="ss-tool-btn" id="ssFsToggleBtn" onclick="toggleSSFullscreen()" data-tooltip="Tam Ekran">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
             </svg>
           </button>
           <button class="ss-close-btn" onclick="closeScreenShareViewer()" data-tooltip="Yayını Kapat">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
@@ -1761,7 +1760,50 @@ function showScreenShareViewer(sharerUsername, stream, isOwnStream = false) {
   requestAnimationFrame(() => overlay.classList.add('open'));
 
   const sharerName = document.getElementById('ssSharerName');
-  if (sharerName) sharerName.textContent = isOwnStream ? 'Ekranınız (Siz)' : `@${sharerUsername} Yayını`;
+  if (sharerName) sharerName.textContent = isOwnStream ? 'Ekranınız' : `@${sharerUsername}`;
+
+  const statusText = document.getElementById('ssVideoStatus');
+  const video = document.getElementById('ssVideo');
+  if (video) {
+    if (!video._pipEventsInit) {
+      video._pipEventsInit = true;
+      video.addEventListener('enterpictureinpicture', () => {
+        const overlay = document.getElementById('screenShareOverlay');
+        if (overlay) overlay.style.display = 'none';
+      });
+      video.addEventListener('leavepictureinpicture', () => {
+        const overlay = document.getElementById('screenShareOverlay');
+        if (overlay) overlay.style.display = 'flex';
+      });
+    }
+
+    if (stream) {
+      if (statusText) statusText.style.display = 'none';
+      attachStreamToVideo(video, stream, isOwnStream);
+    } else if (statusText) {
+      statusText.style.display = 'block';
+      statusText.textContent = `🎥 @${sharerUsername} kullanıcısının yayınına bağlanılıyor...`;
+    }
+  }
+
+  window._ssCurrentSharer = sharerUsername;
+}
+
+function toggleSSVolumePopover(e) {
+  if (e) e.stopPropagation();
+  const popover = document.getElementById('ssVolumePopover');
+  if (!popover) return;
+  const isHidden = getComputedStyle(popover).display === 'none';
+  popover.style.display = isHidden ? 'flex' : 'none';
+}
+
+document.addEventListener('click', (e) => {
+  const popover = document.getElementById('ssVolumePopover');
+  const btn = document.getElementById('ssVolumeBtn');
+  if (popover && btn && !popover.contains(e.target) && !btn.contains(e.target)) {
+    popover.style.display = 'none';
+  }
+});
 
   const statusText = document.getElementById('ssVideoStatus');
   const video = document.getElementById('ssVideo');

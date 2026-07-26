@@ -10363,8 +10363,11 @@ a {
 .ss-toolbar-left {
   display: flex !important;
   align-items: center !important;
-  gap: 10px !important;
+  gap: 8px !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  min-width: 0 !important;
+  flex: 0 1 auto !important;
+  overflow: hidden !important;
 }
 
 .ss-sharer-badge {
@@ -10374,45 +10377,81 @@ a {
   color: #e2e4f0 !important;
   font-size: 12.5px !important;
   font-weight: 600 !important;
+  min-width: 0 !important;
+}
+
+.ss-sharer-name {
+  max-width: 120px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.ss-live-dot {
+  width: 8px !important;
+  height: 8px !important;
+  background: #ef4444 !important;
+  border-radius: 50% !important;
+  display: inline-block !important;
+  box-shadow: 0 0 8px #ef4444 !important;
+  animation: ssPulse 1.5s infinite ease-in-out !important;
+  flex-shrink: 0 !important;
+}
+
+@keyframes ssPulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
 }
 
 .ss-quality-badge {
   background: #252738 !important;
   color: #8b92ff !important;
-  font-size: 10px !important;
+  font-size: 9.5px !important;
   font-weight: 700 !important;
-  padding: 2px 6px !important;
+  padding: 1px 5px !important;
   border-radius: 4px !important;
   border: 1px solid #363852 !important;
   letter-spacing: 0.5px !important;
+  flex-shrink: 0 !important;
 }
 
-.ss-live-badge {
-  display: inline-flex !important;
+.ss-volume-popover {
+  display: none;
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  right: 0 !important;
+  background: #181926 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 8px !important;
+  padding: 8px 10px !important;
+  z-index: 9999999 !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8) !important;
   align-items: center !important;
-  gap: 5px !important;
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #ef4444 !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  padding: 2px 6px !important;
-  border-radius: 4px !important;
-  border: 1px solid rgba(239, 68, 68, 0.3) !important;
-  letter-spacing: 0.5px !important;
-}
-
-.ss-live-badge::before {
-  content: "" !important;
-  width: 6px !important;
-  height: 6px !important;
-  background: #ef4444 !important;
-  border-radius: 50% !important;
+  gap: 8px !important;
 }
 
 .ss-toolbar-right {
   display: flex !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 3px !important;
+  flex-shrink: 0 !important;
+}
+
+@media (max-width: 600px) {
+  .ss-sharer-name {
+    max-width: 65px !important;
+  }
+  .ss-quality-badge {
+    display: none !important;
+  }
+}
+
+.ss-overlay.mini-mode .ss-sharer-name {
+  max-width: 75px !important;
+}
+.ss-overlay.mini-mode .ss-quality-badge {
+  display: none !important;
 }
 
 .ss-tool-btn,
