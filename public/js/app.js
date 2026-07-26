@@ -508,27 +508,29 @@ async function requestPushPermission() {
 }
 
 async function registerServiceWorkerAndSubscribe() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const registration = await navigator.serviceWorker.register('/service-worker.js');
+    if (!registration || !registration.pushManager) return;
     const vapidRes = await fetch('/api/notifications/vapidPublicKey');
+    if (!vapidRes.ok) return;
     const vapidPublicKey = await vapidRes.text();
     
-    let subscription = await registration.pushManager.getSubscription();
+    let subscription = await registration.pushManager.getSubscription().catch(() => null);
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-      });
+      }).catch(() => null);
     }
+    if (!subscription) return;
 
     await fetch('/api/notifications/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(subscription)
-    });
-  } catch (err) {
-    console.warn('Push registration status:', err.message || err);
-  }
+    }).catch(() => {});
+  } catch (err) {}
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -614,58 +616,171 @@ function showPage(name) {
 // ============================================================
 // LEADERBOARD
 // ============================================================
-async function loadLeaderboard() {
-  const [lbRes] = await Promise.all([fetch('/api/leaderboard')]);
-  const users = await lbRes.json();
+window._lbUsersCache = [];
 
-  const myIdx = users.findIndex(u => u.username === currentUser.username);
+async function loadLeaderboard() {
+  const lbRes = await fetch('/api/leaderboard');
+  if (!lbRes.ok) return;
+  const users = await lbRes.json();
+  window._lbUsersCache = users || [];
+
+  const myIdx = users.findIndex(u => u.username === currentUser?.username);
   const myRank = myIdx + 1;
 
-  // Hero card
+  // Personal Rank Status Card (Matching site card style)
   const hero = document.getElementById('myRankHero');
   if (myRank > 0) {
     const me = users[myIdx];
     hero.innerHTML = `
-      <div class="my-rank-hero">
-        <div class="my-rank-num">#${myRank}</div>
-        <div class="my-rank-info">
-          <div class="my-rank-label">Senin Sıran</div>
-          <div class="my-rank-name">${esc(me.username)}</div>
-          <div style="font-size:12px;color:var(--text-3);font-weight:500;margin-top:4px">${fmtTime(me.total_focus_time)} odak · Seviye ${me.level}</div>
+      <div style="margin: 16px 16px 12px; padding: 16px; background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius); display: flex; align-items: center; justify-content: space-between;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          ${renderAvatar(me, 'avatar avatar-md')}
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:15px; font-weight:700; color:var(--text);">@${esc(me.username)}</span>
+              <span style="font-size:10px; font-weight:700; padding:2px 6px; background:rgba(255,255,255,0.1); color:var(--text-2); border-radius:4px;">SEN</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-2); margin-top:2px;">
+              Seviye ${me.level || 1} · Toplam Odak: <strong style="color:var(--text);">${fmtTime(me.total_focus_time)}</strong>
+            </div>
+          </div>
         </div>
-      </div>`;
+        <div style="text-align:right;">
+          <div style="font-size:10px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:0.5px;">SIRANIZ</div>
+          <div style="font-size:20px; font-weight:800; color:var(--text);">#${myRank}</div>
+        </div>
+      </div>
+    `;
   } else {
     hero.innerHTML = '';
   }
 
   const list = document.getElementById('leaderboardList');
   if (!users.length) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-title">Henüz kimse yok</div></div>';
+    list.innerHTML = '<div class="empty-state" style="padding:40px; text-align:center; color:var(--text-2);"><div class="empty-title">Henüz sıralamada kimse yok</div></div>';
     return;
   }
 
-  list.innerHTML = users.map((u, i) => {
-    const isMe = u.username === currentUser.username;
-    const rank = i + 1;
-    let rankClass = '';
-    if (rank === 1) rankClass = 'top1';
-    else if (rank === 2) rankClass = 'top2';
-    else if (rank === 3) rankClass = 'top3';
+  // Top 3 Cards (If users >= 3)
+  let podiumHtml = '';
+  const hasPodium = users.length >= 3;
+  if (hasPodium) {
+    const p1 = users[0];
+    const p2 = users[1];
+    const p3 = users[2];
+
+    podiumHtml = `
+      <div style="display:flex; align-items:stretch; gap:10px; margin: 12px 16px 16px;">
+        
+        <!-- #2 -->
+        <div onclick="openUserModal('${esc(p2.username)}')" style="flex:1; display:flex; flex-direction:column; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 10px; cursor:pointer; position:relative; box-sizing:border-box;">
+          <div style="position:absolute; top:10px; left:12px; font-size:11px; font-weight:800; color:var(--text-2);">#2</div>
+          <div style="margin-top:6px;">
+            ${renderAvatar(p2, 'avatar avatar-md')}
+          </div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-top:8px; text-align:center; overflow:hidden; text-overflow:ellipsis; width:100%; white-space:nowrap;">@${esc(p2.username)}</div>
+          <div style="font-size:11px; color:var(--text-2); margin-top:2px;">Seviye ${p2.level || 1}</div>
+          <div style="font-size:12px; color:var(--text); margin-top:8px; font-weight:700;">${fmtTime(p2.total_focus_time)}</div>
+        </div>
+
+        <!-- #1 -->
+        <div onclick="openUserModal('${esc(p1.username)}')" style="flex:1.05; display:flex; flex-direction:column; align-items:center; background:var(--card2); border:1px solid var(--border); border-radius:var(--radius); padding:18px 12px; cursor:pointer; position:relative; box-sizing:border-box;">
+          <div style="position:absolute; top:10px; left:12px; font-size:11px; font-weight:800; color:var(--text);">#1</div>
+          <div style="margin-top:6px;">
+            ${renderAvatar(p1, 'avatar avatar-lg')}
+          </div>
+          <div style="font-size:14px; font-weight:800; color:var(--text); margin-top:8px; text-align:center; overflow:hidden; text-overflow:ellipsis; width:100%; white-space:nowrap;">@${esc(p1.username)}</div>
+          <div style="font-size:11px; color:var(--text-2); margin-top:2px;">Seviye ${p1.level || 1}</div>
+          <div style="font-size:13px; color:var(--text); margin-top:8px; font-weight:800;">${fmtTime(p1.total_focus_time)}</div>
+        </div>
+
+        <!-- #3 -->
+        <div onclick="openUserModal('${esc(p3.username)}')" style="flex:1; display:flex; flex-direction:column; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 10px; cursor:pointer; position:relative; box-sizing:border-box;">
+          <div style="position:absolute; top:10px; left:12px; font-size:11px; font-weight:800; color:var(--text-2);">#3</div>
+          <div style="margin-top:6px;">
+            ${renderAvatar(p3, 'avatar avatar-md')}
+          </div>
+          <div style="font-size:13px; font-weight:700; color:var(--text); margin-top:8px; text-align:center; overflow:hidden; text-overflow:ellipsis; width:100%; white-space:nowrap;">@${esc(p3.username)}</div>
+          <div style="font-size:11px; color:var(--text-2); margin-top:2px;">Seviye ${p3.level || 1}</div>
+          <div style="font-size:12px; color:var(--text); margin-top:8px; font-weight:700;">${fmtTime(p3.total_focus_time)}</div>
+        </div>
+
+      </div>
+    `;
+  }
+
+  // Live Desktop Search Bar (Matching site input style)
+  const searchBarHtml = `
+    <div style="margin: 0 16px 12px; position: relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" stroke-width="2" width="16" height="16" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="lbSearchInput" class="mono-input" placeholder="Kullanıcı ara..." oninput="filterLeaderboardList(this.value)" style="padding-left: 38px !important; background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; height: 40px !important; font-size: 13px !important; color: var(--text) !important; width: 100% !important; box-sizing: border-box !important;">
+    </div>
+  `;
+
+  // Start table list from #4 if top 3 podium exists
+  const tableUsers = hasPodium ? users.slice(3) : users;
+
+  const listRowsContainerHtml = `
+    <div style="margin: 0 16px 20px; display:flex; flex-direction:column; gap:8px;">
+      <div id="lbRowsContainer" style="display:flex; flex-direction:column; gap:6px;">
+        ${renderLeaderboardRows(tableUsers)}
+      </div>
+    </div>
+  `;
+
+  list.innerHTML = podiumHtml + searchBarHtml + listRowsContainerHtml;
+}
+
+function renderLeaderboardRows(usersList) {
+  if (!usersList || !usersList.length) {
+    return '<div style="text-align:center; padding:24px; color:var(--text-2); font-size:12px; font-weight:600;">KULLANICI BULUNAMADI</div>';
+  }
+
+  return usersList.map((u, i) => {
+    const originalRank = (window._lbUsersCache || []).findIndex(orig => orig.username === u.username) + 1 || (i + 1);
+    const isMe = u.username === currentUser?.username;
 
     return `
-      <div class="user-rank-card ${isMe ? 'is-me' : ''}" onclick="openUserModal('${esc(u.username)}')">
-        <div class="rank-num ${rankClass}">${rank === 1 ? '①' : rank === 2 ? '②' : rank === 3 ? '③' : rank}</div>
-        ${renderAvatar(u, 'avatar avatar-sm')}
-        <div class="rank-user-info">
-          <div class="rank-username">
-            ${esc(u.username)}
-            ${isMe ? '<span class="me-tag">SEN</span>' : ''}
+      <div class="user-rank-card ${isMe ? 'is-me' : ''}" onclick="openUserModal('${esc(u.username)}')" style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:var(--card); border:1px solid ${isMe ? 'rgba(255,255,255,0.25)' : 'var(--border)'}; border-radius:var(--radius); cursor:pointer; transition:all 0.15s ease;">
+        <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+          <div style="font-size:12px; font-weight:800; width:24px; color:var(--text-2); text-align:center;">
+            #${originalRank}
           </div>
-          <div class="rank-sub">Seviye ${u.level}</div>
+          ${renderAvatar(u, 'avatar avatar-sm')}
+          <div style="min-width:0;">
+            <div style="font-size:13px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px;">
+              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@${esc(u.username)}</span>
+              ${isMe ? '<span style="font-size:9px; font-weight:700; padding:1px 5px; background:rgba(255,255,255,0.15); color:var(--text); border-radius:4px; flex-shrink:0;">SEN</span>' : ''}
+            </div>
+            <div style="font-size:11px; color:var(--text-2); margin-top:2px;">Seviye ${u.level || 1}</div>
+          </div>
         </div>
-        <div class="rank-time">${fmtTime(u.total_focus_time)}</div>
-      </div>`;
+        <div style="font-size:13px; font-weight:700; color:var(--text); flex-shrink:0;">
+          ${fmtTime(u.total_focus_time)}
+        </div>
+      </div>
+    `;
   }).join('');
+}
+
+function filterLeaderboardList(query) {
+  const q = (query || '').toLowerCase().trim();
+  const listContainer = document.getElementById('lbRowsContainer');
+  if (!listContainer) return;
+
+  const allUsers = window._lbUsersCache || [];
+  const hasPodium = allUsers.length >= 3;
+
+  let filtered = allUsers;
+  if (q) {
+    filtered = allUsers.filter(u => u.username.toLowerCase().includes(q));
+  } else if (hasPodium) {
+    filtered = allUsers.slice(3);
+  }
+
+  listContainer.innerHTML = renderLeaderboardRows(filtered);
 }
 
 // ============================================================
@@ -855,7 +970,9 @@ function openUserModal(username) { openUserPage(username); }
 
 function closeUserPage() {
   const page = document.getElementById('userProfilePage');
-  page.style.display = 'none';
+  if (page) page.style.display = 'none';
+  const headerActionsEl = document.getElementById('userPageHeaderActions');
+  if (headerActionsEl) headerActionsEl.innerHTML = '';
 }
 
 function renderUserPage(user) {
@@ -868,27 +985,66 @@ function renderUserPage(user) {
   _profileUserPosts = posts;
   _profileUserReposts = reposts;
 
-  // Friendship action
+  // Friendship action buttons for topbar top-right
   let actionBtnHtml = '';
   if (!isMe) {
     if (!user.friendship) {
-      actionBtnHtml = `<button class="mono-btn-primary" style="flex:1" onclick="sendFriendReq('${esc(user.username)}')">Arkadaş Ekle</button>`;
+      actionBtnHtml = `
+        <button class="profile-action-icon-btn active" onclick="sendFriendReq('${esc(user.username)}')" data-tooltip="Arkadaş Ekle" data-tooltip-pos="bottom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/>
+          </svg>
+        </button>
+        <button class="profile-action-icon-btn" onclick="closeUserPage();showPage('messages');openDirectChat('${esc(user.username)}')" data-tooltip="Mesaj Gönder" data-tooltip-pos="bottom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>`;
     } else if (user.friendship.status === 'accepted') {
       actionBtnHtml = `
-        <button class="mono-btn-secondary" style="flex:1;cursor:default" disabled>✓ Arkadaşsınız</button>
-        <button class="mono-btn-primary" style="flex:1" onclick="closeUserPage();showPage('messages');openDirectChat('${esc(user.username)}')">Mesaj</button>
-        <button class="mono-btn-danger" style="width:auto;padding:0 14px" onclick="removeFriend(${user.friendship.id},'${esc(user.username)}')">Çıkar</button>`;
+        <button class="profile-action-icon-btn active" onclick="closeUserPage();showPage('messages');openDirectChat('${esc(user.username)}')" data-tooltip="Mesaj Gönder" data-tooltip-pos="bottom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
+        <button class="profile-action-icon-btn danger" onclick="removeFriend(${user.friendship.id},'${esc(user.username)}')" data-tooltip="Arkadaşlıktan Çıkar" data-tooltip-pos="bottom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="18" y1="11" x2="23" y2="11"/>
+          </svg>
+        </button>`;
     } else if (user.friendship.status === 'pending') {
       if (user.friendship.sender_id === currentUser.id) {
         actionBtnHtml = `
-          <button class="mono-btn-secondary" style="flex:1;cursor:default" disabled>İstek Gönderildi</button>
-          <button class="mono-btn-danger" style="width:auto;padding:0 14px" onclick="removeFriend(${user.friendship.id},'${esc(user.username)}')">İptal</button>`;
+          <button class="profile-action-icon-btn warning" disabled data-tooltip="İstek Gönderildi" data-tooltip-pos="bottom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </button>
+          <button class="profile-action-icon-btn danger" onclick="removeFriend(${user.friendship.id},'${esc(user.username)}')" data-tooltip="İsteği İptal Et" data-tooltip-pos="bottom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>`;
       } else {
         actionBtnHtml = `
-          <button class="mono-btn-primary" style="flex:1" onclick="acceptFriendReqFromModal(${user.friendship.id},'${esc(user.username)}')">Kabul Et</button>
-          <button class="mono-btn-danger" style="flex:1" onclick="removeFriend(${user.friendship.id},'${esc(user.username)}')">Reddet</button>`;
+          <button class="profile-action-icon-btn active" onclick="acceptFriendReqFromModal(${user.friendship.id},'${esc(user.username)}')" data-tooltip="İsteği Kabul Et" data-tooltip-pos="bottom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </button>
+          <button class="profile-action-icon-btn danger" onclick="removeFriend(${user.friendship.id},'${esc(user.username)}')" data-tooltip="İsteği Reddet" data-tooltip-pos="bottom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>`;
       }
     }
+  }
+
+  // Populate topbar top-right actions container
+  const headerActionsEl = document.getElementById('userPageHeaderActions');
+  if (headerActionsEl) {
+    headerActionsEl.innerHTML = actionBtnHtml;
   }
 
   const isOnline = user.last_seen ? (new Date() - new Date(user.last_seen) < 120000) : false;
@@ -916,35 +1072,27 @@ function renderUserPage(user) {
       : `<div class="profile-post-grid">${reposts.map(p => renderPostGridItem(p, false, true)).join('')}</div>`;
   }
 
-  const statusColors = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af' };
-  const userStatusColor = statusColors[user.status || 'online'] || statusColors.online;
+  const titleEl = document.getElementById('userPageTitle');
+  if (titleEl) titleEl.textContent = `@${user.username}`;
 
   content.innerHTML = `
     <div class="profile-insta-header">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="profile-insta-username" style="font-size:18px;">${esc(user.username)}</span>
-          <span class="lvl-badge">LVL ${user.level}</span>
-          <div class="status-dot-indicator" style="background:${userStatusColor}; width:12px; height:12px; border-radius:50%;"></div>
-        </div>
-      </div>
-
       <div class="profile-insta-top">
         <div class="profile-insta-avatar-col">
           ${renderAvatar(user, 'avatar avatar-xl')}
         </div>
         <div class="profile-insta-stats-col">
-          <div onclick="openFriendListModal('${esc(user.username)}')" style="cursor:pointer">
+          <div class="profile-stat-box" onclick="openUserPage('${esc(user.username)}','posts')" data-tooltip="Gönderiler">
             <div class="profile-insta-stat-val">${user.post_count || 0}</div>
             <div class="profile-insta-stat-lbl">Gönderi</div>
           </div>
-          <div onclick="openFriendListModal('${esc(user.username)}')" style="cursor:pointer">
-            <div class="profile-insta-stat-val">${user.friend_count || 0}</div>
+          <div class="profile-stat-box" onclick="openFriendListModal('${esc(user.username)}', 'followers')" data-tooltip="Takipçileri Gör">
+            <div class="profile-insta-stat-val">${user.follower_count || user.friend_count || 0}</div>
             <div class="profile-insta-stat-lbl">Takipçi</div>
           </div>
-          <div>
-            <div class="profile-insta-stat-val">${fmtTime(user.total_focus_time||0)}</div>
-            <div class="profile-insta-stat-lbl">Odak</div>
+          <div class="profile-stat-box" onclick="openFriendListModal('${esc(user.username)}', 'following')" data-tooltip="Takip Edilenleri Gör">
+            <div class="profile-insta-stat-val">${user.following_count || user.friend_count || 0}</div>
+            <div class="profile-insta-stat-lbl">Takip</div>
           </div>
         </div>
       </div>
@@ -959,15 +1107,14 @@ function renderUserPage(user) {
             <span>⏱️ ${fmtTime(user.total_focus_time||0)}</span>
           </div>` : ''}
         ${user.cv ? `<div class="up-cv">${esc(user.cv)}</div>` : ''}
-        <div class="profile-xp-row">
-          <div class="xp-bar-wrap" style="height:2px;background:#1a1a1a;flex:1">
-            <div class="xp-bar-fill" style="width:${progress.percentage}%;background:#fff;height:100%"></div>
+        <div class="profile-xp-row" style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+          <span class="lvl-badge">LVL ${user.level}</span>
+          <div class="xp-bar-wrap" style="height:4px;background:rgba(255,255,255,0.08);flex:1;border-radius:99px;overflow:hidden;">
+            <div class="xp-bar-fill" style="width:${progress.percentage}%;background:linear-gradient(90deg, #a855f7, #ec4899);height:100%;border-radius:99px;"></div>
           </div>
-          <span class="profile-xp-label">${progress.xpInLevel}/${progress.xpNeededForNext} XP</span>
+          <span class="profile-xp-label" style="font-size:11px; font-weight:700; color:var(--text-3);">${progress.xpInLevel}/${progress.xpNeededForNext} XP</span>
         </div>
       </div>
-
-      ${actionBtnHtml ? `<div class="profile-insta-action-btn-row"><div style="display:flex;gap:8px">${actionBtnHtml}</div></div>` : ''}
     </div>
 
     ${user.is_locked ? `
@@ -977,15 +1124,18 @@ function renderUserPage(user) {
         <div class="profile-locked-desc">Gönderi ve istatistiklerini görmek için arkadaş olun.</div>
       </div>` : `
       <div class="profile-insta-tabs">
-        <div class="profile-insta-tab ${_userPageActiveTab==='posts'?'active':''}" onclick="openUserPage('${esc(user.username)}','posts')">
-          <svg viewBox="0 0 24 24" fill="${_userPageActiveTab==='posts'?'#fff':'#555'}" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        </div>
-        <div class="profile-insta-tab ${_userPageActiveTab==='sessions'?'active':''}" onclick="openUserPage('${esc(user.username)}','sessions')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="${_userPageActiveTab==='sessions'?'#fff':'#555'}" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        </div>
-        <div class="profile-insta-tab ${_userPageActiveTab==='reposts'?'active':''}" onclick="openUserPage('${esc(user.username)}','reposts')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="${_userPageActiveTab==='reposts'?'#fff':'#555'}" stroke-width="2" width="18" height="18"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-        </div>
+        <button class="profile-insta-tab ${_userPageActiveTab==='posts'?'active':''}" onclick="openUserPage('${esc(user.username)}','posts')" data-tooltip="Gönderiler" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="${_userPageActiveTab==='posts'?'#ffffff':'none'}" stroke="${_userPageActiveTab==='posts'?'#ffffff':'#888888'}" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span>GÖNDERİLER</span>
+        </button>
+        <button class="profile-insta-tab ${_userPageActiveTab==='sessions'?'active':''}" onclick="openUserPage('${esc(user.username)}','sessions')" data-tooltip="Odak Oturumları" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="none" stroke="${_userPageActiveTab==='sessions'?'#ffffff':'#888888'}" stroke-width="2.2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span>OTURUMLAR</span>
+        </button>
+        <button class="profile-insta-tab ${_userPageActiveTab==='reposts'?'active':''}" onclick="openUserPage('${esc(user.username)}','reposts')" data-tooltip="Repostlar" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="none" stroke="${_userPageActiveTab==='reposts'?'#ffffff':'#888888'}" stroke-width="2.2" width="18" height="18"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          <span>REPOSTLAR</span>
+        </button>
       </div>
       <div id="userPageTabContent">${tabHtml}</div>
     `}
@@ -995,33 +1145,79 @@ function renderUserPage(user) {
 // ============================================================
 // FRIEND LIST MODAL
 // ============================================================
-async function openFriendListModal(username) {
+let _flModalAllUsers = [];
+
+async function openFriendListModal(username, type = 'followers') {
   const modal = document.getElementById('friendListModal');
   const title = document.getElementById('friendListTitle');
   const content = document.getElementById('friendListContent');
-  title.textContent = `${username} — Arkadaşlar`;
-  content.innerHTML = '<div class="loading-row">YÜKLENİYOR...</div>';
+  if (!modal || !title || !content) return;
+
+  let displayTitle = 'TAKİPÇİLER';
+  if (type === 'following') displayTitle = 'TAKİP EDİLENLER';
+  else if (type === 'friends') displayTitle = 'ARKADAŞLAR';
+
+  title.textContent = `${displayTitle} (@${username})`;
+  content.innerHTML = `
+    <div style="padding:12px 16px 8px 16px;">
+      <div class="share-search-box" style="margin:0 0 12px 0;">
+        <input type="text" id="flSearchInput" autocomplete="off" placeholder="Kullanıcı ara..." oninput="filterFriendListModal(this.value)">
+        <svg class="share-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+          <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </div>
+    </div>
+    <div id="flUserItems" style="max-height: 380px; overflow-y: auto; padding: 0 16px;">
+      <div class="loading-row">YÜKLENİYOR...</div>
+    </div>
+  `;
   modal.classList.add('open');
 
   try {
     const res = await fetch(`/api/users/${username}/friends`);
     const friends = await res.json();
-    if (!friends.length) {
-      content.innerHTML = '<div class="profile-empty-tab">HENÜz ARKADAŞ YOK</div>';
-      return;
-    }
-    content.innerHTML = friends.map(f => `
-      <div class="fl-row" onclick="closeFriendListModal();openUserPage('${esc(f.username)}')">
-        ${renderAvatar(f, 'avatar avatar-sm')}
+    _flModalAllUsers = Array.isArray(friends) ? friends : [];
+    renderFriendListItems(_flModalAllUsers);
+  } catch {
+    const container = document.getElementById('flUserItems');
+    if (container) container.innerHTML = '<div class="profile-empty-tab">Liste yüklenemedi</div>';
+  }
+}
+
+function filterFriendListModal(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) {
+    renderFriendListItems(_flModalAllUsers);
+    return;
+  }
+  const filtered = _flModalAllUsers.filter(u => 
+    (u.username && u.username.toLowerCase().includes(q)) || 
+    (u.display_name && u.display_name.toLowerCase().includes(q))
+  );
+  renderFriendListItems(filtered);
+}
+
+function renderFriendListItems(users) {
+  const container = document.getElementById('flUserItems');
+  if (!container) return;
+
+  if (!users || !users.length) {
+    container.innerHTML = '<div class="profile-empty-tab" style="padding:32px 0;">KULLANICI BULUNAMADI</div>';
+    return;
+  }
+
+  container.innerHTML = users.map(f => `
+    <div class="fl-row" onclick="closeFriendListModal();openUserPage('${esc(f.username)}')" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; margin-bottom:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; cursor:pointer; transition:all 0.15s ease;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        ${renderAvatar(f, 'avatar avatar-md')}
         <div class="fl-info">
-          <div class="fl-name">${esc(f.username)}</div>
-          <div class="fl-sub">LVL ${f.level} · ${fmtTime(f.total_focus_time||0)}</div>
+          <div class="fl-name" style="font-weight:800; color:#fff; font-size:13.5px;">${esc(f.display_name || f.username)}</div>
+          <div class="fl-sub" style="font-size:11px; color:var(--text-3); font-weight:600;">@${esc(f.username)} &bull; LVL ${f.level || 1}</div>
         </div>
       </div>
-    `).join('');
-  } catch {
-    content.innerHTML = '<div class="profile-empty-tab">Yüklenemedi</div>';
-  }
+      <button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation();closeFriendListModal();openUserPage('${esc(f.username)}')">GÖR</button>
+    </div>
+  `).join('');
 }
 
 function closeFriendListModal() {
@@ -1076,7 +1272,7 @@ function updateTimerStats() {
 
   if (typeof getLevelProgress === 'function') {
     const progress = getLevelProgress(currentUser.xp || 0);
-    document.getElementById('statLevel').textContent = progress.level;
+    document.getElementById('statLevel').textContent = 'LVL ' + progress.level;
     document.getElementById('xpBarFill').style.width = progress.percentage + '%';
     document.getElementById('xpText').textContent = `${progress.xpInLevel} / ${progress.xpNeededForNext} XP`;
   }
@@ -1355,10 +1551,13 @@ function updatePresenceUI() {
   let label = 'Çevrimiçi';
   
   if (status === 'away') { color = '#fbbf24'; label = 'Uzakta'; }
-  else if (status === 'dnd') { color = '#ef4444'; label = 'R. Etmeyin'; }
+  else if (status === 'dnd') { color = '#ef4444'; label = 'R. Etme'; }
   else if (status === 'invisible') { color = '#9ca3af'; label = 'Görünmez'; }
   
+  dot.setAttribute('data-status', status);
   dot.style.background = color;
+  dot.style.boxShadow = `0 0 8px ${color}`;
+  dot.style.color = color;
   text.textContent = label.toUpperCase();
 
   if (typeof _spmMarkActive === 'function') _spmMarkActive(status);
@@ -1498,4 +1697,48 @@ function updatePresenceUI() {
 
   document.addEventListener('click', () => hideTooltip());
   window.addEventListener('scroll', () => hideTooltip(), { passive: true });
+})();
+
+// ─── AUTOMATIC AFK / IDLE DETECTION ENGINE ───────────────────────
+(function initAutoAfkEngine() {
+  let lastActivity = Date.now();
+  let isAutoAway = false;
+  const IDLE_TIMEOUT_MS = 2.5 * 60 * 1000; // 2.5 minutes of inactivity
+
+  function onUserActivity() {
+    lastActivity = Date.now();
+    if (isAutoAway && currentUser) {
+      isAutoAway = false;
+      if (typeof setUserStatus === 'function') {
+        setUserStatus('online', true);
+      }
+    }
+  }
+
+  const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'];
+  events.forEach(evt => {
+    window.addEventListener(evt, onUserActivity, { passive: true });
+  });
+
+  setInterval(() => {
+    if (!currentUser) return;
+    const idleDuration = Date.now() - lastActivity;
+    // Auto-away if idle for > 2.5 minutes and currently online
+    if (idleDuration >= IDLE_TIMEOUT_MS && (!currentUser.status || currentUser.status === 'online') && !isAutoAway) {
+      isAutoAway = true;
+      if (typeof setUserStatus === 'function') {
+        setUserStatus('away', true);
+      }
+    }
+  }, 10000); // Check every 10 seconds
+})();
+
+// ─── MULTI-DEVICE VOICE HANDOVER BACKGROUND POLLER ────────────────
+(function initMultiDeviceHandoverPoller() {
+  setInterval(() => {
+    if (!currentUser) return;
+    if (typeof checkAndRenderHandoverButton === 'function') {
+      checkAndRenderHandoverButton(window._currentPartyId);
+    }
+  }, 4000);
 })();

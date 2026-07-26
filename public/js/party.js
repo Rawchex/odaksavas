@@ -92,6 +92,7 @@ async function refreshPartyModal() {
       </button>
     </div>
     <div style="flex:1; overflow-y:auto; padding:24px; box-sizing:border-box;">
+      <div id="voiceHandoverBanner" class="voice-handover-banner" style="display:none;"></div>
   `;
 
   try {
@@ -107,6 +108,11 @@ async function refreshPartyModal() {
   html += `</div>`; // Close scrollable body
 
   content.innerHTML = html;
+
+  // Trigger multi-device voice handover check
+  if (typeof checkAndRenderHandoverButton === 'function') {
+    checkAndRenderHandoverButton(window._currentPartyId);
+  }
 
   if (_currentPartyTab === 'lobby') {
     let activeParty = _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id);

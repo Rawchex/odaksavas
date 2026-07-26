@@ -100,7 +100,7 @@ function renderPostCard(p) {
   const hasImage = !!p.image;
 
   return `
-    <article class="post-card ${hasImage ? 'has-image' : 'no-image'}" data-post-id="${p.id}" onclick="if(!event.target.closest('.post-card-actions, .post-card-header, button, a, img')) openProfilePostDetail(${p.id}, false, false)">
+    <article class="post-card ${hasImage ? 'has-image' : 'no-image'}" data-post-id="${p.id}" onclick="if(!event.target.closest('.post-card-actions, .post-card-header, button, a, img')) openPostModal(${p.id})">
       <!-- Header -->
       <div class="post-card-header">
         <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="event.stopPropagation(); openUserPage('${esc(p.username)}')">
@@ -711,7 +711,7 @@ function initCropperEvents() {
   viewport._hasEvents = true;
 }
 
-function openPostModal() {
+function openCreatePostModal() {
   document.getElementById('postModalOverlay').classList.add('open');
   const tx = document.getElementById('postTextarea');
   if (tx) {
@@ -735,11 +735,12 @@ function openPostModal() {
   updatePostModalState();
 }
 
-function closePostModal() {
+function closeCreatePostModal() {
   document.getElementById('postModalOverlay').classList.remove('open');
   document.getElementById('postTextarea').value = '';
   clearPostImage();
 }
+function closePostModal() { closeCreatePostModal(); }
 
 function onPostImageSelected(input) {
   if (!input.files[0]) return;
@@ -796,8 +797,10 @@ async function submitPost() {
   }
 
   const btn = document.getElementById('postSubmitBtn');
+  const originalSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+  
   btn.disabled = true;
-  btn.textContent = '...';
+  btn.innerHTML = '⏳';
 
   const formData = new FormData();
   formData.append('content', content);
@@ -813,7 +816,7 @@ async function submitPost() {
     } catch (e) {
       showToast('Görsel işlenemedi');
       btn.disabled = false;
-      btn.textContent = 'PAYLAŞ';
+      btn.innerHTML = originalSvg;
       return;
     }
   }
@@ -832,7 +835,7 @@ async function submitPost() {
   }
 
   btn.disabled = false;
-  btn.textContent = 'PAYLAŞ';
+  btn.innerHTML = originalSvg;
 }
 
 // ============================================================

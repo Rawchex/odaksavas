@@ -336,12 +336,12 @@ app.get('/users/:username/friends', authMiddleware, async (c) => {
   if (!user) return c.json({ error: 'Kullanıcı bulunamadı' }, 404);
 
   const { results } = await c.env.DB.prepare(`
-    SELECT u.id, u.username, u.profile_photo, u.level, u.total_focus_time
-    FROM friendships f
-    JOIN users u ON f.friend_id = u.id
-    WHERE f.user_id = ? AND f.status = 'accepted'
+    SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.total_focus_time, u.status
+    FROM users u
+    JOIN friendships f ON ((f.user_id = ? AND f.friend_id = u.id) OR (f.friend_id = ? AND f.user_id = u.id))
+    WHERE f.status = 'accepted' AND u.id != ?
     ORDER BY u.username ASC
-  `).bind(user.id).all();
+  `).bind(user.id, user.id, user.id).all();
   return c.json(results || []);
 });
 
@@ -610,7 +610,6 @@ app.get('/feed/trending', authMiddleware, async (c) => {
       ) as engagement
     FROM posts p
     JOIN users u ON p.user_id = u.id
-    WHERE datetime(p.created_at) > datetime('now', '-24 hours')
     ORDER BY engagement DESC, p.created_at DESC
     LIMIT 50
   `).bind(user.id).all();

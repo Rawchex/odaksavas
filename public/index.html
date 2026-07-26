@@ -13,7 +13,7 @@
   <title>BLUNK — Sosyal Odak &amp; Pomodoro Topluluğu</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
   <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
-  <link rel="stylesheet" href="/css/style.css?v=55.0.0">
+  <link rel="stylesheet" href="/css/style.css?v=69.0.0">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4259190146952385" crossorigin="anonymous"></script>
 </head>
 
@@ -54,7 +54,7 @@
         <div class="post-modal-author-wrap" id="postModalAuthor">
           <!-- Rendered dynamically -->
         </div>
-        <span class="post-modal-close" onclick="closePostModal()">✕</span>
+        <span class="post-modal-close" onclick="closeCreatePostModal()">✕</span>
       </div>
 
       <div style="position:relative; width:100%;">
@@ -97,19 +97,24 @@
         </div>
       </div>
 
-      <div class="post-modal-actions"
-        style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.06); padding-top:12px;">
-        <label class="post-image-label" for="postImageInput">
-          <svg viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <polyline points="21 15 16 10 5 21" />
+      <div class="post-modal-actions">
+        <div class="post-modal-tools">
+          <label class="post-image-label" for="postImageInput" data-tooltip="Fotoğraf Ekle" data-tooltip-pos="top" aria-label="Fotoğraf Ekle">
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="4" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </label>
+          <input type="file" id="postImageInput" accept="image/*" style="display:none"
+            onchange="onPostImageSelected(this)">
+        </div>
+        <button class="post-submit-btn" onclick="submitPost()" id="postSubmitBtn" disabled data-tooltip="Gönderi Paylaş" data-tooltip-pos="top" aria-label="Gönderi Paylaş">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
-          FOTOĞRAF
-        </label>
-        <input type="file" id="postImageInput" accept="image/*" style="display:none"
-          onchange="onPostImageSelected(this)">
-        <button class="post-submit-btn" onclick="submitPost()" id="postSubmitBtn" disabled>PAYLAŞ</button>
+        </button>
       </div>
     </div>
   </div>
@@ -126,30 +131,30 @@
   <!-- ══════════════════════════════════════════════════════ -->
   <!-- PARTY CHAT MODAL (fullscreen)                         -->
   <!-- ══════════════════════════════════════════════════════ -->
-  <div class="modal-overlay" id="partyChatModal">
+  <div class="modal-overlay" id="partyChatModal" style="z-index: 999999 !important;">
     <div class="party-chat-fullscreen">
       <div class="party-chat-header">
-        <button class="up-back-btn" onclick="togglePartyChatModal(false)">
+        <button class="up-back-btn" onclick="togglePartyChatModal(false)" data-tooltip="Kapat" data-tooltip-pos="bottom">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <span style="font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">Parti
-          Sohbeti</span>
+        <span class="party-chat-header-title">Parti Sohbeti</span>
         <div style="width:40px"></div>
       </div>
-      <div style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
-        <div id="partyChatMessages"
-          style="flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px;"></div>
-        <div style="padding:12px 20px; background:#000; border-top:1px solid var(--border-soft);">
-          <div
-            style="display:flex; border:1px solid var(--border-soft); border-radius:24px; background:#111; padding:4px 6px; align-items:center;">
-            <input type="text" id="partyChatInput" autocomplete="off" class="mono-input"
-              style="flex:1; border:none; height:40px; padding:0 16px; font-size:13px; background:transparent; color:#fff;"
+      <div class="party-chat-body">
+        <div id="partyChatMessages" class="party-chat-messages"></div>
+        <div class="party-chat-input-wrapper">
+          <div class="party-chat-input-pill">
+            <input type="text" id="partyChatInput" autocomplete="off" class="party-chat-input-field"
               placeholder="Partiye mesaj gönder..." onkeydown="if(event.key==='Enter')sendPartyChatMessage()">
-            <button class="mono-btn-primary"
-              style="height:36px; padding:0 18px; margin:0; border-radius:18px; font-size:11px; width:auto"
-              onclick="sendPartyChatMessage()">GÖNDER</button>
+            <button class="party-chat-send-btn" onclick="sendPartyChatMessage()" data-tooltip="Mesaj Gönder" data-tooltip-pos="top">
+              <span>GÖNDER</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -420,13 +425,18 @@
           </div>
         </div>
 
+        <div id="overlayVoiceHandoverBanner" class="voice-handover-banner" style="display:none; padding:10px 14px 0 14px;"></div>
         <div class="party-focus-members" id="partyFocusMembers"></div>
 
         <!-- Bottom Controls Bar inside Focus Room Panel -->
         <div class="party-focus-footer">
           <div class="party-control-bar">
-            <button id="voiceMicToggleBtn" class="party-ctrl-btn" onclick="setMicMuteState(!window._micMuted)" data-tooltip="Sustur" data-tooltip-pos="left"></button>
-            <button id="voiceDeafToggleBtn" class="party-ctrl-btn" onclick="setDeafState(!window._deafened)" data-tooltip="Sağırlaştır" data-tooltip-pos="left"></button>
+            <button id="voiceMicToggleBtn" class="party-ctrl-btn" onclick="setMicMuteState(!window._micMuted)" data-tooltip="Sustur" data-tooltip-pos="left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </button>
+            <button id="voiceDeafToggleBtn" class="party-ctrl-btn" onclick="setDeafState(!window._deafened)" data-tooltip="Sağırlaştır" data-tooltip-pos="left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1 2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 1 2 2h1a2 2 0 0 1 2-2v-3a2 2 0 0 1-2-2H3z"/></svg>
+            </button>
             <button id="voiceScreenShareBtn" class="party-ctrl-btn" onclick="toggleScreenShare()" data-tooltip="Ekran Paylaş" data-tooltip-pos="left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
@@ -459,26 +469,26 @@
         <div class="timer-main-stage">
           <!-- Level, Status & XP Header (Top of page) -->
           <div class="timer-top-meta" id="timerTopMeta">
-            <div class="timer-level-chip" data-tooltip="Seviye ve XP İlerlemen">
-              <div class="blunk-topbar-brand" style="margin-right:10px;">BLUNK</div>
-              <span id="statLevel">1</span>
+            <div class="timer-level-chip" data-tooltip="Seviye ve XP İlerlemen" data-tooltip-pos="bottom">
+              <div class="blunk-topbar-brand">BLUNK</div>
+              <span class="timer-lvl-badge" id="statLevel">LVL 1</span>
               <div class="timer-xp-rail">
                 <div class="timer-xp-fill" id="xpBarFill" style="width:0%"></div>
               </div>
               <span id="xpText" class="timer-xp-txt">0 XP</span>
             </div>
 
-            <!-- Status Chip Bar -->
-            <div class="timer-status-chip" id="timerStatusChip" onclick="openStatusSelector()" data-tooltip="Durumunu Değiştir">
-              <div class="status-chip-avatar" id="statusChipAvatar"></div>
-              <span class="status-chip-username" id="statusChipUsername"></span>
-              <span class="status-chip-text" id="statusText">ÇEVRİMİÇİ</span>
+            <!-- Dead-Center Status Chip Bar -->
+            <div class="timer-status-chip" id="timerStatusChip" onclick="openStatusSelector()" data-tooltip="Durumunu Değiştir" data-tooltip-pos="bottom">
               <div class="timer-status-dot" id="statusDot"></div>
+              <span class="status-chip-text" id="statusText">ÇEVRİMİÇİ</span>
+              <div class="status-chip-avatar" id="statusChipAvatar" style="display:none"></div>
+              <span class="status-chip-username" id="statusChipUsername" style="display:none"></span>
             </div>
 
-            <div class="timer-total-chip" data-tooltip="Toplam Odaklanma Süren">
+            <div class="timer-total-chip" data-tooltip="Toplam Odaklanma Süren" data-tooltip-pos="bottom">
               <span id="statTotal" class="timer-total-val">—</span>
-              <span class="timer-total-lbl">toplam odak</span>
+              <span class="timer-total-lbl">TOPLAM ODAK</span>
             </div>
           </div>
 
@@ -580,7 +590,7 @@
       <div class="page" id="feedPage">
         <!-- Sticky header + tabs -->
         <div class="topbar">
-          <span class="topbar-brand">ODAK SAVAŞI</span>
+          <span class="blunk-topbar-brand">BLUNK</span>
           <div style="display:flex; align-items:center; gap:10px;">
             <!-- Search Toggle Button -->
             <button id="btnToggleFeedSearch" onclick="toggleFeedSearch()"
@@ -591,7 +601,7 @@
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </button>
-            <button onclick="openPostModal()"
+            <button onclick="openCreatePostModal()"
               style="background:none; border:1px solid #333; color:#fff; font-size:10px; font-weight:800; letter-spacing:1.5px; padding:6px 12px; border-radius:14px; text-transform:uppercase; cursor:pointer; transition:all 0.2s;">PAYLAŞ</button>
           </div>
         </div>
@@ -616,8 +626,15 @@
 
       <!-- ── LEADERBOARD PAGE ── -->
       <div class="page" id="leaderboardPage">
-        <div class="topbar">
-          <span class="topbar-title">Sıralama</span>
+        <div class="topbar" style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span class="blunk-topbar-brand">BLUNK</span>
+            <div style="height:14px; width:1px; background:rgba(255,255,255,0.15);"></div>
+            <span class="topbar-title" style="font-size:14px; font-weight:800; color:#fff; letter-spacing:0.5px;">Sıralama</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:10px; font-weight:800; padding:4px 10px; background:rgba(139,146,255,0.12); border:1px solid rgba(139,146,255,0.3); color:#8b92ff; border-radius:20px; text-transform:uppercase; letter-spacing:1px;">CANLI LİDERLİK</span>
+          </div>
         </div>
         <div id="myRankHero"></div>
         <div id="leaderboardList"></div>
@@ -688,9 +705,9 @@
       <div class="page" id="profilePage">
         <div class="topbar"
           style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;">
-          <span class="topbar-title">Profil</span>
+          <span class="topbar-title" id="myProfileHeaderTitle">PROFİL</span>
           <!-- Settings button in sticky topbar -->
-          <button class="topbar-settings-btn" onclick="openProfileSettings(); event.stopPropagation();" title="Ayarlar"
+          <button class="topbar-settings-btn" onclick="openProfileSettings(); event.stopPropagation();" data-tooltip="Profil Ayarları" data-tooltip-pos="bottom"
             style="background:none; border:none; color:#fff; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
               <circle cx="12" cy="12" r="1" />
@@ -705,14 +722,14 @@
 
       <!-- ── USER PROFILE PAGE (full-screen, Instagram-style) ── -->
       <div class="page" id="userProfilePage" style="display:none">
-        <div class="topbar" style="position:sticky;top:0;z-index:20;background:#000">
-          <button class="up-back-btn" onclick="closeUserPage()">
+        <div class="topbar" style="position:sticky;top:0;z-index:20;background:#000;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;padding:0 16px;">
+          <button class="up-back-btn" onclick="closeUserPage()" data-tooltip="Geri" data-tooltip-pos="bottom">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
           <span id="userPageTitle" class="topbar-title"></span>
-          <div style="width:40px"></div>
+          <div id="userPageHeaderActions" style="display:flex; align-items:center; gap:8px;"></div>
         </div>
         <div id="userPageContent"></div>
       </div>
@@ -886,7 +903,7 @@
   </div>
 
   <!-- ── SHARE POST MODAL (Instagram Style) ── -->
-  <div class="modal-overlay" id="sharePostModal" style="z-index:99999;">
+  <div class="modal-overlay" id="sharePostModal" style="z-index:999999 !important;">
     <div class="modal-sheet share-sheet" style="max-height:85dvh;">
       <div class="modal-drag-handle"></div>
       <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
@@ -1521,13 +1538,13 @@
     </svg>
   </div>
 
-  <script src="/js/app.js?v=3.0.0"></script>
-  <script src="/js/timer.js?v=3.0.0"></script>
+  <script src="/js/app.js?v=10.0.0"></script>
+  <script src="/js/timer.js?v=4.0.0"></script>
   <script src="/js/feed.js?v=3.0.0"></script>
   <script src="/js/profile.js?v=3.0.0"></script>
   <script src="/js/party.js?v=3.0.0"></script>
   <script src="/js/messages.js?v=3.0.0"></script>
-  <script src="/js/voice.js?v=3.0.0"></script>
+  <script src="/js/voice.js?v=7.0.0"></script>
 
   <script>
   // ─── UNIVERSAL MOBILE MODAL BACKDROP & ESCAPE HANDLER ─────────────
@@ -1642,7 +1659,6 @@
       <div style="margin-top:18px;font-size:12.5px;color:#949ba4;cursor:pointer;text-align:center;font-weight:600;" onclick="closeRegisterModal()">
         Zaten bir hesabın var mı? <span style="color:#5865f2;text-decoration:underline;">Giriş Yap</span>
       </div>
-    </div>
   </div>
 
 </body>

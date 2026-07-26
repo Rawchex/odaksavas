@@ -69,21 +69,21 @@ const upload = multer({
   }
 });
 
-// Generic Rate Limiter
+// Generic Rate Limiter (Only for /api endpoints, never static assets)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5000, // Limit each IP to 5000 requests per 15 mins (avoiding 429 during active polling)
+  max: 20000, // Limit each IP to 20000 API requests per 15 mins (avoids 429 during active voice polling)
   message: { error: 'Çok fazla istek gönderdiniz, lütfen daha sonra tekrar deneyin.' }
 });
 
 // Auth specific Rate Limiter
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15, // Limit each IP to 15 login/register requests per window
+  max: 30, // Limit each IP to 30 login/register requests per window
   message: { error: 'Çok fazla giriş denemesi, lütfen 15 dakika bekleyin.' }
 });
 
-app.use(limiter);
+app.use('/api', limiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 
@@ -948,12 +948,12 @@ app.get('/api/users/:username/friends', auth, (req, res) => {
   db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, user) => {
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     db.all(`
-      SELECT u.id, u.username, u.profile_photo, u.level, u.total_focus_time
-      FROM friendships f
-      JOIN users u ON f.friend_id = u.id
-      WHERE f.user_id = ? AND f.status = 'accepted'
+      SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.total_focus_time, u.status
+      FROM users u
+      JOIN friendships f ON ((f.user_id = ? AND f.friend_id = u.id) OR (f.friend_id = ? AND f.user_id = u.id))
+      WHERE f.status = 'accepted' AND u.id != ?
       ORDER BY u.username ASC
-    `, [user.id], (err, friends) => {
+    `, [user.id, user.id, user.id], (err, friends) => {
       res.json(friends || []);
     });
   });
@@ -1035,7 +1035,6 @@ app.get('/api/feed/trending', auth, (req, res) => {
       ) as engagement
     FROM posts p
     JOIN users u ON p.user_id = u.id
-    WHERE datetime(p.created_at) > datetime('now', '-24 hours')
     ORDER BY engagement DESC, p.created_at DESC
     LIMIT 50
   `, [req.user.id], (err, posts) => {
@@ -1828,6 +1827,9 @@ app.post('/api/parties/:id/leave', auth, (req, res) => {
 
 // --- PARTY VOICE CHAT SIGNALING & STATE ENDPOINTS ---
 
+// Global Active Voice Session Tracker per User
+global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
+
 app.post('/api/parties/:id/voice-state', auth, (req, res) => {
   try {
     const partyId = req.params.id;
@@ -1836,7 +1838,7 @@ app.post('/api/parties/:id/voice-state', auth, (req, res) => {
     db.get('SELECT id FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
       if (!member) return res.status(403).json({ error: 'Oda üyesi değilsiniz' });
 
-      const { micMuted, deafened, pingMs, channelId } = req.body;
+      const { micMuted, deafened, pingMs, channelId, deviceId, inVoice } = req.body;
       const userId = req.user.id;
       const username = req.user.username;
 
@@ -1852,8 +1854,19 @@ app.post('/api/parties/:id/voice-state', auth, (req, res) => {
         deafened: !!deafened,
         channelId: channelId ? parseInt(channelId) : null,
         pingMs: parseInt(pingMs) || 0,
+        deviceId: deviceId || null,
         lastSeen: Date.now()
       };
+
+      // Track active device session ONLY if device is actively in voice channel
+      if (deviceId && (inVoice || channelId)) {
+        global.userActiveVoiceSessions[userId] = {
+          partyId: parseInt(partyId),
+          channelId: channelId ? parseInt(channelId) : null,
+          deviceId: deviceId || null,
+          lastSeen: Date.now()
+        };
+      }
 
       // Cleanup users that haven't sent state in 15 seconds
       const now = Date.now();
@@ -1867,6 +1880,78 @@ app.post('/api/parties/:id/voice-state', auth, (req, res) => {
     });
   } catch(e) {
     res.status(500).json({ error: 'Ses durumu güncellenemedi' });
+  }
+});
+
+// GET active voice session for logged-in user (for device handover detection)
+app.get('/api/user/active-voice-session', auth, (req, res) => {
+  const currentDeviceId = req.query.deviceId;
+  const session = global.userActiveVoiceSessions ? global.userActiveVoiceSessions[req.user.id] : null;
+  const now = Date.now();
+
+  if (session && (now - session.lastSeen < 12000)) {
+    const isOtherDevice = !!(session.deviceId && session.deviceId !== currentDeviceId);
+    return res.json({
+      hasActiveVoice: true,
+      partyId: session.partyId,
+      channelId: session.channelId,
+      deviceId: session.deviceId,
+      isOtherDevice
+    });
+  }
+  return res.json({ hasActiveVoice: false });
+});
+
+// POST handover: user claims voice chat on current device (disconnects previous device)
+app.post('/api/parties/:id/voice-handover', auth, (req, res) => {
+  try {
+    const partyId = req.params.id;
+    const { targetDeviceId, channelId } = req.body;
+    const username = req.user.username;
+    const userId = req.user.id;
+
+    if (!global.partySignals) global.partySignals = {};
+    if (!global.partySignals[partyId]) global.partySignals[partyId] = [];
+
+    // Send handover force-disconnect signal to any existing voice sessions of this user
+    global.partySignals[partyId].push({
+      fromUsername: username,
+      toUsername: username,
+      signal: { _handover: true, newDeviceId: targetDeviceId },
+      timestamp: Date.now()
+    });
+
+    // Update active device session
+    global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
+    global.userActiveVoiceSessions[userId] = {
+      partyId: parseInt(partyId),
+      channelId: channelId ? parseInt(channelId) : null,
+      deviceId: targetDeviceId,
+      lastSeen: Date.now()
+    };
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Server Voice] Handover failed:', err);
+    res.status(500).json({ error: 'Voice handover failed' });
+  }
+});
+
+// POST leave voice: clears active session instantly when closing tab/leaving room
+app.post('/api/parties/:id/voice-leave', auth, (req, res) => {
+  try {
+    const partyId = req.params.id;
+    const userId = req.user.id;
+
+    if (global.partyVoiceStates && global.partyVoiceStates[partyId]) {
+      delete global.partyVoiceStates[partyId][userId];
+    }
+    if (global.userActiveVoiceSessions) {
+      delete global.userActiveVoiceSessions[userId];
+    }
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({ error: 'Voice leave failed' });
   }
 });
 
@@ -1966,8 +2051,11 @@ app.get('/api/parties/:id/screenshare-state', auth, (req, res) => {
   db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
     if (!member) return res.status(403).json({ error: 'Yetkisiz' });
     const states = global.partyScreenShareStates[partyId] || {};
-    // Cleanup stale (>30s)
     const now = Date.now();
+    if (states[req.user.username]) {
+      states[req.user.username].ts = now;
+    }
+    // Cleanup stale (>30s)
     Object.keys(states).forEach(u => { if (now - states[u].ts > 30000) delete states[u]; });
     res.json(states);
   });
@@ -2528,17 +2616,6 @@ setInterval(() => {
     DELETE FROM party_messages 
     WHERE created_at < datetime('now', '-24 hours')
   `);
-
-  // 3. Delete posts older than 24 hours, along with their engagements
-  db.all(`SELECT id FROM posts WHERE created_at < datetime('now', '-24 hours')`, (err, oldPosts) => {
-    if (oldPosts && oldPosts.length > 0) {
-      const ids = oldPosts.map(p => p.id).join(',');
-      db.run(`DELETE FROM likes WHERE post_id IN (${ids})`);
-      db.run(`DELETE FROM comments WHERE post_id IN (${ids})`);
-      db.run(`DELETE FROM reposts WHERE post_id IN (${ids})`);
-      db.run(`DELETE FROM posts WHERE id IN (${ids})`);
-    }
-  });
 }, 30000);
 
 

@@ -1763,12 +1763,13 @@ function scrollToMessage(messageId) {
   }, 1600);
 }
 
-// Load and view a shared post using the premium Instagram-style detail modal from profile.js
 async function openSharedPostInChat(postId) {
-  if (typeof openProfilePostDetail === 'function') {
-    openProfilePostDetail(postId, false, false);
+  if (typeof openPostModal === 'function') {
+    openPostModal(postId);
+  } else if (typeof openProfilePostDetail === 'function') {
+    openProfilePostDetail(postId);
   } else {
-    showToast('Profil modülü yüklenemedi.');
+    showToast('Gönderi detay modülü yüklenemedi.');
   }
 }
 

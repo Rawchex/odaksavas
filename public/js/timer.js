@@ -920,6 +920,8 @@ async function fetchPartyMessages(partyId) {
       </div>
     `;
 
+    const partyKey = `party_${partyId}`;
+
     container.innerHTML = partySystemBanner + (data.messages || []).map(m => {
       if (m.user_id === 0 || !m.username) {
         return `
@@ -928,8 +930,16 @@ async function fetchPartyMessages(partyId) {
           </div>
         `;
       }
-      const isMe = m.username === currentUser.username;
-      const decryptedContent = decryptText(m.content, key);
+      const isMe = m.username === currentUser?.username;
+      let decryptedContent = m.content || '';
+      try {
+        if (typeof decryptText === 'function') {
+          decryptedContent = decryptText(m.content, partyKey) || m.content;
+        }
+      } catch(e) {
+        decryptedContent = m.content;
+      }
+
       return `
         <div class="party-msg-row ${isMe ? 'me' : ''}">
           <div style="cursor:pointer" onclick="openUserPage('${esc(m.username)}')">
@@ -981,22 +991,28 @@ async function fetchPartyMessages(partyId) {
 async function sendPartyChatMessage() {
   const input = document.getElementById('partyChatInput');
   const content = input?.value?.trim();
-  if (!content || !_currentPartyId) return;
+  const partyId = _currentPartyId || window._currentPartyId || (window._currentParty && window._currentParty.id);
+  if (!content || !partyId) return;
 
-  const key = `party_${_currentPartyId}`;
+  _currentPartyId = partyId;
+  window._currentPartyId = partyId;
+
+  const key = `party_${partyId}`;
   const encryptedContent = encryptText(content, key);
 
   input.value = '';
   try {
-    const res = await fetch(`/api/parties/${_currentPartyId}/messages`, {
+    const res = await fetch(`/api/parties/${partyId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: encryptedContent })
     });
     if (res.ok) {
-      await fetchPartyMessages(_currentPartyId);
+      await fetchPartyMessages(partyId);
     }
-  } catch {}
+  } catch (e) {
+    console.warn('[PartyChat] Message send error:', e);
+  }
 }
 
 async function fetchPartyAndRender(partyId) {
@@ -1286,10 +1302,59 @@ function playChannelSound(type) {
     const vol = volSetting !== null ? parseInt(volSetting) / 100 : 1.0;
     if (vol <= 0) return;
 
-    const audioPath = type === 'connect' ? '/audio/connect.wav' : '/audio/disconnect.wav';
-    const audio = new Audio(audioPath);
-    audio.volume = Math.max(0, Math.min(1, vol));
-    audio.play().catch(e => console.warn('[Sound] Audio play prevented:', e));
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    if (!window._sharedAudioCtx || window._sharedAudioCtx.state === 'closed') {
+      try {
+        window._sharedAudioCtx = new AudioCtx();
+      } catch (e) { return; }
+    }
+    const ctx = window._sharedAudioCtx;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+      if (ctx.state === 'suspended') return; // Silent bypass until user gesture
+    }
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(Math.min(1, Math.max(0, vol * 0.15)), ctx.currentTime);
+    masterGain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    if (type === 'connect') {
+      // High-quality C5 -> E5 -> G5 harmonic chime
+      const freqs = [523.25, 659.25, 783.99];
+      freqs.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + i * 0.07);
+        gain.gain.setValueAtTime(0, now + i * 0.07);
+        gain.gain.linearRampToValueAtTime(1, now + i * 0.07 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.35);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now + i * 0.07);
+        osc.stop(now + i * 0.07 + 0.4);
+      });
+    } else {
+      // High-quality G5 -> E5 -> C5 descending chime
+      const freqs = [783.99, 659.25, 523.25];
+      freqs.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + i * 0.07);
+        gain.gain.setValueAtTime(0, now + i * 0.07);
+        gain.gain.linearRampToValueAtTime(1, now + i * 0.07 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.35);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now + i * 0.07);
+        osc.stop(now + i * 0.07 + 0.4);
+      });
+    }
+
   } catch (e) {
     console.warn('[Sound] Error playing channel sound:', e);
   }
@@ -1602,12 +1667,8 @@ async function joinSubChannel(chanId) {
         await switchVoiceChannel(chanId);
       }
 
-      if (prev !== null) {
-        playChannelSound('disconnect');
-        setTimeout(() => playChannelSound('connect'), 120);
-      } else {
-        playChannelSound('connect');
-      }
+      // Oda değiştirildiğinde veya odaya girildiğinde SADECE yeni odaya giriş sesi çalınır
+      playChannelSound('connect');
 
       showToast(`"${chanName}" kanalına geçildi`);
       fetchPartyAndRender(window._currentPartyId);
@@ -1708,11 +1769,31 @@ function togglePartyChatModal(show) {
 // ============================================================
 // SET ACTIVE PARTY (called from party.js)
 // ============================================================
-function setActiveParty(partyId) {
+async function setActiveParty(partyId, isForceTransfer = false) {
   if (!partyId || partyId === 'undefined' || partyId === 'null') {
     clearActiveParty();
     return;
   }
+
+  // If NOT a manual force transfer (e.g. initial auto restore / page load), check if another device is using voice
+  if (!isForceTransfer) {
+    try {
+      const devId = typeof getDeviceSessionId === 'function' ? getDeviceSessionId() : '';
+      const checkRes = await fetch(`/api/user/active-voice-session?deviceId=${encodeURIComponent(devId)}`);
+      if (checkRes.ok) {
+        const activeData = await checkRes.json();
+        if (activeData.hasActiveVoice && activeData.isOtherDevice) {
+          console.log('[Party] Active voice session detected on another device. Rendering Handover banner instead of auto-joining.');
+          if (typeof checkAndRenderHandoverButton === 'function') {
+            checkAndRenderHandoverButton(partyId);
+          }
+          startPartyPoll(partyId);
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+
   _currentPartyId = partyId;
   window._currentPartyId = partyId;
 
@@ -1946,7 +2027,13 @@ function startStatusChipAnimation() {
   const refreshData = () => {
     if (!currentUser) return;
     const s = currentUser.status || 'online';
-    if (dotEl)    dotEl.style.background = COLORS[s] || COLORS.online;
+    const c = COLORS[s] || COLORS.online;
+    if (dotEl) {
+      dotEl.setAttribute('data-status', s);
+      dotEl.style.background = c;
+      dotEl.style.boxShadow = `0 0 8px ${c}`;
+      dotEl.style.color = c;
+    }
     if (avatarEl) avatarEl.style.backgroundImage = `url('${currentUser.profile_photo || '/uploads/default-avatar.png'}')`;
     if (nameEl)   nameEl.textContent   = `@${currentUser.username || ''}`;
     if (textEl)   textEl.textContent   = LABELS[s] || 'ÇEVRİMİÇİ';

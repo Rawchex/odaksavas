@@ -87,7 +87,23 @@ async function initVoiceChat(partyId) {
   window._currentPartyId = partyId;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast('Sesli sohbet bu tarayıcıda desteklenmiyor (HTTPS gerekli).');
+    console.warn('[VoiceChat] Insecure context / No mediaDevices API.');
+    const handoverBanner = document.getElementById('voiceHandoverBanner');
+    if (handoverBanner) {
+      handoverBanner.innerHTML = `
+        <div class="voice-handover-pill warning" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" width="18" height="18">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div style="flex:1">
+            <div style="font-weight:800; color:#ef4444; font-size:12.5px;">HTTPS / Güvenli Bağlantı Gerekli</div>
+            <div style="font-size:11px; color:rgba(255,255,255,0.7); margin-top:2px;">HTTP IP adresinden (http://${window.location.hostname}) mikrofona izin verilmez. Lütfen HTTPS veya localhost adresini kullanın.</div>
+          </div>
+        </div>`;
+      handoverBanner.style.display = 'block';
+    }
+    showToast('Mikrofon erişimi için HTTPS veya localhost gereklidir.');
     return;
   }
 
@@ -136,17 +152,26 @@ async function initVoiceChat(partyId) {
 
 function stopVoiceChat(resetPartyId = true) {
   console.log('[VoiceChat] Stopping. resetPartyId:', resetPartyId);
+  const pId = window._currentPartyId;
   if (resetPartyId && window._currentPartyId) {
     if (typeof playChannelSound === 'function') playChannelSound('disconnect');
     window._currentPartyId = null;
+  }
+
+  if (pId) {
+    try {
+      fetch(`/api/parties/${pId}/voice-leave`, { method: 'POST' }).catch(() => {});
+    } catch(e) {}
   }
 
   if (window._voiceInterval)        { clearInterval(window._voiceInterval);        window._voiceInterval = null; }
   if (window._voiceSignalsInterval)  { clearInterval(window._voiceSignalsInterval);  window._voiceSignalsInterval = null; }
   if (window._ssPolling)             { clearInterval(window._ssPolling);             window._ssPolling = null; }
 
-  // Stop screen share if active
-  stopScreenShare(false);
+  // Stop screen share if explicitly leaving party
+  if (resetPartyId) {
+    stopScreenShare(false);
+  }
 
   // Stop local stream
   if (window._localStream) {
@@ -176,6 +201,15 @@ function stopVoiceChat(resetPartyId = true) {
     window._audioContext = null;
   }
 }
+
+// Send beacon on page unload so active voice session is instantly cleared
+window.addEventListener('beforeunload', () => {
+  if (window._currentPartyId) {
+    try {
+      navigator.sendBeacon(`/api/parties/${window._currentPartyId}/voice-leave`);
+    } catch(e) {}
+  }
+});
 
 // ─── INSTANT CHANNEL SWITCH ──────────────────────────────────
 async function switchVoiceChannel(newChannelId) {
@@ -252,10 +286,212 @@ function startVoiceStateLoop(partyId) {
 }
 
 // ─── SIGNAL LOOP (fast polling) ─────────────────────────────
+function getDeviceSessionId() {
+  if (!window._deviceSessionId) {
+    let id = localStorage.getItem('os_device_session_id') || sessionStorage.getItem('os_device_session_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+      localStorage.setItem('os_device_session_id', id);
+      sessionStorage.setItem('os_device_session_id', id);
+    } else {
+      localStorage.setItem('os_device_session_id', id);
+      sessionStorage.setItem('os_device_session_id', id);
+    }
+    window._deviceSessionId = id;
+  }
+  return window._deviceSessionId;
+}
+
+function handleVoiceHandoverDisconnect() {
+  console.log('[VoiceChat] Handover force disconnect triggered on this device.');
+
+  // 1. Play disconnect sound chime
+  if (typeof playChannelSound === 'function') playChannelSound('disconnect');
+
+  // 2. Stop WebRTC voice chat streams
+  if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
+
+  // 3. Clear active party room state on this device
+  if (typeof clearActiveParty === 'function') clearActiveParty();
+
+  // 4. Close Party Modal if open on this device
+  if (typeof closePartyModal === 'function') closePartyModal();
+
+  // 5. Hide overlays and banners
+  const overlay = document.getElementById('partyFocusOverlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+    overlay.classList.remove('has-active-handover-blocker');
+  }
+  const modal = document.getElementById('partyModal');
+  if (modal) modal.classList.remove('has-active-handover-blocker');
+
+  const container1 = document.getElementById('voiceHandoverBanner');
+  const container2 = document.getElementById('overlayVoiceHandoverBanner');
+  if (container1) container1.style.display = 'none';
+  if (container2) container2.style.display = 'none';
+
+  // 6. Show toast notification to user
+  if (typeof showToast === 'function') {
+    showToast('Sesli sohbet diğer cihazınıza aktarıldı');
+  }
+}
+
+let _handoverTargetPartyId = null;
+let _handoverTargetChannelId = null;
+let _handoverDismissed = false;
+
+window.dismissHandoverOverlay = function dismissHandoverOverlay() {
+  const container1 = document.getElementById('voiceHandoverBanner');
+  const container2 = document.getElementById('overlayVoiceHandoverBanner');
+  if (container1) container1.style.display = 'none';
+  if (container2) container2.style.display = 'none';
+};
+
+async function checkAndRenderHandoverButton(partyId) {
+  const container1 = document.getElementById('voiceHandoverBanner');
+  const container2 = document.getElementById('overlayVoiceHandoverBanner');
+
+  const hideAll = () => {
+    if (container1) container1.style.display = 'none';
+    if (container2) container2.style.display = 'none';
+  };
+
+  // RULE 1: Visitor / Logged-out guard — ABSOLUTELY NEVER SHOW HANDOVER TO UNAUTHENTICATED VISITORS!
+  if (typeof currentUser === 'undefined' || !currentUser || !currentUser.id) {
+    hideAll();
+    return;
+  }
+
+  // RULE 2: Local WebRTC Voice Active Guard — If this device is ALREADY in voice locally, hide handover!
+  if (window._localStream && window._localStream.getAudioTracks().some(t => t.readyState === 'live')) {
+    hideAll();
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/user/active-voice-session?deviceId=${encodeURIComponent(getDeviceSessionId())}`);
+    
+    // RULE 3: HTTP Auth Guard — If 401 Unauthorized, 403 Forbidden, 500 or not OK, immediately hide!
+    if (!res.ok) {
+      hideAll();
+      return;
+    }
+
+    const data = await res.json();
+    
+    // RULE 4: Multi-Device Valid Handover Guard — MUST have active voice AND be a DIFFERENT device AND have valid partyId!
+    if (data.hasActiveVoice && data.isOtherDevice && data.partyId) {
+      _handoverTargetPartyId = partyId || data.partyId;
+      _handoverTargetChannelId = data.channelId || null;
+
+      const html = `
+        <div class="voice-handover-card">
+          <div class="voice-handover-icon-circle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="24" height="24">
+              <rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <div class="voice-handover-card-title">Sesli Sohbet Başka Cihazda Aktif</div>
+          <div class="voice-handover-card-desc">Şu an bilgisayarınız veya başka bir cihazınız bu odak odasında sesli sohbette. Sesi bu cihaza devralmak için aşağıdaki butona basın.</div>
+          <button class="voice-handover-btn-lg" onclick="transferVoiceToCurrentDevice(${_handoverTargetPartyId}, ${_handoverTargetChannelId || 'null'})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+              <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+            <span>Buradan Bağlan</span>
+          </button>
+        </div>`;
+
+      if (container1) { container1.innerHTML = html; container1.style.display = 'block'; }
+      if (container2) { container2.innerHTML = html; container2.style.display = 'block'; }
+      return;
+    }
+  } catch (e) {}
+
+  hideAll();
+}
+
+window.transferVoiceToCurrentDevice = async function transferVoiceToCurrentDevice(partyId, channelId) {
+  console.log('[VoiceChat] Transfer voice requested for:', partyId, channelId);
+  let pId = partyId || _handoverTargetPartyId || window._currentPartyId;
+  let cId = channelId || _handoverTargetChannelId || window._currentChannelId;
+
+  if (!pId) {
+    try {
+      const res = await fetch(`/api/user/active-voice-session?deviceId=${encodeURIComponent(getDeviceSessionId())}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.hasActiveVoice) {
+          pId = data.partyId;
+          cId = data.channelId;
+        }
+      }
+    } catch(e) {}
+  }
+
+  if (!pId) {
+    if (typeof showToast === 'function') showToast('Aktarılacak aktif sesli sohbet bulunamadı');
+    return;
+  }
+
+  const deviceId = getDeviceSessionId();
+
+  try {
+    const res = await fetch(`/api/parties/${pId}/voice-handover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetDeviceId: deviceId, channelId: cId })
+    });
+    if (res.ok) {
+      // 1. Close Odak Odaları Modal cleanly
+      if (typeof closePartyModal === 'function') {
+        closePartyModal();
+      }
+
+      // 2. Hide Handover banners
+      const container1 = document.getElementById('voiceHandoverBanner');
+      const container2 = document.getElementById('overlayVoiceHandoverBanner');
+      if (container1) container1.style.display = 'none';
+      if (container2) container2.style.display = 'none';
+
+      // 3. Connect voice on current device with force transfer = true
+      if (typeof setActiveParty === 'function') await setActiveParty(pId, true);
+      if (typeof joinChannel === 'function' && cId) {
+        await joinChannel(cId);
+      } else if (typeof initVoiceChat === 'function') {
+        await initVoiceChat(pId);
+      }
+      showToast('Sesli sohbet bu cihaza aktarıldı');
+    }
+  } catch (e) {
+    showToast('Ses aktarılamadı');
+  }
+};
+
+// Explicit click listener on document for handover buttons
+document.addEventListener('click', (e) => {
+  const primaryBtn = e.target.closest('#globalHandoverActionBtn, .global-handover-btn-primary, .voice-handover-btn-lg');
+  if (primaryBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.transferVoiceToCurrentDevice();
+    return;
+  }
+
+  const secondaryBtn = e.target.closest('.global-handover-btn-secondary');
+  if (secondaryBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.dismissHandoverOverlay();
+    return;
+  }
+});
+
 async function fetchVoiceSignals() {
   if (!window._currentPartyId) return;
   try {
     const res = await fetch(`/api/parties/${window._currentPartyId}/voice-signals`);
+    if (res.status === 429) return;
     if (res.status === 401 || res.status === 404 || res.status === 403) {
       if (typeof stopVoiceChat === 'function') stopVoiceChat(true);
       if (typeof clearActiveParty === 'function') clearActiveParty();
@@ -264,7 +500,11 @@ async function fetchVoiceSignals() {
     if (res.ok) {
       const signals = await res.json();
       for (const sig of signals) {
-        if (sig.signal && sig.signal._ssShare) {
+        if (sig.signal && sig.signal._handover) {
+          if (sig.signal.newDeviceId !== getDeviceSessionId()) {
+            handleVoiceHandoverDisconnect();
+          }
+        } else if (sig.signal && sig.signal._ssShare) {
           await handleIncomingScreenShareSignal(sig.fromUsername, sig.signal);
         } else {
           await handleIncomingSignal(sig.fromUsername, sig.signal);
@@ -557,7 +797,8 @@ async function triggerVoiceStateUpdate() {
         micMuted: window._micMuted || window._deafened,
         deafened: window._deafened,
         channelId: window._currentChannelId || null,
-        pingMs: Date.now() - tStart
+        pingMs: Date.now() - tStart,
+        deviceId: getDeviceSessionId()
       })
     });
     if (res.ok) {
@@ -697,6 +938,8 @@ function updateLobbyVoiceBadges() {
     const badgeContainer  = document.getElementById(`voice-badge-${username}`);
     if (!badgeContainer) return;
 
+    const existingSSBadge = badgeContainer.querySelector(`.ss-member-badge`);
+
     const isDeaf         = member.deafened;
     const isMuted        = member.micMuted || member.deafened;
     const isLocallyMuted = !!window._userLocalMuted[username];
@@ -710,10 +953,12 @@ function updateLobbyVoiceBadges() {
       iconsHtml += `<span class="voice-badge-icon muted" title="Susturulmuş"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
     }
     badgeContainer.innerHTML = iconsHtml;
+    if (existingSSBadge) badgeContainer.appendChild(existingSSBadge);
   });
 
   const selfBadge = document.getElementById(`voice-badge-${currentUser?.username}`);
   if (selfBadge) {
+    const existingSelfSSBadge = selfBadge.querySelector(`.ss-member-badge`);
     let selfIcons = '';
     if (window._deafened) {
       selfIcons += `<span class="voice-badge-icon deafened" title="Kulaklığınız Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg></span>`;
@@ -721,7 +966,10 @@ function updateLobbyVoiceBadges() {
       selfIcons += `<span class="voice-badge-icon muted" title="Mikrofonunuz Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
     }
     selfBadge.innerHTML = selfIcons;
+    if (existingSelfSSBadge) selfBadge.appendChild(existingSelfSSBadge);
   }
+
+  if (window._latestScreenShareStates) updateScreenShareBadges(window._latestScreenShareStates);
 }
 
 // ─── USER VOICE MODAL ─────────────────────────────────────────
@@ -1160,7 +1408,11 @@ async function toggleScreenShare() {
   if (window._screenStream) {
     stopScreenShare(true);
   } else {
-    openScreenSharePromptModal();
+    if (!window._currentPartyId || !window._currentChannelId) {
+      showToast('Önce bir ses kanalına girin.');
+      return;
+    }
+    await startScreenShare('monitor');
   }
 }
 
@@ -1176,7 +1428,17 @@ async function startScreenShare(preferredSurface = 'monitor') {
 
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: videoConstraints,
-      audio: false
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false,
+        suppressLocalAudioPlayback: false
+      }
+    }).catch(async () => {
+      return await navigator.mediaDevices.getDisplayMedia({
+        video: videoConstraints,
+        audio: true
+      });
     });
 
     window._screenStream = stream;
@@ -1236,17 +1498,16 @@ function stopScreenShare(announce = true) {
   }
 }
 
-async function createScreenShareConnection(targetUsername, isInitiator) {
+function getOrCreateSSPeerConnection(targetUsername) {
   if (window._ssConnections[targetUsername]) {
-    try { window._ssConnections[targetUsername].close(); } catch(e){}
+    const existing = window._ssConnections[targetUsername];
+    if (existing.connectionState !== 'closed' && existing.signalingState !== 'closed') {
+      return existing;
+    }
   }
 
   const pc = new RTCPeerConnection(RTC_CONFIG);
   window._ssConnections[targetUsername] = pc;
-
-  if (window._screenStream) {
-    window._screenStream.getTracks().forEach(track => pc.addTrack(track, window._screenStream));
-  }
 
   pc.onicecandidate = (event) => {
     if (event.candidate && window._currentPartyId) {
@@ -1255,10 +1516,28 @@ async function createScreenShareConnection(targetUsername, isInitiator) {
   };
 
   pc.ontrack = (event) => {
-    const stream = event.streams?.[0] || new MediaStream([event.track]);
+    console.log('[ScreenShare WebRTC] Received remote track from:', targetUsername, event.streams);
+    const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
     window._ssRemoteStreams[targetUsername] = stream;
     showScreenShareViewer(targetUsername, stream, false);
   };
+
+  return pc;
+}
+
+async function createScreenShareConnection(targetUsername, isInitiator) {
+  if (window._ssConnections[targetUsername]) {
+    try { window._ssConnections[targetUsername].close(); } catch(e){}
+    delete window._ssConnections[targetUsername];
+  }
+
+  const pc = getOrCreateSSPeerConnection(targetUsername);
+
+  if (window._screenStream) {
+    window._screenStream.getTracks().forEach(track => {
+      pc.addTrack(track, window._screenStream);
+    });
+  }
 
   if (isInitiator && window._screenStream) {
     const offer = await pc.createOffer({ offerToReceiveVideo: true });
@@ -1270,9 +1549,10 @@ async function createScreenShareConnection(targetUsername, isInitiator) {
 async function sendScreenShareSignal(toUsername, signal) {
   if (!window._currentPartyId) return;
   try {
+    const ssSig = Object.assign({}, signal, { _ssShare: true });
     await fetch(`/api/parties/${window._currentPartyId}/screenshare-signal`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ toUsername, signal })
+      body: JSON.stringify({ toUsername, signal: ssSig })
     });
   } catch(e){}
 }
@@ -1285,28 +1565,11 @@ async function handleIncomingScreenShareSignal(fromUsername, signal) {
   if (signal.type === 'ss-request') {
     console.log('[ScreenShare] Received ss-request from viewer:', fromUsername);
     if (window._screenStream) {
-      createScreenShareConnection(fromUsername, true);
+      await createScreenShareConnection(fromUsername, true);
     }
   } else if (signal.type === 'ss-offer') {
     console.log('[ScreenShare] Received ss-offer from sharer:', fromUsername);
-    let pc = window._ssConnections[fromUsername];
-    if (!pc) {
-      pc = new RTCPeerConnection(RTC_CONFIG);
-      window._ssConnections[fromUsername] = pc;
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate && window._currentPartyId) {
-          sendScreenShareSignal(fromUsername, { type: 'candidate', candidate: event.candidate });
-        }
-      };
-
-      pc.ontrack = (event) => {
-        console.log('[ScreenShare] Received remote track from:', fromUsername);
-        const stream = event.streams?.[0] || new MediaStream([event.track]);
-        window._ssRemoteStreams[fromUsername] = stream;
-        showScreenShareViewer(fromUsername, stream, false);
-      };
-    }
+    const pc = getOrCreateSSPeerConnection(fromUsername);
 
     await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
 
@@ -1328,7 +1591,6 @@ async function handleIncomingScreenShareSignal(fromUsername, signal) {
     if (pc) {
       await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
 
-      // Flush queued ICE candidates
       if (window._ssIceQueues[fromUsername]) {
         for (const cand of window._ssIceQueues[fromUsername]) {
           try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch(e){}
@@ -1348,17 +1610,91 @@ async function handleIncomingScreenShareSignal(fromUsername, signal) {
 }
 
 // ─── SCREEN SHARE VIEWER ─────────────────────────────────────
+function makeOverlayDraggable(overlay, handle) {
+  if (!overlay || !handle || overlay._isDraggableInit) return;
+  overlay._isDraggableInit = true;
+  let isDragging = false, startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+
+  handle.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return;
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = overlay.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialTop = rect.top;
+    overlay.style.transform = 'none';
+    overlay.style.left = initialLeft + 'px';
+    overlay.style.top = initialTop + 'px';
+    overlay.style.bottom = 'auto';
+    overlay.style.right = 'auto';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  function onMouseMove(e) {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    overlay.style.left = Math.max(0, Math.min(window.innerWidth - overlay.offsetWidth, initialLeft + dx)) + 'px';
+    overlay.style.top = Math.max(0, Math.min(window.innerHeight - overlay.offsetHeight, initialTop + dy)) + 'px';
+  }
+
+  function onMouseUp() {
+    isDragging = false;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+}
+
+function attachStreamToVideo(video, stream, isOwnStream = false) {
+  if (!video || !stream) return;
+  
+  if (isOwnStream) {
+    video.muted = true;
+    video.volume = 0;
+    video.setAttribute('muted', '');
+  } else {
+    video.muted = false;
+    video.removeAttribute('muted');
+    const slider = document.getElementById('ssVolumeSlider');
+    const currentVol = slider ? parseInt(slider.value) / 100 : 1.0;
+    video.volume = Math.min(1.0, currentVol);
+  }
+
+  video.setAttribute('playsinline', '');
+  video.setAttribute('autoplay', '');
+  
+  if (video.srcObject !== stream) {
+    video.srcObject = stream;
+  }
+  
+  const play = () => {
+    video.play().catch(err => console.warn('[ScreenShare] Video play warning:', err));
+  };
+  
+  video.onloadedmetadata = play;
+  play();
+  requestAnimationFrame(play);
+  setTimeout(play, 100);
+}
+
 function showScreenShareViewer(sharerUsername, stream, isOwnStream = false) {
   let overlay = document.getElementById('screenShareOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id        = 'screenShareOverlay';
-    overlay.className = 'ss-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  overlay.className = 'ss-overlay open' + (isOwnStream ? ' mini-mode' : '');
+
+  if (!overlay.querySelector('#ssToolbar') || !overlay.querySelector('#ssVideo')) {
     overlay.innerHTML = `
-      <div class="ss-toolbar" id="ssToolbar">
+      <div class="ss-toolbar" id="ssToolbar" title="Pencereyi sürüklemek için tıklayıp tutun">
         <div class="ss-toolbar-left">
           <div class="ss-sharer-badge" id="ssSharerBadge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
               <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
             </svg>
             <span id="ssSharerName"></span>
@@ -1367,23 +1703,46 @@ function showScreenShareViewer(sharerUsername, stream, isOwnStream = false) {
           <span class="ss-live-badge">CANLI</span>
         </div>
         <div class="ss-toolbar-right">
-          <button class="ss-tool-btn" id="ssMiniToggleBtn" onclick="toggleSSMiniMode()" title="Küçük / Kayan Pencere">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+          <button class="ss-tool-btn" id="ssSnapshotBtn" onclick="takeSSSnapshot()" data-tooltip="📸 Kare Yakala & İndir (Snapshot)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
+          
+          <div class="ss-volume-control" style="display: flex; align-items: center; gap: 5px; background: #232436; padding: 2px 8px; border-radius: 6px; border: 1px solid #363852;" title="Yayın Ses Seviyesi & Gain Boost (%0 - %200)">
+            <button class="ss-tool-btn" id="ssVolumeBtn" onclick="toggleSSAudioMute()" data-tooltip="Ses Aç/Kapat" style="width:20px; height:20px; padding:0;">
+              <svg id="ssVolumeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+            </button>
+            <input type="range" id="ssVolumeSlider" min="0" max="200" value="100" oninput="setSSVolume(this.value)" style="width: 60px; height: 4px; accent-color: #8b92ff; cursor: pointer;">
+            <span id="ssVolumeValue" style="color: #8b92ff; font-size: 10px; font-weight: 800; min-width: 30px;">100%</span>
+          </div>
+
+          <button class="ss-tool-btn" id="ssMiniToggleBtn" onclick="toggleSSMiniMode()" data-tooltip="Küçük / Kayan Pencere Modu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <rect x="3" y="3" width="18" height="18" rx="2"/><rect x="11" y="11" width="8" height="8" rx="1"/>
             </svg>
           </button>
-          <button class="ss-tool-btn" id="ssPipToggleBtn" onclick="toggleSSPiP()" title="Masaüstü Resim-içinde-Resim (PiP)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+          <button class="ss-tool-btn" id="ssFitToggleBtn" onclick="toggleSSFitMode()" data-tooltip="Oran: Sığdır / Ekranı Kapla">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          </button>
+          <button class="ss-tool-btn" id="ssPipToggleBtn" onclick="toggleSSPiP()" data-tooltip="Masaüstü Resim-içinde-Resim (PiP)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="9" width="8" height="6" rx="1" fill="currentColor"/>
             </svg>
           </button>
-          <button class="ss-tool-btn" id="ssFsToggleBtn" onclick="toggleSSFullscreen()" title="Tam Ekran">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+          <button class="ss-tool-btn" id="ssFsToggleBtn" onclick="toggleSSFullscreen()" data-tooltip="Tam Ekran Modu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
             </svg>
           </button>
-          <button class="ss-close-btn" onclick="closeScreenShareViewer()" title="Kapat">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+          <button class="ss-close-btn" onclick="closeScreenShareViewer()" data-tooltip="Yayını Kapat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
@@ -1391,35 +1750,150 @@ function showScreenShareViewer(sharerUsername, stream, isOwnStream = false) {
       </div>
 
       <div class="ss-video-container">
-        <video id="ssVideo" class="ss-video" autoplay playsinline muted></video>
+        <div id="ssVideoStatus" style="position: absolute; z-index: 2; color: #a0a5ba; font-size: 13px; font-weight: 600; text-align: center; pointer-events: none;">🎥 Yayına bağlanılıyor...</div>
+        <video id="ssVideo" class="ss-video" autoplay playsinline></video>
       </div>
     `;
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('open'));
+    makeOverlayDraggable(overlay, overlay.querySelector('#ssToolbar'));
   }
 
+  overlay.style.display = 'flex';
+  requestAnimationFrame(() => overlay.classList.add('open'));
+
+  const sharerName = document.getElementById('ssSharerName');
+  if (sharerName) sharerName.textContent = isOwnStream ? 'Ekranınız (Siz)' : `@${sharerUsername} Yayını`;
+
+  const statusText = document.getElementById('ssVideoStatus');
   const video = document.getElementById('ssVideo');
   if (video) {
-    video.muted = true;
-    if (video.srcObject !== stream) video.srcObject = stream;
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        const unlock = () => {
-          video?.play().catch(() => {});
-          document.removeEventListener('click', unlock);
-          document.removeEventListener('touchstart', unlock);
-        };
-        document.addEventListener('click', unlock);
-        document.addEventListener('touchstart', unlock);
+    if (!video._pipEventsInit) {
+      video._pipEventsInit = true;
+      video.addEventListener('enterpictureinpicture', () => {
+        const overlay = document.getElementById('screenShareOverlay');
+        if (overlay) overlay.style.display = 'none';
       });
+      video.addEventListener('leavepictureinpicture', () => {
+        const overlay = document.getElementById('screenShareOverlay');
+        if (overlay) overlay.style.display = 'flex';
+      });
+    }
+
+    if (stream) {
+      if (statusText) statusText.style.display = 'none';
+      attachStreamToVideo(video, stream, isOwnStream);
+    } else if (statusText) {
+      statusText.style.display = 'block';
+      statusText.textContent = `🎥 @${sharerUsername} kullanıcısının yayınına bağlanılıyor...`;
     }
   }
 
-  const sharerName = document.getElementById('ssSharerName');
-  if (sharerName) sharerName.textContent = isOwnStream ? 'Ekranınız (Siz)' : sharerUsername;
-
   window._ssCurrentSharer = sharerUsername;
+}
+
+window._ssAudioContext = null;
+window._ssGainNode = null;
+
+function setSSVolume(val) {
+  const value = parseInt(val);
+  const valDisplay = document.getElementById('ssVolumeValue');
+  if (valDisplay) valDisplay.textContent = `${value}%`;
+
+  const video = document.getElementById('ssVideo');
+  if (!video) return;
+
+  if (value === 0) {
+    video.muted = true;
+  } else {
+    video.muted = false;
+    if (value <= 100) {
+      video.volume = value / 100;
+      if (window._ssGainNode) window._ssGainNode.gain.value = 1.0;
+    } else {
+      video.volume = 1.0;
+      if (video.srcObject && !window._ssGainNode) {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            window._ssAudioContext = new AudioContext();
+            const source = window._ssAudioContext.createMediaStreamSource(video.srcObject);
+            window._ssGainNode = window._ssAudioContext.createGain();
+            source.connect(window._ssGainNode);
+            window._ssGainNode.connect(window._ssAudioContext.destination);
+          }
+        } catch(e) {
+          console.warn('[AudioBoost] Gain node creation error:', e);
+        }
+      }
+      if (window._ssGainNode) {
+        window._ssGainNode.gain.value = value / 100;
+      }
+    }
+  }
+
+  const icon = document.getElementById('ssVolumeIcon');
+  if (icon) {
+    if (video.muted || value === 0) {
+      icon.innerHTML = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`;
+    } else {
+      icon.innerHTML = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>`;
+    }
+  }
+}
+
+function takeSSSnapshot() {
+  const video = document.getElementById('ssVideo');
+  if (!video || !video.videoWidth || !video.videoHeight) {
+    showToast('Snapshot için aktif video yayını bulunamadı.');
+    return;
+  }
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    ctx.font = 'bold 16px -apple-system, sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 6;
+    ctx.fillText(`BLUNK LIVE — ${new Date().toLocaleTimeString()}`, 20, canvas.height - 20);
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `blunk_snapshot_${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    const overlay = document.getElementById('screenShareOverlay');
+    if (overlay) {
+      const flash = document.createElement('div');
+      flash.style.cssText = 'position: absolute; inset: 0; background: #ffffff; opacity: 0.75; z-index: 999; pointer-events: none; transition: opacity 0.3s ease;';
+      overlay.appendChild(flash);
+      requestAnimationFrame(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 350); });
+    }
+
+    showToast('📸 Ekran alıntısı başarıyla indirildi!');
+  } catch(err) {
+    console.warn('[Snapshot] Error:', err);
+    showToast('Ekran alıntısı alınamadı.');
+  }
+}
+
+function toggleSSAudioMute() {
+  const slider = document.getElementById('ssVolumeSlider');
+  const video = document.getElementById('ssVideo');
+  if (!video) return;
+
+  if (video.muted) {
+    const prevVal = slider ? slider.value : '100';
+    setSSVolume(prevVal > 0 ? prevVal : '100');
+  } else {
+    setSSVolume(0);
+  }
 }
 
 function closeScreenShareViewer() {
@@ -1431,7 +1905,7 @@ function closeScreenShareViewer() {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-    overlay.classList.remove('open', 'mini-mode');
+    overlay.classList.remove('open', 'mini-mode', 'is-fullscreen', 'cover-fit');
     setTimeout(() => { try { overlay.style.display = 'none'; } catch(e){} }, 300);
   }
 
@@ -1443,17 +1917,62 @@ function closeScreenShareViewer() {
   window._ssCurrentSharer = null;
 }
 
+function toggleSSFitMode() {
+  const overlay = document.getElementById('screenShareOverlay');
+  if (!overlay) return;
+  const isContain = overlay.classList.toggle('contain-fit');
+  showToast(isContain ? 'Görüntü Modu: Orantılı Sığdır (Yan Boşluklu)' : 'Görüntü Modu: Ekranı Kapla (Siyah Boşluksuz)');
+}
+
+function toggleSSMiniMode() {
+  const overlay = document.getElementById('screenShareOverlay');
+  if (!overlay) return;
+  const isMini = overlay.classList.toggle('mini-mode');
+  if (isMini) {
+    overlay.style.transform = 'none';
+    overlay.style.top = Math.max(20, window.innerHeight - 330) + 'px';
+    overlay.style.left = Math.max(20, window.innerWidth - 480) + 'px';
+    overlay.style.width = '460px';
+    overlay.style.height = '290px';
+  } else {
+    overlay.style.top = '50%';
+    overlay.style.left = '50%';
+    overlay.style.transform = 'translate(-50%, -50%)';
+    overlay.style.width = '880px';
+    overlay.style.height = '520px';
+  }
+  showToast(isMini ? 'Küçük kayan pencere moduna geçildi' : 'Varsayılan pencere moduna geçildi');
+}
+
 function toggleSSFullscreen() {
   const overlay = document.getElementById('screenShareOverlay');
-  const video = document.getElementById('ssVideo');
-  const target = overlay || video;
-  if (!target) return;
-  if (!document.fullscreenElement) {
-    target.requestFullscreen?.().catch(() => {});
+  if (!overlay) return;
+
+  if (!document.fullscreenElement && !overlay.classList.contains('is-fullscreen')) {
+    if (overlay.requestFullscreen) {
+      overlay.requestFullscreen().catch(() => {
+        overlay.classList.add('is-fullscreen');
+      });
+    } else {
+      overlay.classList.add('is-fullscreen');
+    }
   } else {
-    document.exitFullscreen?.().catch(() => {});
+    if (document.exitFullscreen && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    overlay.classList.remove('is-fullscreen');
   }
 }
+
+document.addEventListener('fullscreenchange', () => {
+  const overlay = document.getElementById('screenShareOverlay');
+  if (!overlay) return;
+  if (document.fullscreenElement === overlay) {
+    overlay.classList.add('is-fullscreen');
+  } else {
+    overlay.classList.remove('is-fullscreen');
+  }
+});
 
 async function toggleSSPiP() {
   const video = document.getElementById('ssVideo');
@@ -1461,7 +1980,7 @@ async function toggleSSPiP() {
   try {
     if (document.pictureInPictureElement) {
       await document.exitPictureInPicture();
-    } else if (document.pictureInPictureEnabled && video.readyState >= 2) {
+    } else if (document.pictureInPictureEnabled) {
       await video.requestPictureInPicture();
     } else {
       showToast('Picture-in-Picture bu tarayıcıda desteklenmiyor.');
@@ -1472,20 +1991,26 @@ async function toggleSSPiP() {
   }
 }
 
-function toggleSSMiniMode() {
-  const overlay = document.getElementById('screenShareOverlay');
-  if (!overlay) return;
-  const isMini = overlay.classList.toggle('mini-mode');
-  showToast(isMini ? 'Küçük kayan pencere moduna geçildi' : 'Tam ekrana geçildi');
-}
-
 // ─── SCREEN SHARE STATE POLLING ──────────────────────────────
 window._prevSharers = [];
 
 function startScreenShareStatePolling(partyId) {
+  let pingCounter = 0;
+  window._ssMissingCount = 0;
+
   const poll = async () => {
     if (!window._currentPartyId) return;
     try {
+      // Keep alive own screen share on every 2nd cycle (4s)
+      if (window._screenStream && ++pingCounter >= 2) {
+        pingCounter = 0;
+        fetch(`/api/parties/${partyId}/screenshare-state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sharing: true, channelId: window._currentChannelId })
+        }).catch(() => {});
+      }
+
       const res = await fetch(`/api/parties/${partyId}/screenshare-state`);
       if (!res.ok) return;
       const states = await res.json();
@@ -1504,9 +2029,20 @@ function startScreenShareStatePolling(partyId) {
       });
       window._prevSharers = currentSharers;
 
-      if (window._ssCurrentSharer && !states[window._ssCurrentSharer]) {
-        closeScreenShareViewer();
-        showToast('Ekran paylaşımı sona erdi.');
+      if (window._ssCurrentSharer) {
+        const isOwnActiveStream = (window._ssCurrentSharer === currentUser?.username) && window._screenStream && window._screenStream.active;
+        if (!isOwnActiveStream && !states[window._ssCurrentSharer]) {
+          window._ssMissingCount = (window._ssMissingCount || 0) + 1;
+          if (window._ssMissingCount >= 3) {
+            window._ssMissingCount = 0;
+            closeScreenShareViewer();
+            showToast('Ekran paylaşımı sona erdi.');
+          }
+        } else {
+          window._ssMissingCount = 0;
+        }
+      } else {
+        window._ssMissingCount = 0;
       }
     } catch(e){}
   };
@@ -1559,10 +2095,9 @@ function updateScreenShareBadges(states) {
       }
     }
 
-    const memberCard = document.getElementById(`member-card-${username}`);
-    if (memberCard) {
-      const badgeBox = memberCard.querySelector(`[id="voice-badge-${username}"]`) || memberCard;
-      if (badgeBox) {
+    const badgeBoxes = document.querySelectorAll(`[id="voice-badge-${username}"]`);
+    if (badgeBoxes.length > 0) {
+      badgeBoxes.forEach(badgeBox => {
         let mBadge = badgeBox.querySelector(`.ss-member-badge[data-sharer="${username}"]`);
         if (!mBadge) {
           mBadge = document.createElement('button');
@@ -1580,6 +2115,28 @@ function updateScreenShareBadges(states) {
             </svg>
           `;
           badgeBox.appendChild(mBadge);
+        }
+      });
+    } else {
+      const memberCard = document.getElementById(`member-card-${username}`);
+      if (memberCard) {
+        let mBadge = memberCard.querySelector(`.ss-member-badge[data-sharer="${username}"]`);
+        if (!mBadge) {
+          mBadge = document.createElement('button');
+          mBadge.className = 'ss-member-badge icon-only';
+          mBadge.setAttribute('data-sharer', username);
+          mBadge.setAttribute('data-tooltip', tooltipText);
+          mBadge.onclick = (e) => {
+            e.stopPropagation();
+            openStreamViewerForUser(username);
+          };
+          mBadge.innerHTML = `
+            <span class="ss-watch-dot"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+            </svg>
+          `;
+          memberCard.appendChild(mBadge);
         }
       }
     }

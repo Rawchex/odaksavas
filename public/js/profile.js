@@ -84,39 +84,26 @@ function renderMyProfile(user) {
       : `<div class="profile-post-grid">${reposts.map(p => renderPostGridItem(p, false, true)).join('')}</div>`;
   }
 
-  const isOnline = user.is_online !== undefined ? Boolean(user.is_online) : true;
-  const statusColors = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af' };
-  let userStatusColor = isOnline ? (statusColors[user.status || 'online'] || statusColors.online) : '#9ca3af';
-  if (user.status === 'invisible') userStatusColor = '#9ca3af';
+  const hdrTitle = document.getElementById('myProfileHeaderTitle');
+  if (hdrTitle) hdrTitle.textContent = `@${user.username}`;
 
   content.innerHTML = `
     <div class="profile-insta-header">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="profile-insta-username" style="font-size:18px;">${esc(user.username)}</span>
-          <span class="lvl-badge">LVL ${user.level}</span>
-          <div class="status-dot-indicator" style="background:${userStatusColor}; width:12px; height:12px; border-radius:50%; cursor:pointer;" onclick="openStatusSelector()"></div>
-        </div>
-      </div>
-
       <div class="profile-insta-top">
-        <div class="profile-insta-avatar-col" onclick="document.getElementById('photoUpload').click()">
+        <div class="profile-insta-avatar-col">
           ${renderAvatar(user, 'avatar avatar-xl')}
-          <div class="profile-avatar-edit-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          </div>
         </div>
         <div class="profile-insta-stats-col">
-          <div>
+          <div class="profile-stat-box" onclick="switchProfileTab('posts')" data-tooltip="Gönderilerin">
             <div class="profile-insta-stat-val">${user.post_count || 0}</div>
             <div class="profile-insta-stat-lbl">Gönderi</div>
           </div>
-          <div onclick="openFriendListModal('${esc(user.username)}')" style="cursor:pointer">
-            <div class="profile-insta-stat-val">${user.friend_count || 0}</div>
+          <div class="profile-stat-box" onclick="openFriendListModal('${esc(user.username)}', 'followers')" data-tooltip="Takipçileri Gör">
+            <div class="profile-insta-stat-val">${user.follower_count || user.friend_count || 0}</div>
             <div class="profile-insta-stat-lbl">Takipçi</div>
           </div>
-          <div onclick="openFriendListModal('${esc(user.username)}')" style="cursor:pointer">
-            <div class="profile-insta-stat-val">${user.friend_count || 0}</div>
+          <div class="profile-stat-box" onclick="openFriendListModal('${esc(user.username)}', 'following')" data-tooltip="Takip Edilenleri Gör">
+            <div class="profile-insta-stat-val">${user.following_count || user.friend_count || 0}</div>
             <div class="profile-insta-stat-lbl">Takip</div>
           </div>
         </div>
@@ -130,25 +117,29 @@ function renderMyProfile(user) {
           ${user.weight ? `<span>⚖️ ${user.weight}kg</span>` : ''}
           <span>⏱️ ${fmtTime(user.total_focus_time || 0)}</span>
         </div>
-        <div class="profile-xp-row">
-          <div class="xp-bar-wrap" style="height:2px;background:#1a1a1a;flex:1">
-            <div class="xp-bar-fill" style="width:${progress.percentage}%;background:#fff;height:100%"></div>
+        <div class="profile-xp-row" style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+          <span class="lvl-badge">LVL ${user.level}</span>
+          <div class="xp-bar-wrap" style="height:4px;background:rgba(255,255,255,0.08);flex:1;border-radius:99px;overflow:hidden;">
+            <div class="xp-bar-fill" style="width:${progress.percentage}%;background:linear-gradient(90deg, #a855f7, #ec4899);height:100%;border-radius:99px;"></div>
           </div>
-          <span class="profile-xp-label">${progress.xpInLevel}/${progress.xpNeededForNext} XP</span>
+          <span class="profile-xp-label" style="font-size:11px; font-weight:700; color:var(--text-3);">${progress.xpInLevel}/${progress.xpNeededForNext} XP</span>
         </div>
       </div>
     </div>
 
     <div class="profile-insta-tabs">
-      <div class="profile-insta-tab ${_profileActiveTab === 'posts' ? 'active' : ''}" onclick="switchProfileTab('posts')">
-        <svg viewBox="0 0 24 24" fill="${_profileActiveTab === 'posts' ? '#fff' : '#555'}" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      </div>
-      <div class="profile-insta-tab ${_profileActiveTab === 'sessions' ? 'active' : ''}" onclick="switchProfileTab('sessions')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="${_profileActiveTab === 'sessions' ? '#fff' : '#555'}" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-      </div>
-      <div class="profile-insta-tab ${_profileActiveTab === 'reposts' ? 'active' : ''}" onclick="switchProfileTab('reposts')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="${_profileActiveTab === 'reposts' ? '#fff' : '#555'}" stroke-width="2" width="18" height="18"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      </div>
+      <button class="profile-insta-tab ${_profileActiveTab === 'posts' ? 'active' : ''}" onclick="switchProfileTab('posts')" data-tooltip="Gönderiler" data-tooltip-pos="top">
+        <svg viewBox="0 0 24 24" fill="${_profileActiveTab === 'posts' ? '#ffffff' : 'none'}" stroke="${_profileActiveTab === 'posts' ? '#ffffff' : '#888888'}" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>GÖNDERİLER</span>
+      </button>
+      <button class="profile-insta-tab ${_profileActiveTab === 'sessions' ? 'active' : ''}" onclick="switchProfileTab('sessions')" data-tooltip="Odak Oturumları" data-tooltip-pos="top">
+        <svg viewBox="0 0 24 24" fill="none" stroke="${_profileActiveTab === 'sessions' ? '#ffffff' : '#888888'}" stroke-width="2.2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <span>OTURUMLAR</span>
+      </button>
+      <button class="profile-insta-tab ${_profileActiveTab === 'reposts' ? 'active' : ''}" onclick="switchProfileTab('reposts')" data-tooltip="Repostlar" data-tooltip-pos="top">
+        <svg viewBox="0 0 24 24" fill="none" stroke="${_profileActiveTab === 'reposts' ? '#ffffff' : '#888888'}" stroke-width="2.2" width="18" height="18"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        <span>REPOSTLAR</span>
+      </button>
     </div>
 
     <div id="profileTabContent">
@@ -170,7 +161,7 @@ function renderPostGridItem(p, isOwn, isRepost) {
   const idx = list.findIndex(x => x.id === p.id);
 
   return `
-    <div class="profile-grid-item" onclick="openProfilePostSlider(${idx}, ${!!isOwn}, ${!!isRepost})">
+    <div class="profile-grid-item" onclick="openPostModal(${p.id})">
       ${thumb}
       ${(p.like_count > 0 || p.comment_count > 0) ? `
         <div class="profile-grid-overlay">
@@ -182,10 +173,10 @@ function renderPostGridItem(p, isOwn, isRepost) {
 }
 
 // ============================================================
-// POST DETAIL MODAL — full Instagram-style
+// GLOBAL UNIFIED POST DETAIL MODAL — full Instagram-style
 // ============================================================
-async function openProfilePostDetail(postId, isOwn, isRepost) {
-  // Remove existing
+async function openPostModal(postId, isOwn, isRepost) {
+  // Remove existing modal if any
   const existing = document.getElementById('profilePostPreview');
   if (existing) existing.remove();
 
@@ -200,7 +191,7 @@ async function openProfilePostDetail(postId, isOwn, isRepost) {
 
   const sheet = document.createElement('div');
   sheet.className = 'pdetail-sheet';
-  sheet.innerHTML = '<div class="loading-row">YÜKLENİYOR...</div>';
+  sheet.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">YÜKLENİYOR...</div>';
   el.appendChild(sheet);
   document.body.appendChild(el);
   requestAnimationFrame(() => sheet.classList.add('open'));
@@ -214,14 +205,20 @@ async function openProfilePostDetail(postId, isOwn, isRepost) {
   } catch {
     // Fallback: use cached data
     const list = isRepost ? _profileUserReposts : _profileUserPosts;
-    const post = list.find(p => p.id === postId);
+    const post = (list || []).find(p => p.id === postId);
     if (post) {
       renderPostDetailSheet(sheet, post, isOwn, isRepost);
     } else {
-      sheet.innerHTML = '<div class="empty-state"><div class="empty-title">Yüklenemedi</div></div>';
+      sheet.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">Gönderi yüklenemedi</div></div>';
     }
   }
 }
+
+window.openPostModal = openPostModal;
+function openProfilePostDetail(postId, isOwn, isRepost) {
+  return openPostModal(postId, isOwn, isRepost);
+}
+window.openProfilePostDetail = openProfilePostDetail;
 
 function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   const isSelfPost = post.username === currentUser.username;
@@ -229,14 +226,12 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   const comments = post.comments || [];
   const likers = post.likers || [];
 
-  // Build avatar for post author — use currentUser data if it's own post
   const authorPhoto = isSelfPost ? (currentUser.profile_photo || post.profile_photo) : post.profile_photo;
   const authorObj = { username: post.username, profile_photo: authorPhoto };
 
-  // Likers preview
   const likersHtml = likers.length > 0 ? `
-    <div class="pdetail-likers">
-      <div class="pdetail-likers-avatars">
+    <div class="pdetail-likers" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:#bbb">
+      <div class="pdetail-likers-avatars" style="display:flex;margin-right:2px">
         ${likers.slice(0, 3).map(l => renderAvatar({ username: l.username, profile_photo: l.profile_photo }, 'avatar avatar-xs')).join('')}
       </div>
       <span class="pdetail-likers-text">
@@ -245,7 +240,6 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
     </div>
   ` : '';
 
-  // Comments grouping
   const parents = comments.filter(c => !c.parent_id || c.parent_id === 'null' || c.parent_id === '0' || c.parent_id === 0);
   const childrenMap = {};
   comments.forEach(c => {
@@ -257,75 +251,103 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   });
 
   const commentsHtml = parents.length === 0
-    ? `<div class="pdetail-no-comment">Henüz yorum yok</div>`
+    ? `<div class="pdetail-no-comment" style="color:#666;font-size:13px;text-align:center;padding:24px 0">Henüz yorum yok. İlk yorumu sen yaz!</div>`
     : parents.map(c => renderPdetailCommentTree(c, childrenMap[c.id] || [], post)).join('');
 
   sheet.innerHTML = `
-    <div class="pdetail-header">
-      <div class="pdetail-author">
-        ${renderAvatar(authorObj, 'avatar avatar-sm')}
-        <span class="pdetail-author-name">${esc(post.username)}</span>
+    <div class="pdetail-modal-container">
+      <!-- Media / Content Column (Left) -->
+      <div class="pdetail-media-column">
+        ${post.image ? `
+          <div class="pdetail-image-box">
+            <img src="${post.image}" class="pdetail-image" alt="Gönderi görseli">
+          </div>
+        ` : `
+          <div class="pdetail-text-card-content">
+            <p>${esc(displayContent)}</p>
+          </div>
+        `}
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        ${(isOwn || isSelfPost) && !isRepost ? `
-          <button class="pdetail-menu-btn" onclick="openDetailMenu(${post.id})">
-            <span></span><span></span><span></span>
-          </button>` : ''}
-        ${isRepost ? `
-          <button class="pdetail-menu-btn" onclick="profileRemoveRepostFromDetail(${post.id})">
-            <span></span><span></span><span></span>
-          </button>` : ''}
-        <button onclick="closeProfilePostPreview()" class="pdetail-close-btn">✕</button>
+
+      <!-- Info / Comments Column (Right) -->
+      <div class="pdetail-info-column">
+        <!-- Header -->
+        <div class="pdetail-header">
+          <div class="pdetail-author" onclick="openUserPage('${esc(post.username)}')">
+            ${renderAvatar(authorObj, 'avatar avatar-sm')}
+            <div style="display:flex;flex-direction:column;line-height:1.2">
+              <span class="pdetail-author-name">${esc(post.username)}</span>
+              <span style="font-size:10px;color:#777">${fmtPostTime(post.created_at)}</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${(isOwn || isSelfPost) && !isRepost ? `
+              <button class="pdetail-menu-btn" onclick="openDetailMenu(${post.id})" data-tooltip="Seçenekler" data-tooltip-pos="bottom">
+                <span></span><span></span><span></span>
+              </button>` : ''}
+            ${isRepost ? `
+              <button class="pdetail-menu-btn" onclick="profileRemoveRepostFromDetail(${post.id})" data-tooltip="Repostu Kaldır" data-tooltip-pos="bottom">
+                <span></span><span></span><span></span>
+              </button>` : ''}
+            <button onclick="closeProfilePostPreview()" class="pdetail-close-btn" data-tooltip="Kapat" data-tooltip-pos="bottom" aria-label="Kapat">✕</button>
+          </div>
+        </div>
+
+        <!-- Scrollable Middle Section (Caption + Likers + Comments) -->
+        <div class="pdetail-comments-scroll" id="pdetailCommentsScroll-${post.id}">
+          ${displayContent && post.image ? `
+            <div class="pdetail-caption" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06)">
+              ${renderAvatar(authorObj, 'avatar avatar-xs')}
+              <div style="font-size:13px;line-height:1.4;color:#eee">
+                <strong style="color:#fff;margin-right:6px;cursor:pointer" onclick="openUserPage('${esc(post.username)}')">${esc(post.username)}</strong>
+                ${esc(displayContent)}
+              </div>
+            </div>
+          ` : ''}
+
+          ${likersHtml}
+
+          <div class="pdetail-comments-section" id="pdetailComments-${post.id}">
+            ${commentsHtml}
+          </div>
+        </div>
+
+        <!-- Bottom Panel (Actions + Counts + Reply Bar + Comment Input) -->
+        <div class="pdetail-bottom-panel">
+          <div class="pdetail-actions">
+            <div class="pdetail-action-left">
+              <button class="pdetail-action-btn ${post.user_liked ? 'liked' : ''}" onclick="pdetailLike(${post.id}, this)" data-tooltip="${post.user_liked ? 'Beğeniyi Kaldır' : 'Beğen'}" data-tooltip-pos="top">
+                <svg viewBox="0 0 24 24" fill="${post.user_liked ? '#ff3b30' : 'none'}" stroke="${post.user_liked ? '#ff3b30' : 'currentColor'}" stroke-width="2" width="24" height="24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+              <button class="pdetail-action-btn" onclick="focusDetailComment(${post.id})" data-tooltip="Yorum Yap" data-tooltip-pos="top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </button>
+              <button class="pdetail-action-btn ${(post.user_reposted || isRepost) ? 'reposted' : ''}" onclick="pdetailRepost(${post.id}, this)" data-tooltip="${(post.user_reposted || isRepost) ? 'Repostu Kaldır' : 'Repost Et'}" data-tooltip-pos="top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="${(post.user_reposted || isRepost) ? '#32d74b' : 'currentColor'}" stroke-width="2" width="22" height="22"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              </button>
+              <button class="pdetail-action-btn" onclick="openSharePostModal(${post.id})" data-tooltip="Gönderiyi Paylaş" data-tooltip-pos="top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="pdetail-counts">
+            <span id="pdetail-like-count">${post.like_count || 0} beğeni</span>
+            <span style="color:var(--text-3)">·</span>
+            <span>${post.comment_count || 0} yorum</span>
+            <span style="color:var(--text-3)">·</span>
+            <span id="pdetail-repost-count-${post.id}">${post.repost_count || 0} repost</span>
+          </div>
+
+          <div id="pdetail-reply-bar-${post.id}" class="pdetail-reply-bar" style="display:none"></div>
+
+          <div class="pdetail-comment-input-row">
+            ${renderAvatar(currentUser, 'avatar avatar-xs')}
+            <input id="pdetailCommentInput-${post.id}" class="pdetail-comment-input" placeholder="Yorum ekle..." onkeydown="if(event.key==='Enter') pdetailComment(${post.id})">
+            <button class="pdetail-comment-send" onclick="pdetailComment(${post.id})">Gönder</button>
+          </div>
+        </div>
       </div>
-    </div>
-
-    ${post.image ? `<img src="${post.image}" class="pdetail-image">` : `
-      <div class="pdetail-text-card-content">
-        <p>${esc(displayContent)}</p>
-      </div>
-    `}
-
-    <div class="pdetail-actions">
-      <div class="pdetail-action-left">
-        <button class="pdetail-action-btn ${post.user_liked ? 'liked' : ''}" onclick="pdetailLike(${post.id}, this)">
-          <svg viewBox="0 0 24 24" fill="${post.user_liked ? '#ff3b30' : 'none'}" stroke="${post.user_liked ? '#ff3b30' : 'currentColor'}" stroke-width="2" width="24" height="24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-        </button>
-        <button class="pdetail-action-btn" onclick="focusDetailComment(${post.id})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </button>
-        <button class="pdetail-action-btn ${(post.user_reposted || isRepost) ? 'reposted' : ''}" onclick="pdetailRepost(${post.id}, this)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="${(post.user_reposted || isRepost) ? '#32d74b' : 'currentColor'}" stroke-width="2" width="22" height="22"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-        </button>
-        <button class="pdetail-action-btn" onclick="openSharePostModal(${post.id})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-        </button>
-      </div>
-      <div class="pdetail-counts">
-        <span id="pdetail-like-count">${post.like_count || 0} beğeni</span>
-        <span style="color:var(--text-3)">·</span>
-        <span>${post.comment_count || 0} yorum</span>
-        <span style="color:var(--text-3)">·</span>
-        <span id="pdetail-repost-count-${post.id}">${post.repost_count || 0} repost</span>
-        <span style="color:var(--text-3)">·</span>
-        <span>${post.views || 0} görüntülenme</span>
-      </div>
-    </div>
-
-    ${displayContent && post.image ? `<div class="pdetail-content"><strong>${esc(post.username)}</strong> ${esc(displayContent)}</div>` : ''}
-
-    ${likersHtml}
-
-    <div class="pdetail-meta">${fmtPostTime(post.created_at)}</div>
-
-    <div id="pdetail-reply-bar-${post.id}" style="display:none"></div>
-    <div class="pdetail-comments-section" id="pdetailComments-${post.id}">
-      ${commentsHtml}
-    </div>
-
-    <div class="pdetail-comment-input-row">
-      ${renderAvatar(currentUser, 'avatar avatar-xs')}
-      <input id="pdetailCommentInput-${post.id}" class="pdetail-comment-input" placeholder="Yorum ekle..." onkeydown="if(event.key==='Enter') pdetailComment(${post.id})">
-      <button class="pdetail-comment-send" onclick="pdetailComment(${post.id})">Gönder</button>
     </div>
 
     <!-- Detail 3-dot menu panel -->
@@ -377,7 +399,6 @@ function pdetailEditPost(postId, currentContent) {
   const el = document.createElement('div');
   el.id = 'pdetailEditSheet';
   el.className = 'profile-edit-modal';
-  el.style.zIndex = '970';
   el.onclick = (e) => { if (e.target === el) el.remove(); };
 
   const inner = document.createElement('div');
@@ -385,25 +406,35 @@ function pdetailEditPost(postId, currentContent) {
 
   const header = document.createElement('div');
   header.className = 'profile-edit-modal-header';
-  header.innerHTML = `<span>GÖNDERİYİ DÜZENLE</span>`;
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
-  closeBtn.style.cssText = 'background:none;border:none;color:#666;font-size:18px;cursor:pointer';
-  closeBtn.onclick = () => el.remove();
-  header.appendChild(closeBtn);
+  header.innerHTML = `
+    <span>GÖNDERİYİ DÜZENLE</span>
+    <button class="profile-edit-modal-close" onclick="document.getElementById('pdetailEditSheet')?.remove()">✕</button>
+  `;
+
+  const body = document.createElement('div');
+  body.className = 'profile-edit-modal-body';
 
   const textarea = document.createElement('textarea');
   textarea.className = 'profile-edit-modal-textarea';
-  textarea.value = currentContent;
-  textarea.placeholder = 'Ne düşünüyorsun?';
+  textarea.value = currentContent || '';
+  textarea.placeholder = 'Gönderi içeriğinizi düzenleyin...';
+  body.appendChild(textarea);
+
+  const footer = document.createElement('div');
+  footer.className = 'profile-edit-modal-footer';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'profile-edit-modal-cancel';
+  cancelBtn.textContent = 'İptal';
+  cancelBtn.onclick = () => el.remove();
 
   const saveBtn = document.createElement('button');
-  saveBtn.className = 'mono-btn-primary';
-  saveBtn.textContent = 'KAYDET';
+  saveBtn.className = 'profile-edit-modal-save';
+  saveBtn.textContent = 'Kaydet';
   saveBtn.onclick = async () => {
     const content = textarea.value.trim();
     saveBtn.disabled = true;
-    saveBtn.textContent = 'KAYDEDİLİYOR...';
+    saveBtn.textContent = 'Kaydediliyor...';
     try {
       const res = await fetch(`/api/posts/${postId}`, {
         method: 'PUT',
@@ -411,27 +442,33 @@ function pdetailEditPost(postId, currentContent) {
         body: JSON.stringify({ content })
       });
       if (res.ok) {
-        showToast('Güncellendi');
+        showToast('Gönderi güncellendi');
         el.remove();
-        closeProfilePostPreview();
-        loadMyProfile();
+        openPostModal(postId);
+        if (typeof loadFeed === 'function') loadFeed();
+        if (typeof loadMyProfile === 'function') loadMyProfile();
       } else {
         showToast('Güncellenemedi');
         saveBtn.disabled = false;
-        saveBtn.textContent = 'KAYDET';
+        saveBtn.textContent = 'Kaydet';
       }
     } catch {
       showToast('Bağlantı hatası');
       saveBtn.disabled = false;
-      saveBtn.textContent = 'KAYDET';
+      saveBtn.textContent = 'Kaydet';
     }
   };
 
+  footer.appendChild(cancelBtn);
+  footer.appendChild(saveBtn);
+
   inner.appendChild(header);
-  inner.appendChild(textarea);
-  inner.appendChild(saveBtn);
+  inner.appendChild(body);
+  inner.appendChild(footer);
   el.appendChild(inner);
   document.body.appendChild(el);
+
+  setTimeout(() => textarea.focus(), 50);
 }
 
 // Delete from detail
@@ -604,13 +641,17 @@ function renderPdetailReplyBar(postId) {
 function togglePdetailRepliesContainer(btn, parentId) {
   const container = document.getElementById(`pdetail-replies-list-${parentId}`);
   if (!container) return;
-  const isHidden = container.style.display === 'none' || !container.style.display;
-  if (isHidden) {
-    container.style.display = 'flex';
-    btn.querySelector('.text').textContent = 'Yanıtları gizle';
+  const isOpen = container.classList.contains('open');
+  if (!isOpen) {
+    container.classList.add('open');
+    if (btn && btn.querySelector('.text')) {
+      btn.querySelector('.text').textContent = 'Yanıtları gizle';
+    }
   } else {
-    container.style.display = 'none';
-    btn.querySelector('.text').textContent = `Yanıtları gör (${container.children.length})`;
+    container.classList.remove('open');
+    if (btn && btn.querySelector('.text')) {
+      btn.querySelector('.text').textContent = `Yanıtları gör (${container.children.length})`;
+    }
   }
 }
 
@@ -696,7 +737,7 @@ function renderPdetailCommentTree(c, replies, post) {
             <span class="line" style="display:inline-block;width:16px;height:1px;background:#333"></span>
             <span class="text">Yanıtları gör (${replies.length})</span>
           </button>
-          <div class="pdetail-replies-list" id="pdetail-replies-list-${c.id}" style="display:none;padding-left:10px;border-left:1px solid #222;margin-top:6px;flex-direction:column;gap:8px">
+          <div class="pdetail-replies-list" id="pdetail-replies-list-${c.id}">
             ${repliesHtml}
           </div>
         </div>
@@ -927,7 +968,7 @@ async function uploadProfilePhoto(input) {
   input.value = '';
 }
 // ============================================================
-async function setUserStatus(status) {
+async function setUserStatus(status, isAuto = false) {
   try {
     const res = await fetch('/api/me/status', {
       method: 'PATCH',
@@ -936,15 +977,15 @@ async function setUserStatus(status) {
     });
     if (res.ok) {
       currentUser.status = status;
-      closeStatusSelector();
-      loadMyProfile(); // Reload header to update dot color
+      if (!isAuto && typeof closeStatusSelector === 'function') closeStatusSelector();
       if (typeof updatePresenceUI === 'function') updatePresenceUI();
-      showToast('Durum güncellendi');
+      if (!isAuto) showToast('Durum güncellendi');
+      if (typeof loadMyProfile === 'function') loadMyProfile();
     } else {
-      showToast('Güncellenemedi');
+      if (!isAuto) showToast('Güncellenemedi');
     }
   } catch {
-    showToast('Bağlantı hatası');
+    if (!isAuto) showToast('Bağlantı hatası');
   }
 }
 
