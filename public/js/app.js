@@ -75,7 +75,7 @@ window.addEventListener('focus', () => {
       if (d.success) {
         setTimeout(() => {
           showToast('Davet bağlantısı ile odaya katıldınız!');
-          if (typeof openPartyUI === 'function') openPartyUI(d.partyId);
+          if (typeof setActiveParty === 'function') setActiveParty(d.partyId);
         }, 1000);
       }
     }).catch(() => {});
@@ -123,7 +123,99 @@ function showLogin() {
   setTimeout(() => {
     const inp = document.getElementById('usernameInput');
     if (inp) inp.focus();
+    initGoogleSignIn();
   }, 100);
+}
+
+// ─── GOOGLE AUTH INTEGRATION ─────────────────────────────────
+let _googleGsiInitialized = false;
+
+function initGoogleSignIn() {
+  const clientId = window.GOOGLE_CLIENT_ID;
+  if (!clientId || clientId.includes('demo') || typeof google === 'undefined' || !google.accounts) {
+    return; // Do not initialize with dummy/demo IDs to avoid Google console 403 errors
+  }
+  if (_googleGsiInitialized) return;
+
+  try {
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleGoogleAuthCallback,
+      auto_select: false,
+      use_fedcm_for_prompt: true
+    });
+    _googleGsiInitialized = true;
+    if (!currentUser) {
+      google.accounts.id.prompt();
+    }
+  } catch (e) {
+    console.warn('Google Sign-In init warn:', e);
+  }
+}
+
+window.triggerGoogleSignIn = function() {
+  const clientId = window.GOOGLE_CLIENT_ID;
+  if (!clientId || clientId.includes('demo')) {
+    if (typeof showToast === 'function') {
+      showToast('Google ile Giriş yapabilmek için geçerli bir Google Client ID eklenmesi gerekmektedir.');
+    }
+    return;
+  }
+
+  if (typeof google === 'undefined' || !google.accounts) {
+    if (typeof showToast === 'function') showToast('Google Giriş kütüphanesi yükleniyor, lütfen tekrar deneyin.');
+    return;
+  }
+
+  try {
+    if (!_googleGsiInitialized) {
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleAuthCallback,
+        use_fedcm_for_prompt: true
+      });
+      _googleGsiInitialized = true;
+    }
+    google.accounts.id.prompt((notification) => {
+      if (notification && notification.isNotDisplayed()) {
+        const reason = notification.getNotDisplayedReason();
+        if (reason === 'unregistered_origin') {
+          console.warn(`Google Client ID yetkili kaynak uyarısı (${window.location.origin}).`);
+          if (typeof showToast === 'function') {
+            showToast(`Google Giriş için ${window.location.origin} adresi Google Cloud Console'da Yetkili Kaynak (Authorized Origin) olarak eklenmelidir.`);
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Trigger Google Sign-In error:', err);
+  }
+};
+
+async function handleGoogleAuthCallback(response) {
+  if (!response || !response.credential) return;
+  try {
+    if (typeof showToast === 'function') showToast('Google ile giriş yapılıyor...');
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      currentUser = data.user;
+      if (typeof closeRegisterModal === 'function') closeRegisterModal();
+      if (typeof showToast === 'function') showToast('Google ile başarıyla giriş yapıldı! Hoş geldin ' + (currentUser.username || ''));
+      showMainApp();
+    } else {
+      const errMsg = data.error || 'Google ile giriş başarısız.';
+      showAuthAlert(errMsg, 'authAlertBox');
+      showAuthAlert(errMsg, 'registerAlertBox');
+    }
+  } catch (err) {
+    console.error('Google auth callback error:', err);
+    showAuthAlert('Google girişi sırasında bir hata oluştu.', 'authAlertBox');
+  }
 }
 
 function openRegisterModal() {
@@ -410,7 +502,8 @@ function showMainApp() {
     setTimeout(() => showToast('Son oturumun ihlalle sonlandı'), 1000);
   }
 
-  showPage('timer');
+  handleInitialUrlRoute();
+  if (typeof window.startFocusRoomOnboarding === 'function') window.startFocusRoomOnboarding();
   startNotifPoll();
   updateTimerStats();
   startHeartbeat();
@@ -547,7 +640,34 @@ function urlBase64ToUint8Array(base64String) {
 // ============================================================
 let _previousPage = 'timer';
 
-function showPage(name) {
+function getPathForPage(pageName, subPath = '') {
+  const map = {
+    timer: '/sayac',
+    messages: '/mesajlar',
+    feed: '/feed',
+    leaderboard: '/siralama',
+    notifications: '/bildirimler',
+    profile: '/profil'
+  };
+  let base = map[pageName] || '/sayac';
+  if (subPath) {
+    base += '/' + encodeURIComponent(subPath);
+  }
+  return base;
+}
+
+function syncUrlState(pageName, subPath = '', replace = false) {
+  const targetUrl = getPathForPage(pageName, subPath);
+  if (window.location.pathname !== targetUrl) {
+    if (replace) {
+      history.replaceState({ pageName, subPath }, '', targetUrl);
+    } else {
+      history.pushState({ pageName, subPath }, '', targetUrl);
+    }
+  }
+}
+
+function showPage(name, pushState = true, subPath = '') {
   // Hide userProfilePage if switching main pages
   document.getElementById('userProfilePage').style.display = 'none';
 
@@ -561,7 +681,6 @@ function showPage(name) {
   const overlay = document.getElementById('partyFocusOverlay');
   if (overlay && overlay.classList.contains('in-active-party')) {
     if (name !== 'timer') {
-      // Collapse and float if not already collapsed
       if (!overlay.classList.contains('collapsed') && typeof togglePartyFocusOverlay === 'function') {
         togglePartyFocusOverlay();
       }
@@ -570,6 +689,7 @@ function showPage(name) {
 
   const oldPage = document.querySelector('.page.active');
   const newPage = document.getElementById(name + 'Page');
+  if (!newPage) return;
   
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const navBtn = document.getElementById('nav-' + name);
@@ -577,6 +697,10 @@ function showPage(name) {
 
   _previousPage = activePage || 'timer';
   activePage = name;
+
+  if (pushState) {
+    syncUrlState(name, subPath);
+  }
 
   if (name === 'feed')          loadFeed();
   if (name === 'leaderboard')   loadLeaderboard();
@@ -599,9 +723,7 @@ function showPage(name) {
       newPage.style.transform = 'translateY(10px)';
       newPage.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
       
-      // Force reflow
       newPage.offsetHeight;
-      
       newPage.style.opacity = '1';
       newPage.style.transform = 'translateY(0)';
     }, 250);
@@ -612,6 +734,74 @@ function showPage(name) {
     newPage.style.transform = '';
   }
 }
+
+function handleInitialUrlRoute() {
+  const rawPath = window.location.pathname.trim();
+  const path = rawPath.toLowerCase();
+  const parts = path.split('/').filter(Boolean);
+  const rawParts = rawPath.split('/').filter(Boolean);
+  
+  if (parts.length === 0 || parts[0] === 'sayac') {
+    showPage('timer', false);
+  } else if (parts[0] === 'mesajlar') {
+    showPage('messages', false);
+    if (parts[1]) {
+      const target = decodeURIComponent(rawParts[1]);
+      setTimeout(() => {
+        if (target.startsWith('group_')) {
+          const groupId = parseInt(target.replace('group_', ''));
+          if (groupId && typeof openGroupChat === 'function') openGroupChat(groupId);
+        } else {
+          if (typeof openDirectChat === 'function') openDirectChat(target);
+        }
+      }, 350);
+    }
+  } else if (parts[0] === 'feed') {
+    showPage('feed', false);
+  } else if (parts[0] === 'siralama' || parts[0] === 'sira') {
+    showPage('leaderboard', false);
+  } else if (parts[0] === 'bildirimler') {
+    showPage('notifications', false);
+  } else if (parts[0] === 'profil') {
+    showPage('profile', false);
+  } else if (parts[0] === 'u' && parts[1]) {
+    const targetUser = decodeURIComponent(rawParts[1]);
+    showPage('timer', false);
+    setTimeout(() => {
+      if (typeof openUserPage === 'function') openUserPage(targetUser);
+    }, 350);
+  } else if (parts.length > 0) {
+    const reservedRoutes = ['sayac', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'u', 'api', 'uploads', 'css', 'js', 'audio'];
+    if (!reservedRoutes.includes(parts[0])) {
+      const username = decodeURIComponent(rawParts[0]).replace(/^@/, '');
+      showPage('timer', false);
+      setTimeout(() => {
+        if (typeof openUserPage === 'function') openUserPage(username);
+      }, 350);
+    } else {
+      showPage('timer', false);
+    }
+  } else {
+    showPage('timer', false);
+  }
+}
+
+window.addEventListener('popstate', (e) => {
+  if (e.state && e.state.pageName) {
+    showPage(e.state.pageName, false, e.state.subPath || '');
+    if (e.state.pageName === 'messages' && e.state.subPath) {
+      const target = e.state.subPath;
+      if (target.startsWith('group_')) {
+        const groupId = parseInt(target.replace('group_', ''));
+        if (groupId && typeof openGroupChat === 'function') openGroupChat(groupId);
+      } else {
+        if (typeof openDirectChat === 'function') openDirectChat(target);
+      }
+    }
+  } else {
+    handleInitialUrlRoute();
+  }
+});
 
 // ============================================================
 // LEADERBOARD
@@ -938,6 +1128,12 @@ async function openUserPage(username, tab = 'posts') {
     return;
   }
 
+  // Update URL without page reload (use clean /username format)
+  const url = new URL(window.location);
+  url.searchParams.delete('u');
+  url.pathname = `/${username}`;
+  window.history.pushState({}, '', url);
+
   _userPageActiveTab = tab;
   const page = document.getElementById('userProfilePage');
   const content = document.getElementById('userPageContent');
@@ -973,6 +1169,26 @@ function closeUserPage() {
   if (page) page.style.display = 'none';
   const headerActionsEl = document.getElementById('userPageHeaderActions');
   if (headerActionsEl) headerActionsEl.innerHTML = '';
+
+  // Clean profile URL format back to root if needed
+  if (window.location.pathname !== '/' && window.location.pathname !== '') {
+    try {
+      const url = new URL(window.location);
+      url.pathname = '/';
+      window.history.pushState({}, '', url);
+    } catch(e) {}
+  }
+
+  // Strictly hide focus room overlay if not in an active party
+  const overlay = document.getElementById('partyFocusOverlay');
+  if (overlay) {
+    const activePartyId = window._currentPartyId || (typeof _currentPartyId !== 'undefined' ? _currentPartyId : null);
+    if (!activePartyId) {
+      overlay.classList.remove('in-active-party');
+      overlay.style.display = 'none';
+      overlay.style.setProperty('display', 'none', 'important');
+    }
+  }
 }
 
 function renderUserPage(user) {
@@ -1126,15 +1342,12 @@ function renderUserPage(user) {
       <div class="profile-insta-tabs">
         <button class="profile-insta-tab ${_userPageActiveTab==='posts'?'active':''}" onclick="openUserPage('${esc(user.username)}','posts')" data-tooltip="Gönderiler" data-tooltip-pos="top">
           <svg viewBox="0 0 24 24" fill="${_userPageActiveTab==='posts'?'#ffffff':'none'}" stroke="${_userPageActiveTab==='posts'?'#ffffff':'#888888'}" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          <span>GÖNDERİLER</span>
         </button>
         <button class="profile-insta-tab ${_userPageActiveTab==='sessions'?'active':''}" onclick="openUserPage('${esc(user.username)}','sessions')" data-tooltip="Odak Oturumları" data-tooltip-pos="top">
           <svg viewBox="0 0 24 24" fill="none" stroke="${_userPageActiveTab==='sessions'?'#ffffff':'#888888'}" stroke-width="2.2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-          <span>OTURUMLAR</span>
         </button>
         <button class="profile-insta-tab ${_userPageActiveTab==='reposts'?'active':''}" onclick="openUserPage('${esc(user.username)}','reposts')" data-tooltip="Repostlar" data-tooltip-pos="top">
           <svg viewBox="0 0 24 24" fill="none" stroke="${_userPageActiveTab==='reposts'?'#ffffff':'#888888'}" stroke-width="2.2" width="18" height="18"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-          <span>REPOSTLAR</span>
         </button>
       </div>
       <div id="userPageTabContent">${tabHtml}</div>
@@ -1295,12 +1508,24 @@ function renderAvatar(user, classes = 'avatar avatar-sm') {
   if (user && user.username) {
     const isOnline = Boolean(user.is_online) || (user.is_online === undefined && user.status && user.status !== 'offline' && user.status !== 'invisible');
     let color = '#747f8d'; // offline / invisible gray
+    let status = 'offline';
     if (isOnline && user.status !== 'invisible') {
-      const st = user.status || 'online';
-      if (st === 'online') color = '#23a55a';      // Çevrimiçi (yeşil)
-      else if (st === 'away') color = '#faa61a';    // Uzakta (sarı)
-      else if (st === 'dnd') color = '#f23f43';     // Rahatsız Etme (kırmızı)
-      else if (st === 'offline') color = '#747f8d'; // Çevrimdışı (gri)
+      status = user.status || 'online';
+    }
+    if (status === 'online') { color = '#23a55a'; }
+    else if (status === 'away') { color = '#faa61a'; }
+    else if (status === 'dnd') { color = '#f23f43'; }
+    else { color = '#747f8d'; }
+
+    let tooltip = '';
+    if (window._statusTooltips) {
+      const list = window._statusTooltips[status] || window._statusTooltips.offline;
+      const template = list[window._statusTooltipIndex] || list[0];
+      const usernameVal = `@${user.username}`;
+      tooltip = template.replace(/@username/g, usernameVal);
+    } else {
+      const STATUS_TR = { online: 'çevrimiçi', away: 'uzakta', dnd: 'rahatsız etme', invisible: 'çevrimdışı', offline: 'çevrimdışı' };
+      tooltip = `@${user.username} şu anda ${STATUS_TR[status] || 'çevrimdışı'}`;
     }
 
     // Determine dot size based on avatar classes
@@ -1311,10 +1536,13 @@ function renderAvatar(user, classes = 'avatar avatar-sm') {
     else if (classes.includes('avatar-lg')) { dotSize = 14; borderSize = 2.5; }
     else if (classes.includes('avatar-xl')) { dotSize = 16; borderSize = 3; }
 
-    statusDot = `<div class="status-online-dot" style="background:${color}; width:${dotSize}px; height:${dotSize}px; border-radius:50%; position:absolute; bottom:-1px; right:-1px; border:${borderSize}px solid #111214; z-index:2;" title="${isOnline && user.status !== 'invisible' ? (user.status || 'online') : 'offline'}"></div>`;
+    statusDot = `<div class="status-online-dot" style="background:${color}; width:${dotSize}px; height:${dotSize}px; border-radius:50%; position:absolute; bottom:-1px; right:-1px; border:${borderSize}px solid #111214; z-index:5; pointer-events:auto;" data-tooltip="${esc(tooltip)}"></div>`;
   }
 
-  return `<div class="${classes}" style="position:relative; display:inline-flex;">${avatarHtml}${statusDot}</div>`;
+  return `<div class="avatar-container" style="position:relative; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">
+    <div class="${classes}">${avatarHtml}</div>
+    ${statusDot}
+  </div>`;
 }
 
 // ============================================================
@@ -1339,8 +1567,19 @@ function showToast(msg, duration = 2400) {
 activePage = 'timer';
 
 // ============================================================
-// CUSTOM UI MODALS
-// ============================================================
+window.showAlert = function(message) {
+  return new Promise(resolve => {
+    const msgEl = document.getElementById('customAlertMessage');
+    const modal = document.getElementById('customAlertModal');
+    if (msgEl) msgEl.textContent = message;
+    if (modal) modal.classList.add('open');
+    window._resolveAlert = () => {
+      if (modal) modal.classList.remove('open');
+      resolve();
+    };
+  });
+};
+
 window.showConfirm = function(message) {
   return new Promise(resolve => {
     document.getElementById('customConfirmMessage').textContent = message;
@@ -1540,6 +1779,71 @@ function _spmMarkActive(status) {
 }
 
 
+// Global status tooltips data (initialized once per page load)
+window._statusTooltipIndex = window._statusTooltipIndex !== undefined ? window._statusTooltipIndex : Math.floor(Math.random() * 10);
+window._statusTooltips = {
+  online: [
+    "@username buralarda, ortalığı kasıp kavuruyor! (çevrimiçi)",
+    "@username burada ve her an çılgın bir şeyler yapabilir. (çevrimiçi)",
+    "@username radara girdi, gözümüz üstünde! (çevrimiçi)",
+    "@username canavar gibi odaklanmaya hazır bekliyor. (çevrimiçi)",
+    "@username çevrimiçi! Kaçın kurtulun ya da selam verin. (çevrimiçi)",
+    "@username sonunda geldi, artık parti başlayabilir. (çevrimiçi)",
+    "@username piksellerin arasında bir yerde süzülüyor. (çevrimiçi)",
+    "@username çevrimiçi ve odaklanmak için parmaklarını çıtlatıyor. (çevrimiçi)",
+    "@username burada! Ekrana bakmaktan gözleri yaşarmış olabilir. (çevrimiçi)",
+    "@username şu an aktif, klavyesinden alevler çıkıyor! (çevrimiçi)"
+  ],
+  away: [
+    "@username çay tazelemeye gitmiş olabilir mi? (uzakta)",
+    "@username ekran başında ama ruhu başka diyarlarda... (uzakta)",
+    "@username ufak bir mola verdi, hemen döner. (uzakta)",
+    "@username mutfakta gizemli atıştırmalıklar arıyor. (uzakta)",
+    "@username gözlerini dinlendiriyor (ya da uyuyakaldı). (uzakta)",
+    "@username geçici olarak buralardan uzaklaştı. (uzakta)",
+    "@username bilgisayarın başından kahve kokusuna doğru çekildi. (uzakta)",
+    "@username kedisini sevmek için kısa bir ara verdi. (uzakta)",
+    "@username ufuklara dalmış, dönmeyi unutmuş gibi. (uzakta)",
+    "@username şu an burada değil ama kalbi bizimle. (uzakta)"
+  ],
+  dnd: [
+    "@username şu an ultra odak modunda, yaklaşanın canı yanar! (rahatsız etme)",
+    "@username dünyayı kurtarıyor ya da çok önemli bir kod yazıyor. (rahatsız etme)",
+    "@username bildirimleri sessize aldı, derin odaklanma devrede! (rahatsız etme)",
+    "@username şu an kimseyi duymuyor, müzik son ses! (rahatsız etme)",
+    "@username dokunmayın, yoksa odak zinciri kırılacak! (rahatsız etme)",
+    "@username sessizlik yemini etti, odaklanıyor. (rahatsız etme)",
+    "@username işine öyle bir gömüldü ki ışık hızını geçti. (rahatsız etme)",
+    "@username şu an dış dünyaya kapalı, sadece odak! (rahatsız etme)",
+    "@username bildirim canavarlarını kapının dışında bıraktı. (rahatsız etme)",
+    "@username konsantrasyonun doruklarında geziyor, bölmeyin. (rahatsız etme)"
+  ],
+  invisible: [
+    "@username şu an uygulamamızı kullanacak zaman bulamıyor (çevrimdışı)",
+    "@username hayata karışmış, gerçek dünyayı keşfediyor. (çevrimdışı)",
+    "@username piksellerden uzaklaşıp biraz dinlenmeye çekildi. (çevrimdışı)",
+    "@username internetsiz bir adaya düşmüş gibi sessiz... (çevrimdışı)",
+    "@username bilgisayarı kapatıp doğayla buluşmaya gitti. (çevrimdışı)",
+    "@username şu an gizemli bir şekilde ortadan kayboldu. (çevrimdışı)",
+    "@username bataryası bitti ya da fişi çekti. (çevrimdışı)",
+    "@username internet kablosunu kemiren bir kediyle boğuşuyor olabilir. (çevrimdışı)",
+    "@username gerçek dünyadaki görevlerini tamamlamaya çalışıyor. (çevrimdışı)",
+    "@username offline ama geri döndüğünde fırtınalar koparacak! (çevrimdışı)"
+  ],
+  offline: [
+    "@username şu an uygulamamızı kullanacak zaman bulamıyor (çevrimdışı)",
+    "@username hayata karışmış, gerçek dünyayı keşfediyor. (çevrimdışı)",
+    "@username piksellerden uzaklaşıp biraz dinlenmeye çekildi. (çevrimdışı)",
+    "@username internetsiz bir adaya düşmüş gibi sessiz... (çevrimdışı)",
+    "@username bilgisayarı kapatıp doğayla buluşmaya gitti. (çevrimdışı)",
+    "@username şu an gizemli bir şekilde ortadan kayboldu. (çevrimdışı)",
+    "@username bataryası bitti ya da fişi çekti. (çevrimdışı)",
+    "@username internet kablosunu kemiren bir kediyle boğuşuyor olabilir. (çevrimdışı)",
+    "@username gerçek dünyadaki görevlerini tamamlamaya çalışıyor. (çevrimdışı)",
+    "@username offline ama geri döndüğünde fırtınalar koparacak! (çevrimdışı)"
+  ]
+};
+
 function updatePresenceUI() {
   if (!currentUser) return;
   const dot = document.getElementById('statusDot');
@@ -1559,6 +1863,15 @@ function updatePresenceUI() {
   dot.style.boxShadow = `0 0 8px ${color}`;
   dot.style.color = color;
   text.textContent = label.toUpperCase();
+
+  const chip = document.getElementById('timerStatusChip');
+  if (chip) {
+    const list = window._statusTooltips[status] || window._statusTooltips.online;
+    const template = list[window._statusTooltipIndex] || list[0];
+    const usernameVal = currentUser.username ? `@${currentUser.username}` : 'Sen';
+    const finalTooltip = template.replace(/@username/g, usernameVal);
+    chip.setAttribute('data-tooltip', finalTooltip);
+  }
 
   if (typeof _spmMarkActive === 'function') _spmMarkActive(status);
 

@@ -130,15 +130,12 @@ function renderMyProfile(user) {
     <div class="profile-insta-tabs">
       <button class="profile-insta-tab ${_profileActiveTab === 'posts' ? 'active' : ''}" onclick="switchProfileTab('posts')" data-tooltip="Gönderiler" data-tooltip-pos="top">
         <svg viewBox="0 0 24 24" fill="${_profileActiveTab === 'posts' ? '#ffffff' : 'none'}" stroke="${_profileActiveTab === 'posts' ? '#ffffff' : '#888888'}" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-        <span>GÖNDERİLER</span>
       </button>
       <button class="profile-insta-tab ${_profileActiveTab === 'sessions' ? 'active' : ''}" onclick="switchProfileTab('sessions')" data-tooltip="Odak Oturumları" data-tooltip-pos="top">
         <svg viewBox="0 0 24 24" fill="none" stroke="${_profileActiveTab === 'sessions' ? '#ffffff' : '#888888'}" stroke-width="2.2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        <span>OTURUMLAR</span>
       </button>
       <button class="profile-insta-tab ${_profileActiveTab === 'reposts' ? 'active' : ''}" onclick="switchProfileTab('reposts')" data-tooltip="Repostlar" data-tooltip-pos="top">
         <svg viewBox="0 0 24 24" fill="none" stroke="${_profileActiveTab === 'reposts' ? '#ffffff' : '#888888'}" stroke-width="2.2" width="18" height="18"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-        <span>REPOSTLAR</span>
       </button>
     </div>
 
@@ -296,12 +293,8 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
         <!-- Scrollable Middle Section (Caption + Likers + Comments) -->
         <div class="pdetail-comments-scroll" id="pdetailCommentsScroll-${post.id}">
           ${displayContent && post.image ? `
-            <div class="pdetail-caption" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06)">
-              ${renderAvatar(authorObj, 'avatar avatar-xs')}
-              <div style="font-size:13px;line-height:1.4;color:#eee">
-                <strong style="color:#fff;margin-right:6px;cursor:pointer" onclick="openUserPage('${esc(post.username)}')">${esc(post.username)}</strong>
-                ${esc(displayContent)}
-              </div>
+            <div class="pdetail-caption">
+              <strong class="pdetail-caption-author" onclick="openUserPage('${esc(post.username)}')">${esc(post.username)}</strong>${esc(displayContent)}
             </div>
           ` : ''}
 
@@ -318,9 +311,6 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
             <div class="pdetail-action-left">
               <button class="pdetail-action-btn ${post.user_liked ? 'liked' : ''}" onclick="pdetailLike(${post.id}, this)" data-tooltip="${post.user_liked ? 'Beğeniyi Kaldır' : 'Beğen'}" data-tooltip-pos="top">
                 <svg viewBox="0 0 24 24" fill="${post.user_liked ? '#ff3b30' : 'none'}" stroke="${post.user_liked ? '#ff3b30' : 'currentColor'}" stroke-width="2" width="24" height="24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              </button>
-              <button class="pdetail-action-btn" onclick="focusDetailComment(${post.id})" data-tooltip="Yorum Yap" data-tooltip-pos="top">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </button>
               <button class="pdetail-action-btn ${(post.user_reposted || isRepost) ? 'reposted' : ''}" onclick="pdetailRepost(${post.id}, this)" data-tooltip="${(post.user_reposted || isRepost) ? 'Repostu Kaldır' : 'Repost Et'}" data-tooltip-pos="top">
                 <svg viewBox="0 0 24 24" fill="none" stroke="${(post.user_reposted || isRepost) ? '#32d74b' : 'currentColor'}" stroke-width="2" width="22" height="22"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
@@ -353,8 +343,10 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
     <!-- Detail 3-dot menu panel -->
     <div id="pdetailMenuOverlay-${post.id}" class="profile-menu-overlay" onclick="closeDetailMenu(${post.id})" style="display:none"></div>
     <div id="pdetailMenuPanel-${post.id}" class="profile-post-menu-panel" style="display:none">
-      <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(displayContent)}\`)">✏️ Düzenle</button>
-      <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">🗑 Sil</button>
+      <div class="profile-post-menu-title">GÖNDERİ YÖNETİMİ</div>
+      <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(displayContent)}\`)">Düzenle</button>
+      <button class="profile-post-menu-item" onclick="pdetailShareFromMenu(${post.id})">Mesajda paylaş</button>
+      <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">Gönderiyi sil</button>
     </div>
   `;
 
@@ -388,6 +380,11 @@ function closeDetailMenu(postId) {
   const p = document.getElementById(`pdetailMenuPanel-${postId}`);
   if (o) o.style.display = 'none';
   if (p) p.style.display = 'none';
+}
+
+function pdetailShareFromMenu(postId) {
+  closeDetailMenu(postId);
+  openSharePostModal(postId);
 }
 
 // Edit from detail
@@ -841,6 +838,9 @@ function openProfileSettings() {
       if (typeof populateMicDeviceList === 'function') {
         populateMicDeviceList();
       }
+      if (typeof syncVoiceProcessingSettings === 'function') {
+        syncVoiceProcessingSettings();
+      }
     } catch (e) {
       console.warn("Failed to populate mic list inside settings:", e);
     }
@@ -1105,4 +1105,3 @@ async function deleteOwnAccount() {
     if (btn) btn.disabled = false;
   }
 }
-

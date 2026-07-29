@@ -9,15 +9,585 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0b0c0e">
-  <meta name="description" content="BLUNK — Arkadaşlarınla sesli çalışma odalarında odaklan, XP kazan, seviye atla.">
-  <title>BLUNK — Sosyal Odak &amp; Pomodoro Topluluğu</title>
+  <meta name="description" content="BLUNK — Aynı hedefe çalışanlarla tanış, arkadaşlarınla sesli çalışma odalarında Pomodoro yap, XP kazan! YKS, KPSS, ALES, YDT, DGS ve yazılımcılar için ders arkadaşı bulma ve sosyal odaklanma platformu.">
+  <meta name="keywords" content="ders arkadaşı bulma, arkadaşla pomodoro, aynı sınava çalışanları bulma, sesli ders çalışma odası, online sanal kütüphane, yks çalışma arkadaşı, kpss odak grubu, yazılımcı çalışma arkadaşı, study buddy bulma, sesli sohbet çalışma grubu, sosyal pomodoro, blunk">
+  <title>BLUNK — Ders Arkadaşı Bul, Sesli Pomodoro &amp; Odak Topluluğu</title>
+  
+  <!-- Open Graph / Facebook / WhatsApp -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://blunk.com.tr/">
+  <meta property="og:title" content="BLUNK — Ders Arkadaşı Bul &amp; Sesli Pomodoro Odaları">
+  <meta property="og:description" content="Seninle aynı şeylere çalışan insanlarla tanış! Sesli odaklanma odalarında birlikte Pomodoro yap, motivasyonunu artır.">
+  <meta property="og:image" content="https://blunk.com.tr/default-avatar.png">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://blunk.com.tr/">
+  <meta property="twitter:title" content="BLUNK — Ders Arkadaşı Bul &amp; Sesli Pomodoro Odaları">
+  <meta property="twitter:description" content="Seninle aynı şeylere çalışan insanlarla tanış! Sesli odaklanma odalarında birlikte Pomodoro yap, motivasyonunu artır.">
+  <meta property="twitter:image" content="https://blunk.com.tr/default-avatar.png">
+
+  <!-- Schema.org JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "BLUNK",
+    "url": "https://blunk.com.tr",
+    "description": "Seninle aynı sınava veya projeye çalışan insanları bulabileceğin sosyal ders arkadaşı ve sesli Pomodoro platformu.",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "All",
+    "inLanguage": "tr"
+  }
+  </script>
+
+  <!-- Schema.org FAQPage JSON-LD for Search Engine Rich Snippets -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "BLUNK nedir ve nasıl ders arkadaşı bulunabilir?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "BLUNK, seninle aynı hedeflere (YKS, KPSS, ALES, Yazılım vb.) çalışan insanlarla tanışabileceğin sosyal bir odak platformudur. Filtreleme ve sesli çalışma kanalları sayesinde kendine en uygun ders arkadaşını anında bulabilirsin."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Arkadaşlarla online Pomodoro nasıl yapılır?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "BLUNK üzerinde dilediğin zaman kendi sesli çalışma odanı oluşturabilir ya da mevcut çalışma kanallarına katılarak arkadaşlarınla senkronize Pomodoro zamanlayıcı eşliğinde ders çalışabilirsin."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Sesli sohbetli ders çalışma odaları ücretsiz mi?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Evet, BLUNK üzerindeki tüm sesli sohbet ve görüntülü çalışma odaları, seviye/XP sistemi ve sosyal etkileşim araçları tamamen ücretsizdir."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Hangi sınav veya konular için çalışma grubu var?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "BLUNK topluluğunda YKS, KPSS, ALES, YDT, DGS, TUS, LGS hazırlık gruplarının yanı sıra yazılımcılar, dil öğrenenler ve genel akademik çalışma odak odaları bulunur."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- Google Identity Services (GIS) for Google Sign-In & One Tap -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    window.GOOGLE_CLIENT_ID = "486185984569-dbkhadetea3ht5qumnbt2khst3k0pudo.apps.googleusercontent.com";
+  </script>
+
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
   <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
-  <link rel="stylesheet" href="/css/style.css?v=70.0.0">
+  <link rel="stylesheet" href="/css/style.css?v=72.0.4">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4259190146952385" crossorigin="anonymous"></script>
 </head>
 
 <body>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ONBOARDING OVERLAY                                    -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div id="blunk-onboarding" style="display:none;">
+    <style>
+      #blunk-onboarding {
+        position: fixed;
+        inset: 0;
+        background: #08090c;
+        z-index: 999999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      #blunk-onboarding.hidden {
+        display: none !important;
+      }
+
+      .onboarding-backdrop {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 50% 30%, rgba(108, 99, 255, 0.22), transparent 70%),
+                    radial-gradient(circle at 80% 80%, rgba(136, 84, 208, 0.15), transparent 50%),
+                    #08090c;
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+      }
+
+      .onboarding-progress {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.08);
+        z-index: 10;
+      }
+
+      .onboarding-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6c63ff, #a855f7, #3b82f6);
+        transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        width: 25%;
+        box-shadow: 0 0 12px rgba(108, 99, 255, 0.8);
+      }
+
+      .onboarding-container {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        max-width: 440px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-sizing: border-box;
+      }
+
+      .onboarding-card {
+        width: 100%;
+        background: rgba(18, 20, 29, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 24px;
+        padding: 36px 28px 28px;
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(108, 99, 255, 0.12) inset;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-sizing: border-box;
+        position: relative;
+      }
+
+      .onboarding-step-counter {
+        position: absolute;
+        top: 16px;
+        right: 20px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 1.5px;
+        color: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 4px 10px;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .onboarding-step {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+        transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .onboarding-step.active {
+        display: flex;
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+
+      .onboarding-icon-wrap {
+        width: 88px;
+        height: 88px;
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(108, 99, 255, 0.25), rgba(168, 85, 247, 0.15));
+        border: 1px solid rgba(168, 85, 247, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+        box-shadow: 0 12px 32px rgba(108, 99, 255, 0.3);
+        position: relative;
+      }
+
+      .onboarding-icon-wrap svg {
+        width: 44px;
+        height: 44px;
+        stroke: #a855f7;
+        stroke-width: 1.8;
+        fill: none;
+        filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.6));
+      }
+
+      .onboarding-brand-title {
+        font-size: 40px;
+        font-weight: 900;
+        letter-spacing: 3px;
+        background: linear-gradient(135deg, #ffffff 30%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 8px;
+        text-shadow: 0 0 30px rgba(168, 85, 247, 0.3);
+      }
+
+      .onboarding-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #ffffff;
+        margin-bottom: 12px;
+        letter-spacing: -0.4px;
+      }
+
+      .onboarding-desc {
+        font-size: 14.5px;
+        font-weight: 400;
+        color: rgba(255, 255, 255, 0.72);
+        line-height: 1.6;
+        margin-bottom: 28px;
+        max-width: 320px;
+      }
+
+      .onboarding-dots {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+
+      .onboarding-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .onboarding-dot.active {
+        width: 24px;
+        background: #a855f7;
+        box-shadow: 0 0 10px rgba(168, 85, 247, 0.8);
+      }
+
+      .onboarding-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: 12px;
+      }
+
+      .onboarding-btn-secondary {
+        background: rgba(255, 255, 255, 0.07);
+        color: rgba(255, 255, 255, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 12px 20px;
+        font-size: 13.5px;
+        font-weight: 700;
+        border-radius: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-height: 46px;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .onboarding-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+      }
+
+      .onboarding-btn-primary {
+        background: linear-gradient(135deg, #6c63ff, #a855f7);
+        color: #ffffff;
+        border: none;
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 800;
+        border-radius: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 8px 24px rgba(108, 99, 255, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex: 1;
+        min-height: 46px;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .onboarding-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 28px rgba(168, 85, 247, 0.5);
+      }
+
+      .onboarding-btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .onboarding-btn-full {
+        width: 100%;
+      }
+
+      .onboarding-hint {
+        font-size: 11.5px;
+        color: rgba(255, 255, 255, 0.38);
+        margin-top: 14px;
+      }
+
+      @media (max-width: 480px) {
+        .onboarding-container {
+          padding: 16px;
+        }
+
+        .onboarding-card {
+          padding: 28px 20px 22px;
+          border-radius: 20px;
+        }
+
+        .onboarding-brand-title {
+          font-size: 34px;
+        }
+
+        .onboarding-title {
+          font-size: 19px;
+        }
+
+        .onboarding-desc {
+          font-size: 13.5px;
+          margin-bottom: 22px;
+        }
+
+        .onboarding-icon-wrap {
+          width: 72px;
+          height: 72px;
+          margin-bottom: 18px;
+        }
+
+        .onboarding-icon-wrap svg {
+          width: 36px;
+          height: 36px;
+        }
+      }
+    </style>
+
+    <div class="onboarding-backdrop"></div>
+    <div class="onboarding-progress">
+      <div class="onboarding-progress-fill" id="onboardingProgressFill"></div>
+    </div>
+
+    <div class="onboarding-container" id="onboardingCardContainer">
+      <div class="onboarding-card">
+        <div class="onboarding-step-counter" id="onboardingStepCounter">1 / 4</div>
+
+        <!-- Step 1: Welcome -->
+        <div class="onboarding-step active" id="onboardingStep1">
+          <div class="onboarding-brand-title">BLUNK</div>
+          <div class="onboarding-title">BLUNK'a Hoş Geldin</div>
+          <div class="onboarding-desc">Burası kasvetli çalışma ortamlarına benzemez. Ekiple beraber masalara kurulup rahatça odaklanıyoruz.</div>
+        </div>
+
+        <!-- Step 2: Voice & Focus Rooms -->
+        <div class="onboarding-step" id="onboardingStep2">
+          <div class="onboarding-icon-wrap">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <div class="onboarding-title">İletişimden taviz yok</div>
+          <div class="onboarding-desc">Sesli odalara girip arkadaşlarınla çalışabilir ya da oyunlar oynayabilirsin. Ve hatta birbirinize kalitesiz yayınlar bile açabilirsiniz... (bütçemiz baya kısıtlı da :D)</div>
+        </div>
+
+        <!-- Step 3: XP & Gamification -->
+        <div class="onboarding-step" id="onboardingStep3">
+          <div class="onboarding-icon-wrap">
+            <svg viewBox="0 0 24 24">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <div class="onboarding-title">Odaklandıkça Seviye Atla</div>
+          <div class="onboarding-desc">Çalıştığın her dakika sana XP kazandırıyor. Seviyeni yükselt, liderlik tablosunda yerini kap ve arkadaşlarına hava at.</div>
+        </div>
+
+        <!-- Step 4: Live App Spotlight Tour -->
+        <div class="onboarding-step" id="onboardingStep4">
+          <div class="onboarding-icon-wrap" style="background:linear-gradient(135deg, rgba(59,130,246,0.3), rgba(168,85,247,0.3));">
+            <svg viewBox="0 0 24 24" stroke="#60a5fa">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polygon points="10 8 16 12 10 16 10 8"></polygon>
+            </svg>
+          </div>
+          <div class="onboarding-title">Ekiple Tur Atalım</div>
+          <div class="onboarding-desc">Seni uygulamanın içinde gezdirelim, ne nerede kısaca bir göz atalım.</div>
+        </div>
+
+        <!-- Dots indicator -->
+        <div class="onboarding-dots">
+          <div class="onboarding-dot active" onclick="goToOnboardingStep(1)"></div>
+          <div class="onboarding-dot" onclick="goToOnboardingStep(2)"></div>
+          <div class="onboarding-dot" onclick="goToOnboardingStep(3)"></div>
+          <div class="onboarding-dot" onclick="goToOnboardingStep(4)"></div>
+        </div>
+
+        <!-- Actions -->
+        <div class="onboarding-actions" id="onboardingActions">
+          <button class="onboarding-btn-secondary" id="onboardingBackBtn" onclick="onboardingPrev()" style="visibility:hidden">Geri</button>
+          <button class="onboarding-btn-primary" id="onboardingNextBtn" onclick="onboardingNext()">Devam Et</button>
+        </div>
+
+        <div class="onboarding-hint">Kaydırarak veya ok tuşlarıyla ilerleyebilirsiniz</div>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        let currentStep = 1;
+        const totalSteps = 4;
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        function updateUI() {
+          for (let i = 1; i <= totalSteps; i++) {
+            const stepEl = document.getElementById('onboardingStep' + i);
+            const dot = document.querySelectorAll('.onboarding-dot')[i - 1];
+            if (stepEl) {
+              stepEl.classList.toggle('active', i === currentStep);
+            }
+            if (dot) {
+              dot.classList.toggle('active', i === currentStep);
+            }
+          }
+
+          const progressFill = document.getElementById('onboardingProgressFill');
+          if (progressFill) {
+            progressFill.style.width = (currentStep / totalSteps * 100) + '%';
+          }
+
+          const counter = document.getElementById('onboardingStepCounter');
+          if (counter) {
+            counter.textContent = currentStep + ' / ' + totalSteps;
+          }
+
+          const backBtn = document.getElementById('onboardingBackBtn');
+          if (backBtn) {
+            backBtn.style.visibility = currentStep > 1 ? 'visible' : 'hidden';
+          }
+
+          const nextBtn = document.getElementById('onboardingNextBtn');
+          if (nextBtn) {
+            if (currentStep === totalSteps) {
+              nextBtn.innerHTML = '<span>Uygulamayı Gez</span>';
+            } else {
+              nextBtn.innerHTML = '<span>Devam Et</span>';
+            }
+          }
+        }
+
+        window.goToOnboardingStep = function(step) {
+          if (step >= 1 && step <= totalSteps) {
+            currentStep = step;
+            updateUI();
+          }
+        };
+
+        window.onboardingNext = function() {
+          if (currentStep < totalSteps) {
+            currentStep++;
+            updateUI();
+          } else {
+            hideOnboardingOverlay(true);
+          }
+        };
+
+        window.onboardingPrev = function() {
+          if (currentStep > 1) {
+            currentStep--;
+            updateUI();
+          }
+        };
+
+        function hideOnboardingOverlay(startSpotlight) {
+          const onboarding = document.getElementById('blunk-onboarding');
+          if (onboarding) {
+            onboarding.classList.add('hidden');
+          }
+          localStorage.setItem('blunk_visited', 'true');
+
+          if (startSpotlight && typeof window.startInteractiveSpotlightTour === 'function') {
+            setTimeout(() => {
+              window.startInteractiveSpotlightTour();
+            }, 300);
+          }
+        }
+
+        window.showOnboardingAgain = function() {
+          localStorage.removeItem('blunk_visited');
+          currentStep = 1;
+          updateUI();
+          const onboarding = document.getElementById('blunk-onboarding');
+          if (onboarding) {
+            onboarding.classList.remove('hidden');
+            onboarding.style.display = 'flex';
+          }
+        };
+
+        // Keyboard & Swipe support
+        const cardContainer = document.getElementById('onboardingCardContainer');
+        if (cardContainer) {
+          cardContainer.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+          }, { passive: true });
+
+          cardContainer.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            if (touchStartX - touchEndX > 50) {
+              window.onboardingNext();
+            } else if (touchEndX - touchStartX > 50) {
+              window.onboardingPrev();
+            }
+          }, { passive: true });
+        }
+
+        document.addEventListener('keydown', function(e) {
+          const onboarding = document.getElementById('blunk-onboarding');
+          if (onboarding && !onboarding.classList.contains('hidden') && onboarding.style.display !== 'none') {
+            if (e.key === 'ArrowRight' || e.key === 'Enter') {
+              window.onboardingNext();
+            } else if (e.key === 'ArrowLeft') {
+              window.onboardingPrev();
+            } else if (e.key === 'Escape') {
+              hideOnboardingOverlay(false);
+            }
+          }
+        });
+
+        // Auto-show for new users
+        if (!localStorage.getItem('blunk_visited')) {
+          const onboarding = document.getElementById('blunk-onboarding');
+          if (onboarding) {
+            onboarding.style.display = 'flex';
+          }
+          updateUI();
+        }
+      })();
+    </script>
+  </div>
 
   <!-- ══════════════════════════════════════════════════════ -->
   <!-- VIOLATION BANNER & CRACK                              -->
@@ -57,6 +627,7 @@
         <span class="post-modal-close" onclick="closeCreatePostModal()">✕</span>
       </div>
 
+      <div class="post-modal-scroll">
       <div style="position:relative; width:100%;">
         <textarea class="post-textarea" id="postTextarea" placeholder="Ne düşünüyorsun?" maxlength="280"></textarea>
         <div class="post-char-counter" id="postCharCounter">280</div>
@@ -97,6 +668,8 @@
         </div>
       </div>
 
+      </div>
+
       <div class="post-modal-actions">
         <div class="post-modal-tools">
           <label class="post-image-label" for="postImageInput" data-tooltip="Fotoğraf Ekle" data-tooltip-pos="top" aria-label="Fotoğraf Ekle">
@@ -114,6 +687,7 @@
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
+          <span>PAYLAŞ</span>
         </button>
       </div>
     </div>
@@ -182,45 +756,47 @@
   <!-- CREATE GROUP MODAL                                    -->
   <!-- ══════════════════════════════════════════════════════ -->
   <div class="modal-overlay" id="createGroupModal" style="z-index:99999;">
-    <div class="modal-sheet share-sheet" style="max-height:85dvh;">
+    <div class="modal-sheet share-sheet" style="max-height:85dvh;max-width:440px;margin:auto;">
       <div class="modal-drag-handle"></div>
-      <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
-        <span style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">Yeni Grup
-          Kur</span>
+      <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+        <span style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#fff;">YENİ GRUP OLUŞTUR</span>
         <span class="modal-close" onclick="closeCreateGroupModal()">✕</span>
       </div>
-      <div class="share-modal-body">
-        <!-- Group Name Input -->
-        <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
-          <input type="text" id="createGroupName" autocomplete="off" placeholder="Grup Adı Girin..."
-            style="flex:1; background:#000; border:1px solid #222; color:#fff; padding:12px; border-radius:10px; font-size:12.5px; font-weight:700;">
+      <div class="share-modal-body" style="display:flex;flex-direction:column;gap:12px;padding:16px 20px 24px;">
+        <!-- Group Name Input with Avatar Icon -->
+        <div style="display:flex; gap:10px; align-items:center;">
+          <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#333,#111);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
+            👥
+          </div>
+          <input type="text" id="createGroupName" autocomplete="off" placeholder="Grup Adı (Örn: Odak Ekibi)..."
+            style="flex:1; background:#121214; border:1px solid rgba(255,255,255,0.12); color:#fff; padding:12px 14px; border-radius:14px; font-size:13px; font-weight:700; outline:none;">
         </div>
 
         <!-- Selected users pills summary -->
-        <div id="selectedGroupUsersPills" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:0"></div>
+        <div id="selectedGroupUsersPills" style="display:flex;flex-wrap:wrap;gap:6px;min-height:0"></div>
 
         <!-- Search input -->
-        <div class="share-search-box" style="margin-top:12px;">
-          <input type="text" id="createGroupSearch" autocomplete="off" placeholder="Arkadaş veya kullanıcı ara..."
-            oninput="handleGroupSearchInput(this.value)">
+        <div class="share-search-box">
+          <input type="text" id="createGroupSearch" autocomplete="off" placeholder="Üye eklemek için arkadaş veya kullanıcı ara..."
+            oninput="handleGroupSearchInput(this.value)" style="background:#121214;border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:14px;padding:10px 14px 10px 36px;font-size:12.5px;">
           <svg class="share-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            width="14" height="14">
+            width="14" height="14" style="left:14px;top:14px;">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
         </div>
 
         <!-- Friends and Search Results container -->
-        <div id="createGroupFriendsList" class="share-grid">
+        <div id="createGroupFriendsList" class="share-grid" style="max-height:36dvh;overflow-y:auto;">
           <div id="createGroupFriendsItems" style="display:contents;"></div>
           <div id="createGroupOtherResults" style="display:contents;"></div>
         </div>
 
         <!-- Footer: Button -->
         <div class="share-bottom-bar"
-          style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06);">
-          <button id="createGroupSubmitBtn" class="share-send-btn" style="width:100%; border-radius:10px;"
-            onclick="submitCreateGroup()">GRUBU KUR</button>
+          style="margin-top:4px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.08);">
+          <button id="createGroupSubmitBtn" class="mono-btn-primary" style="width:100%; border-radius:14px; padding:12px; font-size:12px; font-weight:800; letter-spacing:1px;"
+            onclick="submitCreateGroup()">GRUBU OLUŞTUR</button>
         </div>
       </div>
     </div>
@@ -252,8 +828,13 @@
 
     <!-- ────── LOGIN / LANDING SCREEN ────── -->
     <div id="loginScreen" class="screen" style="display:none;">
-      <!-- Interactive Mouse Parallax Background Canvas & Belts -->
-      <canvas id="blunkCanvasBg" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:0;opacity:0.85;"></canvas>
+      <!-- Ambient Glow Orbs -->
+      <div class="blunk-ambient-glow glow-1"></div>
+      <div class="blunk-ambient-glow glow-2"></div>
+      <div class="blunk-ambient-glow glow-3"></div>
+
+      <!-- Interactive Background Canvas & Belts -->
+      <canvas id="blunkCanvasBg" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:0;opacity:0.6;"></canvas>
       <div class="blunk-parallax-bg" id="blunkParallaxBg">
         <div class="blunk-marquee-belt">BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp;</div>
         <div class="blunk-marquee-belt reverse">BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp; BLUNK &nbsp;&bull;&nbsp;</div>
@@ -262,15 +843,38 @@
       </div>
 
       <div class="blunk-landing-wrap">
-        <!-- Hero Title Header -->
-        <div class="blunk-hero-header">
-          <div class="blunk-hero-logo">BLUNK</div>
-          <div class="blunk-hero-tagline">Gelişmiş Sosyal Odak & Birlikte Çalışma Platformu. Masana kurul, arkadaşlarınla sesli çalışma odalarında odaklan.</div>
+        <!-- Hero Section -->
+        <div class="bh">
+          <div class="bh-badge">
+            <span class="bh-badge-dot"></span>
+            <span>SOSYAL ODAK &amp; POMODORO</span>
+          </div>
+          <div class="bh-logo">BLUNK</div>
+          <h1 class="bh-title">Birlikte<br><span class="bh-title-accent">Odaklan &amp; Kazan</span></h1>
+          <p class="bh-sub">Sesli çalışma odalarına katıl, arkadaşlarınla Pomodoro seansı yap, XP kazanıp seviye atla.</p>
+          
+          <div class="bh-feature-pills">
+            <span class="bh-pill">🎙️ Sesli Odalar</span>
+            <span class="bh-pill">⚡ Canlı XP &amp; Seviye</span>
+            <span class="bh-pill">🏆 Liderlik Tablosu</span>
+          </div>
         </div>
 
         <!-- Auth Card (Login) -->
         <div class="blunk-auth-card">
-          <div style="font-size:18px;font-weight:800;color:#ffffff;margin-bottom:20px;text-align:left;letter-spacing:0.3px;">BLUNK'a Giriş Yap</div>
+          <div class="auth-card-header">
+            <div class="auth-card-title">Hesabına Giriş Yap</div>
+            <div class="auth-card-sub">Topluluğa katıl ve arkadaşlarınla oda aç</div>
+          </div>
+
+          <!-- Google Sign-In Button Container -->
+          <div style="margin-bottom: 16px; width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <button type="button" class="google-auth-btn" onclick="triggerGoogleSignIn()">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.15C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.24c-.25-.72-.38-1.49-.38-2.24s.13-1.52.38-2.24V6.61H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.39l3.99-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.72-4.96z"/></svg>
+              <span>Google ile Giriş Yap</span>
+            </button>
+            <div class="auth-divider"><span>VEYA E-POSTA İLE</span></div>
+          </div>
 
           <!-- Inline Alert Message Box -->
           <div class="auth-alert-box" id="authAlertBox"></div>
@@ -279,59 +883,36 @@
           <div class="auth-input-group">
             <div class="auth-input-wrap">
               <label class="auth-input-label" for="usernameInput">Kullanıcı Adı</label>
-              <input type="text" id="usernameInput" class="auth-input-field" placeholder="Kullanıcı adınızı girin" maxlength="20" autocomplete="off" autocapitalize="none">
+              <div class="auth-field-inner">
+                <svg class="auth-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="usernameInput" class="auth-input-field" placeholder="Kullanıcı adınız" maxlength="20" autocomplete="off" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('passwordInput').focus()">
+              </div>
             </div>
 
             <div class="auth-input-wrap">
               <label class="auth-input-label" for="passwordInput">Şifre</label>
-              <input type="password" id="passwordInput" class="auth-input-field" placeholder="En az 6 karakter" autocomplete="off">
+              <div class="auth-field-inner">
+                <svg class="auth-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <input type="password" id="passwordInput" class="auth-input-field" placeholder="••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')login()">
+              </div>
             </div>
           </div>
 
           <!-- Submit Button -->
-          <button class="discord-action-btn primary" id="loginSubmitBtn" style="width:100%;padding:14px 20px;font-size:14px;font-weight:800;border-radius:10px;background:#5865f2 !important;color:#ffffff !important;" onclick="login()">
-            GİRİŞ YAP
+          <button class="discord-action-btn primary" id="loginSubmitBtn" onclick="login()">
+            <span>GİRİŞ YAP</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </button>
 
           <!-- Footer Prompt Link -->
-          <div id="authPromptLink" style="margin-top:18px;font-size:12.5px;color:#949ba4;cursor:pointer;text-align:center;font-weight:600;" onclick="openRegisterModal()">
-            Henüz bir hesabın yok mu? <span style="color:#5865f2;text-decoration:underline;">Buradan kayıt ol!</span>
+          <div id="authPromptLink" class="auth-footer-link" onclick="openRegisterModal()">
+            Hesabın yok mu? <span class="link-accent">Hemen Kaydol</span>
           </div>
         </div>
 
-        <!-- Corporate Info Showcase & FAQ Section -->
-        <div class="blunk-info-card">
-          <div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#5865f2;margin-bottom:6px;">NEDİR BU BLUNK?</div>
-          <div style="font-size:22px;font-weight:800;color:#f2f3f5;margin-bottom:12px;">Disiplinli Çalışmanın Sosyal Hali</div>
-          <div style="font-size:13.5px;color:#949ba4;line-height:1.6;margin-bottom:24px;">
-            BLUNK, yalnız başına ders çalışmaktan veya odaklanmaktan sıkılanlar için tasarlanmış gelişmiş bir birlikte çalışma platformudur. Sesli çalışma odalarında arkadaşlarınla veya toplulukla bir araya gel, masa başında birlikte verimli kal.
-          </div>
-
-          <div class="blunk-grid-features">
-            <div class="blunk-feature-box">
-              <div class="blunk-feature-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              </div>
-              <div class="blunk-feature-title">Kristal Netlikte Sesli Odalar</div>
-              <div class="blunk-feature-desc">Kesintisiz yüksek kaliteli ses odalarında arkadaşlarınla masaya kurul. Odaktayken ortam sesleri otomatik olarak dengelensin.</div>
-            </div>
-
-            <div class="blunk-feature-box">
-              <div class="blunk-feature-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              </div>
-              <div class="blunk-feature-title">XP ve Seviye Sistemi</div>
-              <div class="blunk-feature-desc">Masada kaldığın her dakika XP kazan. Seviyeni yükselt, rozetleri kap ve sıralamada öne geç.</div>
-            </div>
-
-            <div class="blunk-feature-box">
-              <div class="blunk-feature-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </div>
-              <div class="blunk-feature-title">Gizlilik ve Veri Güvenliği</div>
-              <div class="blunk-feature-desc">Gereksiz kişisel bilgi vermeden 10 saniyede kayıt ol. Şifrelerin ve verilerin yüksek standartlarda korunur.</div>
-            </div>
-          </div>
+        <!-- Copyright Footer -->
+        <div class="blunk-landing-footer">
+          <p>© 2026-2027 BLUNK. Odaklan, Üret, Başar.</p>
         </div>
       </div>
     </div>
@@ -409,7 +990,8 @@
               <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><circle cx="8" cy="6" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/></svg>
             </div>
             <div class="party-label-scroll-wrap">
-              <span class="party-focus-label" id="partyFocusLabel" onclick="triggerPartyRenameFromHeader()" data-tooltip="Oda Adını Değiştir" data-tooltip-pos="bottom-right">Odak Odası</span>
+              <span id="partyVoiceConnectionState" class="party-voice-connection" role="status" aria-live="polite"><span class="party-voice-connection-dot"></span> Ses hazir</span>
+              <span class="party-focus-label" id="partyFocusLabel" onclick="if(window.RoomManagement) window.RoomManagement.open();" data-tooltip="Oda Ayarları & Yönetimi" data-tooltip-pos="bottom-right">Odak Odası</span>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:4px;">
@@ -434,16 +1016,22 @@
             <button id="voiceMicToggleBtn" class="party-ctrl-btn" onclick="setMicMuteState(!window._micMuted)" data-tooltip="Sustur" data-tooltip-pos="left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             </button>
+            <button id="voiceSettingsToggleBtn" class="party-ctrl-btn voice-settings-caret" onclick="toggleVoiceSettingsPopover(event, 'input')" aria-label="Mikrofon giriş ayarları" data-tooltip="Mikrofon giriş ayarları" data-tooltip-pos="left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="12" height="12"><path d="m8 10 4 4 4-4"/></svg>
+            </button>
             <button id="voiceDeafToggleBtn" class="party-ctrl-btn" onclick="setDeafState(!window._deafened)" data-tooltip="Sağırlaştır" data-tooltip-pos="left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1 2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 1 2 2h1a2 2 0 0 1 2-2v-3a2 2 0 0 1-2-2H3z"/></svg>
+            </button>
+            <button id="voiceOutputSettingsToggleBtn" class="party-ctrl-btn voice-settings-caret" onclick="toggleVoiceSettingsPopover(event, 'output')" aria-label="Kulaklık çıkış ayarları" data-tooltip="Kulaklık çıkış ayarları" data-tooltip-pos="left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="12" height="12"><path d="m8 10 4 4 4-4"/></svg>
             </button>
             <button id="voiceScreenShareBtn" class="party-ctrl-btn" onclick="toggleScreenShare()" data-tooltip="Ekran Paylaş" data-tooltip-pos="left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
               </svg>
             </button>
-            <button class="party-ctrl-btn" id="timerPartyBtn" onclick="openPartyModal()" style="display:none;" data-tooltip="Oda Yönetimi" data-tooltip-pos="left">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <button class="party-ctrl-btn" id="timerPartyBtn" onclick="if(window.RoomManagement && typeof window.RoomManagement.open === 'function') window.RoomManagement.open(); else openPartyModal();" style="display:none;" data-tooltip="Oda Yönetimi" data-tooltip-pos="left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
             <button class="party-ctrl-btn" id="timerChatBtn" onclick="togglePartyChatModal(true)" style="display:none; position:relative;" data-tooltip="Oda Sohbeti" data-tooltip-pos="left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -542,6 +1130,7 @@
                   <div class="spm-check" aria-hidden="true">✓</div>
                 </div>
               </div>
+              <div class="timer-real-clock" id="timerRealClock"></div>
               <div class="timer-display-solo" id="timerDisplaySolo">00:00</div>
               <div class="timer-status-text" id="timerStatusText">odaklanmaya başlamak için dokun</div>
               <div id="timerBonusIndicator" style="font-size: 9px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; display: none;"></div>
@@ -660,43 +1249,103 @@
       <div class="page" id="messagesPage">
         <div class="topbar">
           <span class="topbar-title">Mesajlar</span>
-          <button onclick="openCreateGroupModal()"
-            style="background:none; border:1px solid #333; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:6px 12px; border-radius:14px; text-transform:uppercase; cursor:pointer; height:28px; line-height:1; display:flex; align-items:center; justify-content:center; margin:0;">+
-            GRUP</button>
+          <button class="mono-btn-primary" onclick="openCreateGroupModal()" data-tooltip="Yeni Grup Oluştur" data-tooltip-pos="bottom"
+            style="width:auto; padding:6px 14px; border-radius:14px; font-size:11px; font-weight:800; display:flex; align-items:center; gap:6px; margin:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span class="btn-label">GRUP OLUŞTUR</span>
+          </button>
         </div>
-        <div class="messages-container" style="display:flex;height:calc(100dvh - 120px);background:#000">
+        <div class="messages-container">
           <!-- Inbox list (sol panel) -->
-          <div class="inbox-list" id="inboxList"
-            style="flex:1;overflow-y:auto;border-right:1px solid var(--border-soft);display:flex;flex-direction:column;gap:8px;padding:12px">
+          <div class="inbox-panel" id="inboxPanel">
+            <!-- Search bar -->
+            <div style="padding:10px; border-bottom:1px solid var(--border-soft); background:#080808; display:flex; align-items:center; gap:8px;">
+              <div style="position:relative; flex:1;">
+                <input type="text" id="inboxSearchInput" autocomplete="off" placeholder="Kullanıcı veya grup ara..."
+                  oninput="handleInboxSearchInput(this.value)"
+                  style="width:100%; background:#121214; border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:14px; padding:8px 12px 8px 32px; font-size:12px; outline:none; box-sizing:border-box;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#666;">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </div>
+            </div>
+            <div class="inbox-list" id="inboxList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;padding:10px;"></div>
           </div>
 
           <!-- Chat area (sağ panel) -->
-          <div class="chat-area" id="chatArea" style="flex:2;display:none;flex-direction:column;height:100%">
+          <div class="chat-area" id="chatArea" style="display:none;">
             <div class="chat-header"
               style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border-soft);background:#050505">
-              <div style="display:flex;align-items:center;gap:10px">
-                <button class="mono-btn-secondary" style="width:auto;padding:6px 12px;font-size:10px"
-                  onclick="closeChatArea()">← GERİ</button>
+              <div style="display:flex;align-items:center;gap:8px">
+                <button class="mono-btn-secondary chat-back-btn" style="width:auto;padding:6px 12px;font-size:11px;display:flex;align-items:center;gap:6px"
+                  onclick="closeChatArea()" data-tooltip="Sohbet Listesine Dön" data-tooltip-pos="bottom">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+                  <span class="btn-label">SOHBETLER</span>
+                </button>
                 <span id="chatHeaderUser" style="font-weight:800;color:#fff;font-size:14px"></span>
               </div>
-              <div id="chatDeviceBadge" class="chat-device-badge" onclick="showDevicePopup()" style="display:none;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <button id="chatDisappearingBtn" onclick="openDisappearingSettingsModal()" title="Süreli Mesaj Ayarları" data-tooltip="Süreli Mesaj Ayarları" data-tooltip-pos="bottom"
+                  style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#888;padding:6px 10px;border-radius:14px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;transition:all 0.2s;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span id="chatDisappearingLabel">24sa</span>
+                </button>
+                <button id="chatGroupDetailsBtn" onclick="openGroupDetailsModal()" style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 10px;border-radius:14px;cursor:pointer;align-items:center;gap:6px;font-size:10px;font-weight:700;" data-tooltip="Grup Ayarları" data-tooltip-pos="bottom">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  <span class="btn-label">AYARLAR</span>
+                </button>
+                <div id="chatDeviceBadge" class="chat-device-badge" onclick="showDevicePopup()" style="display:none;"></div>
               </div>
             </div>
             <div class="chat-messages" id="chatMessages"
               style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px"></div>
-            <div class="chat-input-bar"
-              style="display:flex;padding:12px 16px;border-top:1px solid var(--border-soft);gap:8px;background:#000">
-              <input type="text" id="chatInput" autocomplete="off" class="mono-input" style="flex:1"
-                placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter')sendChatMessage()">
-              <button class="mono-btn-primary" style="width:auto;padding:0 20px"
-                onclick="sendChatMessage()">GÖNDER</button>
+            
+            <!-- Real-time Typing Indicator -->
+            <div id="chatTypingIndicator" class="chat-typing-indicator" style="display:none;padding:4px 16px;font-size:11px;color:#888;font-style:italic;">
+              <span id="chatTypingText">yazıyor...</span>
+            </div>
+
+            <!-- Standard Active Chat Input Bar -->
+            <div id="chatInputBar" class="chat-input-bar"
+              style="display:flex;align-items:center;padding:12px 16px;border-top:1px solid var(--border-soft);gap:10px;background:#050505">
+              <button type="button" onclick="showChatMediaNotice()" data-tooltip="Görsel Yükleme (Yakında)" data-tooltip-pos="top"
+                style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#ccc;border-radius:18px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span class="btn-label">MEDYA</span>
+              </button>
+              <input type="text" id="chatInput" autocomplete="off" class="mono-input" style="flex:1;background:#121214;border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:18px;padding:10px 16px;font-size:13px;outline:none;"
+                placeholder="Mesaj yaz..." oninput="handleChatInputTyping()" onkeydown="handleChatInputKeydown(event)">
+              <button id="chatSendBtn" class="mono-btn-primary" style="width:auto;padding:10px 22px;border-radius:18px;font-size:11px;font-weight:800;letter-spacing:0.5px;display:flex;align-items:center;gap:6px;"
+                onclick="sendChatMessage()" data-tooltip="Mesaj Gönder" data-tooltip-pos="top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span class="btn-label">GÖNDER</span>
+              </button>
+            </div>
+
+            <!-- Non-Friend Barrier Panel -->
+            <div id="chatNonFriendBanner" style="display:none;padding:24px 20px;background:#08090c;border-top:1px solid rgba(255,255,255,0.08);text-align:center;flex-direction:column;align-items:center;gap:12px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;color:#888;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/></svg>
+              </div>
+              <div id="chatNonFriendText" style="font-size:13px;font-weight:700;color:#fff;line-height:1.4;">
+                Bu kullanıcı ile mesajlaşabilmek için arkadaş olmalısınız.
+              </div>
+              <div style="font-size:11px;color:#888;max-width:380px;line-height:1.4;">
+                Veri tabanı ve gizlilik ilkelerimiz gereği yalnızca ekli arkadaşlarınızla mesajlaşabilirsiniz.
+              </div>
+              <button id="chatNonFriendProfileBtn" class="mono-btn-primary" style="width:auto;padding:10px 24px;border-radius:14px;font-size:11px;font-weight:800;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;"
+                data-tooltip="Kullanıcı profilini ziyaret et" data-tooltip-pos="top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span class="btn-label">PROFİLİ ZİYARET ET</span>
+              </button>
             </div>
           </div>
 
           <!-- Chat placeholder -->
           <div class="chat-placeholder" id="chatPlaceholder"
-            style="flex:2;display:flex;align-items:center;justify-content:center;color:#444;font-weight:800;font-size:11px">
-            SOHBET ETMEK İÇİN BİR ARKADAŞINI SEÇİN VEYA PROFİLİNDEN MESAJ ATIN.
+            style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#444;font-weight:700;font-size:12px;padding:24px;text-align:center;gap:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="opacity:0.3;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>SOHBET ETMEK İÇİN BİR ARKADAŞINIZI SEÇİN VEYA ARAMA ÇUBUĞUNDAN KULLANICI ARAYIN</span>
           </div>
         </div>
       </div>
@@ -740,7 +1389,16 @@
 
   <!-- ══════════════════════════════════════════════════════ -->
   <!-- CUSTOM CONFIRM / PROMPT UI                            -->
-  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="customAlertModal" style="z-index:999999;">
+    <div style="position:relative; margin:auto; width:320px; background:#121214; border-radius:18px; padding:24px 20px; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.9); border:1px solid rgba(255,255,255,0.12); display:flex; flex-direction:column; align-items:center; gap:16px;">
+      <div style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; color:#fff;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div id="customAlertMessage" style="font-size:13px; font-weight:600; line-height:1.5; color:#fff;"></div>
+      <button class="mono-btn-primary" style="width:100%; padding:11px; font-size:12px; font-weight:800; border-radius:12px;" onclick="window._resolveAlert()">ANLADIM</button>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="customConfirmModal" style="z-index:99999;">
     <div
       style="position:relative; margin:auto; width:300px; background:#1a1a1a; border-radius:16px; padding:24px 20px; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.8); border:1px solid #333;">
@@ -776,14 +1434,26 @@
     style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.4);"
     onclick="closeMessageActionsModal()">
     <div id="messageActionsPopover" class="msg-action-popover" onclick="event.stopPropagation()">
-      <!-- Quick Reactions Grid -->
+      <!-- Quick Reactions Grid (Pure SVG) -->
       <div class="msg-reaction-row">
-        <span onclick="reactToMessage('❤️')" class="react-emoji">❤️</span>
-        <span onclick="reactToMessage('👍')" class="react-emoji">👍</span>
-        <span onclick="reactToMessage('😂')" class="react-emoji">😂</span>
-        <span onclick="reactToMessage('😮')" class="react-emoji">😮</span>
-        <span onclick="reactToMessage('😢')" class="react-emoji">😢</span>
-        <span onclick="reactToMessage('🙏')" class="react-emoji">🙏</span>
+        <button type="button" onclick="reactToMessage('heart')" class="react-svg-btn" data-tooltip="Beğen" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </button>
+        <button type="button" onclick="reactToMessage('thumbsup')" class="react-svg-btn" data-tooltip="Harika" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+        </button>
+        <button type="button" onclick="reactToMessage('star')" class="react-svg-btn" data-tooltip="Yıldız" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </button>
+        <button type="button" onclick="reactToMessage('flame')" class="react-svg-btn" data-tooltip="Alev" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.38 0 2.5-1.12 2.5-2.5 0-1.75-2.5-4.5-2.5-4.5s-2.5 2.75-2.5 4.5z"/><path d="M12 2C6.5 2 2 6.5 2 12c0 3.31 1.61 6.24 4.1 8.07.41-.65.9-1.24 1.46-1.75.92-.83 2.05-1.32 3.24-1.32s2.32.49 3.24 1.32c.56.51 1.05 1.1 1.46 1.75C18.39 18.24 20 15.31 20 12c0-5.5-4.5-10-10-10z"/></svg>
+        </button>
+        <button type="button" onclick="reactToMessage('bookmark')" class="react-svg-btn" data-tooltip="Kaydet" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button type="button" onclick="reactToMessage('check')" class="react-svg-btn" data-tooltip="Onayla" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
       </div>
       <div class="msg-popover-divider"></div>
       <!-- Actions List -->
@@ -884,6 +1554,45 @@
     </div>
   </div>
 
+  <!-- ── DISAPPEARING MESSAGES SETTINGS MODAL ── -->
+  <div class="modal-overlay" id="disappearingSettingsModal" style="z-index:99999;">
+    <div class="modal-sheet" style="max-width:380px;margin:auto;">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header">
+        <span style="font-size:12px;font-weight:800;letter-spacing:2px;">SÜRELİ MESAJLAR</span>
+        <span class="modal-close" onclick="closeDisappearingSettingsModal()">✕</span>
+      </div>
+      <div style="padding:0 20px 30px; display:flex; flex-direction:column; gap:16px;">
+        <div style="font-size:11px;color:#888;line-height:1.4;">
+          Yeni gönderilen tüm mesajlar seçtiğiniz süre dolduğunda otomatik olarak cihazlardan silinir.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="disappearing-opt-btn" onclick="selectDisappearingOption(1)">
+            <span>1 Saat</span>
+            <span class="disappearing-check" data-hours="1"></span>
+          </button>
+          <button class="disappearing-opt-btn" onclick="selectDisappearingOption(24)">
+            <span>24 Saat (Varsayılan)</span>
+            <span class="disappearing-check" data-hours="24"></span>
+          </button>
+          <button class="disappearing-opt-btn" onclick="selectDisappearingOption(168)">
+            <span>7 Gün</span>
+            <span class="disappearing-check" data-hours="168"></span>
+          </button>
+          <button class="disappearing-opt-btn locked" onclick="selectDisappearingOption(0)">
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;">
+              <span style="font-weight:700;color:#fff;">Kapalı (Süresiz)</span>
+              <span style="font-size:9.5px;color:#888;font-weight:500;">Çok yakında abonelik sistemi ile sınırsız süreli mesajları aktif edeceğiz...</span>
+            </div>
+            <span style="display:flex;align-items:center;color:#888;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── FORWARD MESSAGE MODAL ── -->
   <div class="modal-overlay" id="forwardMessageModal" style="z-index:99999;">
     <div class="modal-sheet" style="max-height:75dvh;">
@@ -928,7 +1637,13 @@
         <!-- Footer: Message input + Send button -->
         <div class="share-bottom-bar">
           <input type="text" id="sharePostMessageInput" autocomplete="off" placeholder="Mesaj yaz... (isteğe bağlı)">
-          <button id="shareSubmitBtn" class="share-send-btn" disabled onclick="submitMultiSharePost()">GÖNDER</button>
+          <button id="shareSubmitBtn" class="share-send-btn" disabled onclick="submitMultiSharePost()" data-tooltip="Gönder" data-tooltip-pos="top" aria-label="Gönder">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span class="share-btn-text">GÖNDER</span>
+          </button>
         </div>
       </div>
     </div>
@@ -1170,32 +1885,31 @@
   <!-- ── PROFILE SETTINGS FULL-SCREEN MODAL ── -->
   <div id="profileSettingsModal"
     style="display:none; position:fixed; inset:0; z-index:10005; background:#000; flex-direction:column; overflow-y:auto;">
-    <div style="max-width:600px; margin:0 auto; width:100%; padding:20px 24px; box-sizing:border-box;">
+    <div class="ps-modal-content">
       <!-- Header -->
-      <div
-        style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px; margin-bottom:24px;">
-        <span style="font-size:16px; font-weight:900; color:#fff; letter-spacing:1px;">PROFİL AYARLARI</span>
-        <button class="mono-btn-secondary" style="width:auto; padding:6px 16px; font-size:11px; margin:0;"
+      <div class="ps-modal-header">
+        <span class="ps-modal-title">PROFİL AYARLARI</span>
+        <button class="ps-btn-secondary" style="width:auto; padding:6px 16px; font-size:11px; margin:0;"
           onclick="closeProfileSettingsModal()">✕ KAPAT</button>
       </div>
 
-      <!-- Avatar Upload Section -->
-      <div
-        style="display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:32px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:20px; border-radius:16px; text-align:center;">
+      <!-- Avatar Card -->
+      <div class="ps-card ps-avatar-section">
         <div id="settingsAvatarContainer"></div>
-        <button class="mono-btn-secondary" style="width:auto; padding:8px 16px; font-size:11px; margin:0;"
+        <button class="ps-btn-secondary" style="width:auto; padding:8px 18px; font-size:12px; margin:0;"
           onclick="document.getElementById('photoUpload').click()">Fotoğrafı Değiştir</button>
       </div>
 
-      <!-- Form Section -->
-      <div style="display:flex; flex-direction:column; gap:20px;">
-        <div class="profile-settings-toggle-row"
-          style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-          <div class="profile-settings-toggle-info">
-            <div class="profile-settings-toggle-title" style="font-size:13px; font-weight:700; color:#fff;">Gizli Profil
-            </div>
-            <div class="profile-settings-toggle-desc" style="font-size:11px; color:var(--text-3); margin-top:2px;">
-              Yalnızca arkadaşlarınız görebilir.</div>
+      <!-- Personal Info & Profile Card -->
+      <div class="ps-card">
+        <div class="ps-section-header">
+          <h3 class="ps-section-title">KİŞİSEL BİLGİLER &amp; GİZLİLİK</h3>
+        </div>
+
+        <div class="ps-toggle-row">
+          <div class="ps-toggle-info">
+            <div class="ps-toggle-title">Gizli Profil</div>
+            <div class="ps-toggle-desc">Profilinizi yalnızca arkadaşlarınız görebilir.</div>
           </div>
           <label class="mono-switch">
             <input type="checkbox" id="settingsPrivateToggle">
@@ -1203,119 +1917,118 @@
           </label>
         </div>
 
-        <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
-          <label class="profile-settings-label"
-            style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Biyografi</label>
-          <textarea class="profile-edit-textarea" id="settingsBio" placeholder="Kendinden bahset..." maxlength="200"
-            style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; resize:none; box-sizing:border-box;"
-            rows="3"></textarea>
+        <div class="ps-field-group">
+          <label class="ps-label">Biyografi</label>
+          <textarea class="ps-textarea" id="settingsBio" placeholder="Kendinden bahset..." maxlength="200" rows="3"></textarea>
         </div>
 
-        <div style="display:flex; gap:16px;">
-          <div class="profile-settings-row" style="flex:1; display:flex; flex-direction:column; gap:6px;">
-            <label class="profile-settings-label"
-              style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Boy
-              (cm)</label>
-            <input type="number" class="profile-edit-input" id="settingsHeight" placeholder="170" min="100" max="250"
-              style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+        <div class="ps-field-row">
+          <div class="ps-field-group">
+            <label class="ps-label">Boy (cm)</label>
+            <input type="number" class="ps-input" id="settingsHeight" placeholder="170" min="100" max="250">
           </div>
-          <div class="profile-settings-row" style="flex:1; display:flex; flex-direction:column; gap:6px;">
-            <label class="profile-settings-label"
-              style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Kilo
-              (kg)</label>
-            <input type="number" class="profile-edit-input" id="settingsWeight" placeholder="70" min="30" max="300"
-              style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
+          <div class="ps-field-group">
+            <label class="ps-label">Kilo (kg)</label>
+            <input type="number" class="ps-input" id="settingsWeight" placeholder="70" min="30" max="300">
           </div>
         </div>
 
-        <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
-          <label class="profile-settings-label"
-            style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">CV
-            / Hakkımda</label>
-          <textarea class="profile-edit-textarea" id="settingsCv" placeholder="Eğitim, kariyer veya diğer detaylar..."
-            rows="4"
-            style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; resize:none; box-sizing:border-box;"></textarea>
-        </div>
-
-        <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
-          <label class="profile-settings-label"
-            style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Ses
-            Giriş Aygıtı (Mikrofon)</label>
-          <select id="settingsMicDeviceSelect" onchange="handleMicDeviceChange(this.value)"
-            style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box; cursor:pointer; font-size:13px;"></select>
-        </div>
-
-        <div class="profile-settings-row" style="display:flex; flex-direction:column; gap:6px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <label class="profile-settings-label"
-              style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Kanal
-              Katılma / Ayrılma Ses Seviyesi</label>
-            <span id="settingsChannelSoundVolVal"
-              style="font-size:11px; font-weight:800; color:#fff; font-family:monospace;">100%</span>
-          </div>
-          <input type="range" id="settingsChannelSoundVol" min="0" max="100" value="100"
-            oninput="handleChannelSoundVolChange(this.value)"
-            style="width:100%; accent-color:#fff; cursor:pointer; height:6px; border-radius:3px; background:rgba(255,255,255,0.1);">
-        </div>
-
-        <button class="mono-btn-primary" onclick="saveSettings()" id="settingsSaveBtn"
-          style="margin:8px 0 0; padding:14px; font-size:13px; font-weight:700; border-radius:12px;">AYARLARI
-          KAYDET</button>
-      </div>
-
-      <!-- Change Password Section -->
-      <div style="margin-top:40px; border-top:1px solid rgba(255,255,255,0.08); padding-top:32px;">
-        <h3 style="font-size:14px; font-weight:800; color:#fff; margin:0 0 16px; letter-spacing:0.5px;">ŞİFRE DEĞİŞTİR
-        </h3>
-        <div style="display:flex; flex-direction:column; gap:16px;">
-          <div style="display:flex; flex-direction:column; gap:6px;">
-            <label
-              style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Eski
-              Şifre</label>
-            <input type="password" id="settingsOldPassword" placeholder="••••••"
-              style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
-          </div>
-          <div style="display:flex; flex-direction:column; gap:6px;">
-            <label
-              style="font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px;">Yeni
-              Şifre</label>
-            <input type="password" id="settingsNewPassword" placeholder="En az 6 karakter"
-              style="width:100%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
-          </div>
-          <button class="mono-btn-secondary" onclick="updatePassword()" id="settingsPasswordBtn"
-            style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid rgba(255,255,255,0.1); color:#fff; background:none;">ŞİFREYİ
-            GÜNCELLE</button>
+        <div class="ps-field-group">
+          <label class="ps-label">CV / Hakkımda</label>
+          <textarea class="ps-textarea" id="settingsCv" placeholder="Eğitim, kariyer veya diğer detaylar..." rows="4"></textarea>
         </div>
       </div>
 
-      <!-- Danger Zone - Delete Account -->
-      <div style="margin-top:40px; border-top:1px solid rgba(239,68,68,0.2); padding-top:32px; box-sizing:border-box;">
-        <h3 style="font-size:14px; font-weight:800; color:#ef4444; margin:0 0 8px; letter-spacing:0.5px;">TEHLİKELİ BÖLGE</h3>
-        <p style="font-size:12px; color:var(--text-3); margin:0 0 16px; line-height:1.5;">
-          Hesabınızı silmek geri alınamaz bir işlemdir. Profiliniz, oturum kayıtlarınız, arkadaşlıklarınız, mesajlarınız ve tüm verileriniz kalıcı olarak veritabanından temizlenir.
-        </p>
-        <div style="display:flex; flex-direction:column; gap:16px; background:rgba(239,68,68,0.03); border:1px solid rgba(239,68,68,0.1); padding:20px; border-radius:12px; box-sizing:border-box;">
-          <div style="display:flex; flex-direction:column; gap:6px;">
-            <label style="font-size:11px; font-weight:700; color:#ef4444; text-transform:uppercase; letter-spacing:0.5px;">Şifreniz</label>
-            <input type="password" id="deleteAccountPassword" placeholder="Hesap şifreniz"
-              style="width:100%; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
-          </div>
-          <div style="display:flex; flex-direction:column; gap:6px;">
-            <label style="font-size:11px; font-weight:700; color:#ef4444; text-transform:uppercase; letter-spacing:0.5px;">Onaylama Kelimesi</label>
-            <input type="text" id="deleteAccountConfirmText" placeholder="Büyük harflerle ONAYLIYORUM yazın"
-              style="width:100%; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; color:#fff; font-family:inherit; outline:none; box-sizing:border-box;">
-          </div>
-          <button onclick="deleteOwnAccount()" id="settingsDeleteBtn"
-            style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid #ef4444; color:#fff; background:#ef4444; cursor:pointer; transition:background 0.15s ease;">HESABIMI KALICI OLARAK SİL</button>
+      <!-- Audio & Hardware Card -->
+      <div class="ps-card">
+        <div class="ps-section-header">
+          <h3 class="ps-section-title">SES &amp; DONANIM AYARLARI</h3>
         </div>
+
+        <div class="ps-field-group">
+          <label class="ps-label">Ses Giriş Aygıtı (Mikrofon)</label>
+          <select id="settingsMicDeviceSelect" class="ps-select" onchange="handleMicDeviceChange(this.value)"></select>
+        </div>
+
+        <div class="voice-processing-settings">
+          <div class="voice-processing-heading">SES İŞLEME</div>
+          <label class="voice-processing-toggle">
+            <span><strong>Gürültü Azaltma</strong><small>Arka plan seslerini azaltır</small></span>
+            <input id="settingsNoiseSuppression" type="checkbox" onchange="handleVoiceProcessingChange('noiseSuppression', this.checked)">
+          </label>
+          <label class="voice-processing-toggle">
+            <span><strong>Yankı Engelleme</strong><small>Hoparlör yankısını bastırır</small></span>
+            <input id="settingsEchoCancellation" type="checkbox" onchange="handleVoiceProcessingChange('echoCancellation', this.checked)">
+          </label>
+          <label class="voice-processing-toggle">
+            <span><strong>Otomatik Mikrofon Kazancı</strong><small>Konuşma sesini dengeler</small></span>
+            <input id="settingsAutoGainControl" type="checkbox" onchange="handleVoiceProcessingChange('autoGainControl', this.checked)">
+          </label>
+          <div class="voice-sensitivity-row">
+            <span><strong>Konuşma Algılama Eşiği</strong><small>Düşük değer daha hassastır</small></span>
+            <b id="settingsVoiceSensitivityVal">22</b>
+          </div>
+          <input id="settingsVoiceSensitivity" class="ps-range-input" type="range" min="8" max="80" value="22" oninput="handleVoiceSensitivityChange(this.value)">
+        </div>
+
+        <div class="ps-field-group">
+          <div class="ps-range-header">
+            <label class="ps-label">Kanal Katılma / Ayrılma Ses Seviyesi</label>
+            <span id="settingsChannelSoundVolVal" class="ps-range-val">100%</span>
+          </div>
+          <input type="range" id="settingsChannelSoundVol" class="ps-range-input" min="0" max="100" value="100" oninput="handleChannelSoundVolChange(this.value)">
+        </div>
+
+        <button class="ps-btn-primary" onclick="saveSettings()" id="settingsSaveBtn">AYARLARI KAYDET</button>
       </div>
 
-      <!-- Account Actions Section -->
-      <div
-        style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.08); padding-top:20px; padding-bottom:40px; display:flex; flex-direction:column; gap:12px;">
-        <button class="mono-btn-secondary" onclick="logout()"
-          style="padding:14px; font-size:13px; font-weight:700; border-radius:12px; border:1px solid var(--danger); color:var(--danger); background:none; transition: all 0.2s ease;">ÇIKIŞ
-          YAP</button>
+      <!-- Password Change Card -->
+      <div class="ps-card">
+        <div class="ps-section-header">
+          <h3 class="ps-section-title">ŞİFRE DEĞİŞTİR</h3>
+        </div>
+        <div class="ps-field-group">
+          <label class="ps-label">Eski Şifre</label>
+          <input type="password" id="settingsOldPassword" class="ps-input" placeholder="••••••">
+        </div>
+        <div class="ps-field-group">
+          <label class="ps-label">Yeni Şifre</label>
+          <input type="password" id="settingsNewPassword" class="ps-input" placeholder="En az 6 karakter">
+        </div>
+        <button class="ps-btn-secondary" onclick="updatePassword()" id="settingsPasswordBtn">ŞİFREYİ GÜNCELLE</button>
+      </div>
+
+      <!-- Quick Tour Card -->
+      <div class="ps-card">
+        <div class="ps-section-header">
+          <h3 class="ps-section-title">REHBER &amp; TANITIM</h3>
+          <p class="ps-section-desc">BLUNK özelliklerini ve kullanımını canlı uygulama rehberi ile tekrar keşfedin.</p>
+        </div>
+        <button class="ps-btn-secondary ps-btn-tour" onclick="closeProfileSettingsModal(); window.showOnboardingAgain();">🎯 HIZLI TURU YENİDEN BAŞLAT</button>
+      </div>
+
+      <!-- Danger Zone Card -->
+      <div class="ps-card ps-card-danger">
+        <div class="ps-section-header">
+          <h3 class="ps-section-title ps-section-title-danger">TEHLİKELİ BÖLGE</h3>
+          <p class="ps-section-desc">
+            Hesabınızı silmek geri alınamaz bir işlemdir. Profiliniz, oturum kayıtlarınız, arkadaşlıklarınız, mesajlarınız ve tüm verileriniz kalıcı olarak veritabanından temizlenir.
+          </p>
+        </div>
+        <div class="ps-field-group">
+          <label class="ps-label" style="color:#ef4444;">Şifreniz</label>
+          <input type="password" id="deleteAccountPassword" class="ps-input" placeholder="Hesap şifreniz" style="background:rgba(0,0,0,0.2);">
+        </div>
+        <div class="ps-field-group">
+          <label class="ps-label" style="color:#ef4444;">Onaylama Kelimesi</label>
+          <input type="text" id="deleteAccountConfirmText" class="ps-input" placeholder="Büyük harflerle ONAYLIYORUM yazın" style="background:rgba(0,0,0,0.2);">
+        </div>
+        <button onclick="deleteOwnAccount()" id="settingsDeleteBtn" class="ps-btn-danger">HESABIMI KALICI OLARAK SİL</button>
+      </div>
+
+      <!-- Account Actions Card -->
+      <div class="ps-card" style="margin-bottom:0;">
+        <button class="ps-btn-secondary" onclick="logout()" style="border-color:var(--danger, #ef4444); color:var(--danger, #ef4444);">ÇIKIŞ YAP</button>
       </div>
     </div>
   </div>
@@ -1386,6 +2099,7 @@
 
         <!-- Manager Controls -->
         <div id="uvManagerControls" class="uvm-section" style="display:none; margin-bottom:14px !important;">
+          <button id="uvServerMuteBtn" type="button" onclick="handleUvServerMuteToggle()" style="width:100% !important; min-height:38px !important; margin:0 0 10px !important; padding:8px 12px !important; background:rgba(242,63,67,.12) !important; border:1px solid rgba(242,63,67,.28) !important; border-radius:8px !important; color:#ffb3b5 !important; font-size:12px !important; font-weight:800 !important; cursor:pointer !important;">ODA GENELİNDE SUSTUR</button>
           <div id="uvRoleSelectWrap" style="display:none; margin-bottom:10px !important;">
             <div class="uvm-section-label" style="font-size:11px !important; font-weight:700 !important; letter-spacing:0.5px !important; color:#949ba4 !important; margin-bottom:8px !important;">ROL ATAMA</div>
             <select id="uvRoleSelect" onchange="handleUvRoleChange(this.value)" class="uvm-select" style="width:100% !important; background:#111214 !important; border:1px solid #2b2d31 !important; border-radius:8px !important; padding:8px 12px !important; color:#dbdee1 !important; font-size:13px !important; outline:none !important; cursor:pointer !important; box-sizing:border-box !important;">
@@ -1480,6 +2194,7 @@
       <div style="font-size:16px; font-weight:900; color:#fff; margin-bottom:4px;">EKRAN PAYLAŞIMI BAŞLAT</div>
       <div style="font-size:11px; color:var(--text-3); margin-bottom:20px;">Paylaşmak istediğiniz kaynak tipini seçin</div>
 
+      <div class="ss-prompt-channel-note">Yayin, yalnizca bulundugunuz alt kanaldaki kisiler "Yayini Izle" dugmesine bastiginda izlenir.</div>
       <div class="ss-prompt-grid" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
         <button class="ss-prompt-option active" data-surface="monitor" onclick="selectSSSurface('monitor', this)">
           <div class="ss-prompt-icon">
@@ -1530,6 +2245,27 @@
     <!-- Populated by voice.js -->
   </div>
 
+  <div id="voiceSettingsPopover" class="voice-settings-popover" role="dialog" aria-label="Ses ayarları" aria-hidden="true">
+    <div class="voice-settings-popover-head"><strong>Ses Ayarları</strong><button type="button" onclick="toggleVoiceSettingsPopover(event)" aria-label="Kapat">×</button></div>
+    <button type="button" class="voice-device-row" onclick="focusVoiceDevice('input')"><span><b>Giriş Aygıtı</b><small id="voiceInputDeviceName">Mikrofon seçilmedi</small></span><span>›</span></button>
+    <select id="voiceInputDeviceSelect" class="voice-device-select" onchange="handleMicDeviceChange(this.value)"></select>
+    <div id="voiceProfilesMenu" class="voice-profiles-menu" aria-hidden="true">
+      <button type="button" data-profile="isolation" onclick="selectVoiceProfile('isolation')"><span>Ses İzolasyonu<small>Gürültü azaltma ve yankı engelleme</small></span><i>○</i></button>
+      <button type="button" data-profile="studio" onclick="selectVoiceProfile('studio')"><span>Stüdyo<small>Doğal ve işlenmemiş mikrofon</small></span><i>○</i></button>
+      <button type="button" data-profile="custom" onclick="selectVoiceProfile('custom')"><span>Özel<small>Ayarları kendin belirle</small></span><i>●</i></button>
+    </div>
+    <button type="button" class="voice-device-row" onclick="openVoiceSettingsFromPopover()"><span><b>Giriş Profili</b><small>Özel</small></span><span>›</span></button>
+    <div class="voice-popover-section"><label>Giriş Sesi <output id="voiceInputVolumeValue">100%</output></label><input id="voiceInputVolume" type="range" min="0" max="100" value="100" oninput="handleVoiceInputVolume(this.value)"></div>
+    <div class="voice-popover-section"><label>Giriş Düzeyi <output id="voiceSensitivityValue">22</output></label><input id="voicePopoverSensitivity" type="range" min="8" max="80" value="22" oninput="handleVoiceSensitivityChange(this.value); syncVoiceSettingsPopover()"></div>
+    <div class="voice-popover-section"><label>Çıkış Sesi <output id="voiceOutputVolumeValue">100%</output></label><input id="voiceOutputVolume" type="range" min="0" max="100" value="100" oninput="handleVoiceOutputVolume(this.value)"></div>
+    <button type="button" class="voice-device-row" onclick="focusVoiceDevice('output')"><span><b>Çıkış Aygıtı</b><small id="voiceOutputDeviceName">Varsayılan cihaz</small></span><span>›</span></button>
+    <select id="voiceOutputDeviceSelect" class="voice-device-select" onchange="handleVoiceOutputDeviceChange(this.value)"></select>
+    <label class="voice-popover-check"><span>Gürültü azaltma<small>Arka plan seslerini bastır</small></span><input id="voicePopoverNoise" type="checkbox" onchange="handleVoiceProcessingChange('noiseSuppression', this.checked)"></label>
+    <label class="voice-popover-check"><span>Yankı engelleme<small>Hoparlör yankısını bastır</small></span><input id="voicePopoverEcho" type="checkbox" onchange="handleVoiceProcessingChange('echoCancellation', this.checked)"></label>
+    <label class="voice-popover-check"><span>Otomatik mikrofon kazancı<small>Konuşma seviyesini dengeler</small></span><input id="voicePopoverGain" type="checkbox" onchange="handleVoiceProcessingChange('autoGainControl', this.checked)"></label>
+    <button type="button" class="voice-settings-link" onclick="openVoiceSettingsFromPopover()">⚙ Ses Ayarları</button>
+  </div>
+
   <!-- ── DISCORD-STYLE FLOATING TOOLTIP ── -->
   <div id="discordTooltip" class="discord-tooltip">
     <span id="discordTooltipText"></span>
@@ -1538,15 +2274,91 @@
     </svg>
   </div>
 
-  <script src="/js/app.js?v=10.0.0"></script>
-  <script src="/js/timer.js?v=4.0.0"></script>
+  <!-- Dedicated Registration Modal -->
+  <div id="registerModal" class="register-modal-overlay" style="display:none;" onclick="if(event.target===this) closeRegisterModal()">
+    <div class="register-modal-card">
+      <div class="register-modal-header">
+        <div class="register-modal-title">BLUNK Hesabı Oluştur</div>
+        <button class="register-modal-close" onclick="closeRegisterModal()">✕</button>
+      </div>
+
+      <!-- Google Sign-In Button Container -->
+      <div style="margin-top: 14px; margin-bottom: 14px; width: 100%; display: flex; flex-direction: column; align-items: center;">
+        <button type="button" class="google-auth-btn" onclick="triggerGoogleSignIn()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.15C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.24c-.25-.72-.38-1.49-.38-2.24s.13-1.52.38-2.24V6.61H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.39l3.99-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.72-4.96z"/></svg>
+          <span>Google ile Hızlı Kaydol</span>
+        </button>
+        <div class="auth-divider"><span>VEYA E-POSTA İLE</span></div>
+      </div>
+
+      <!-- Inline Alert Message Box -->
+      <div class="auth-alert-box" id="registerAlertBox"></div>
+
+      <!-- Form Inputs Container -->
+      <div class="auth-input-group">
+        <div class="auth-input-wrap">
+          <label class="auth-input-label" for="regUsernameInput">Kullanıcı Adı</label>
+          <input type="text" id="regUsernameInput" class="auth-input-field" placeholder="Kullanıcı adınızı girin" maxlength="20" autocomplete="off" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('regEmailInput').focus()">
+        </div>
+
+        <div class="auth-input-wrap">
+          <label class="auth-input-label" for="regEmailInput">E-Posta Adresi <span style="font-weight:400;color:#80848e;">(İsteğe bağlı)</span></label>
+          <input type="email" id="regEmailInput" class="auth-input-field" placeholder="ornek@domain.com" autocomplete="off" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('regPasswordInput').focus()">
+          <div class="auth-privacy-note">🔒 E-posta adresiniz veritabanımızda güvende tutulur, spam gönderilmez.</div>
+        </div>
+
+        <div class="auth-input-wrap">
+          <label class="auth-input-label" for="regPasswordInput">Şifre</label>
+          <input type="password" id="regPasswordInput" class="auth-input-field" placeholder="En az 6 karakter" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('regConfirmPasswordInput').focus()">
+        </div>
+
+        <div class="auth-input-wrap">
+          <label class="auth-input-label" for="regConfirmPasswordInput">Şifre (Tekrar)</label>
+          <input type="password" id="regConfirmPasswordInput" class="auth-input-field" placeholder="Şifrenizi tekrar yazın" autocomplete="off" onkeydown="if(event.key==='Enter')register()">
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <button class="discord-action-btn primary" id="regSubmitBtn" style="width:100%;padding:14px 20px;font-size:14px;font-weight:800;border-radius:10px;background:#5865f2 !important;color:#ffffff !important;" onclick="register()">
+        KAYIT OL
+      </button>
+
+      <!-- Footer Prompt Link -->
+      <div style="margin-top:18px;font-size:12.5px;color:#949ba4;cursor:pointer;text-align:center;font-weight:600;" onclick="closeRegisterModal()">
+        Zaten bir hesabın var mı? <span style="color:#5865f2;text-decoration:underline;">Giriş Yap</span>
+      </div>
+  </div>
+
+  <script src="/js/app.js?v=10.0.4"></script>
+  <script src="/js/timer.js?v=4.0.8"></script>
   <script src="/js/feed.js?v=3.0.0"></script>
   <script src="/js/profile.js?v=3.0.0"></script>
-  <script src="/js/party.js?v=3.0.0"></script>
+  <script src="/js/party.js?v=3.0.1"></script>
+  <script src="/js/room-management.js?v=1.1.0"></script>
   <script src="/js/messages.js?v=3.0.0"></script>
   <script src="/js/voice.js?v=9.0.0"></script>
+  <script src="/js/onboarding.js?v=1.0.0"></script>
 
   <script>
+  // ─── URL PARAMETER HANDLER FOR PROFILE SHARING ─────────────
+  document.addEventListener('DOMContentLoaded', function() {
+    // Check for /username format (clean URLs)
+    const path = window.location.pathname;
+    if (path.length > 1 && path.startsWith('/')) {
+      const username = path.substring(1).split('/')[0];
+      const reservedRoutes = ['sayac', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'u', 'api', 'uploads', 'css', 'js', 'audio'];
+      if (username && !reservedRoutes.includes(username.toLowerCase()) && typeof openUserPage === 'function') {
+        openUserPage(username);
+      }
+    }
+    // Fallback for ?u=username format (legacy)
+    const params = new URLSearchParams(window.location.search);
+    const usernameParam = params.get('u');
+    if (usernameParam && typeof openUserPage === 'function') {
+      openUserPage(usernameParam);
+    }
+  });
+
   // ─── UNIVERSAL MOBILE MODAL BACKDROP & ESCAPE HANDLER ─────────────
   function closeAllActiveModals() {
     // 1. Class based modals (.open)
@@ -1630,23 +2442,23 @@
       <div class="auth-input-group">
         <div class="auth-input-wrap">
           <label class="auth-input-label" for="regUsernameInput">Kullanıcı Adı</label>
-          <input type="text" id="regUsernameInput" class="auth-input-field" placeholder="Kullanıcı adınızı girin" maxlength="20" autocomplete="off" autocapitalize="none">
+          <input type="text" id="regUsernameInput" class="auth-input-field" placeholder="Kullanıcı adınızı girin" maxlength="20" autocomplete="off" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('regEmailInput').focus()">
         </div>
 
         <div class="auth-input-wrap">
           <label class="auth-input-label" for="regEmailInput">E-Posta Adresi <span style="font-weight:400;color:#80848e;">(İsteğe bağlı)</span></label>
-          <input type="email" id="regEmailInput" class="auth-input-field" placeholder="ornek@domain.com" autocomplete="off" autocapitalize="none">
+          <input type="email" id="regEmailInput" class="auth-input-field" placeholder="ornek@domain.com" autocomplete="off" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('regPasswordInput').focus()">
           <div class="auth-privacy-note">🔒 E-posta adresiniz veritabanımızda güvende tutulur, spam gönderilmez.</div>
         </div>
 
         <div class="auth-input-wrap">
           <label class="auth-input-label" for="regPasswordInput">Şifre</label>
-          <input type="password" id="regPasswordInput" class="auth-input-field" placeholder="En az 6 karakter" autocomplete="off">
+          <input type="password" id="regPasswordInput" class="auth-input-field" placeholder="En az 6 karakter" autocomplete="off" onkeydown="if(event.key==='Enter')document.getElementById('regConfirmPasswordInput').focus()">
         </div>
 
         <div class="auth-input-wrap">
           <label class="auth-input-label" for="regConfirmPasswordInput">Şifre (Tekrar)</label>
-          <input type="password" id="regConfirmPasswordInput" class="auth-input-field" placeholder="Şifrenizi tekrar yazın" autocomplete="off">
+          <input type="password" id="regConfirmPasswordInput" class="auth-input-field" placeholder="Şifrenizi tekrar yazın" autocomplete="off" onkeydown="if(event.key==='Enter')register()">
         </div>
       </div>
 

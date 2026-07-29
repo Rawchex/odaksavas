@@ -15,6 +15,11 @@ let _chatPollInterval = null;
 let _devicePollInterval = null;
 let _replyToMessage = null;
 
+let _chatPendingImageFile = null;
+let _chatDisappearingHours = 24;
+let _chatTypingTimer = null;
+let _keyboardListenerInitialized = false;
+
 function getChatChannelKey() {
   if (_activeChatType === 'group') {
     return `group_${_activeChatId}`;
@@ -26,9 +31,128 @@ function getChatChannelKey() {
 
 // Call this when showing the messages page
 async function initMessagesPage() {
+  initMessagesKeyboardListener();
+  setupChatPasteListener();
   await loadInbox();
   // Start polling inbox & messages
   startChatPolling();
+}
+
+function initMessagesKeyboardListener() {
+  if (_keyboardListenerInitialized) return;
+  _keyboardListenerInitialized = true;
+
+  window.addEventListener('keydown', (e) => {
+    if (typeof activePage !== 'undefined' && activePage !== 'messages') return;
+    if (!_activeChatPartner) return;
+    
+    // Ignore if focus is inside any input, textarea, select or modal
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+      return;
+    }
+    const openModals = document.querySelectorAll('.modal-overlay.open, .post-modal-overlay.open');
+    if (openModals.length > 0) return;
+
+    if (e.ctrlKey || e.altKey || e.metaKey || e.key === 'Escape' || e.key === 'Tab' || e.key.startsWith('F')) {
+      return;
+    }
+
+    const input = document.getElementById('chatInput');
+    if (input) {
+      input.focus();
+      if (e.key.length === 1) {
+        input.value += e.key;
+        e.preventDefault();
+        handleChatInputTyping();
+      }
+    }
+  });
+}
+
+function setupChatPasteListener() {
+  const input = document.getElementById('chatInput');
+  if (!input || input._hasPasteListener) return;
+  input._hasPasteListener = true;
+  input.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData)?.items;
+    if (!items) return;
+    for (let item of items) {
+      if (item.type.indexOf('image') !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          setChatMediaAttachment(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  });
+}
+
+function handleChatInputKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage();
+  } else if (e.key === 'ArrowUp') {
+    const input = document.getElementById('chatInput');
+    if (input && !input.value.trim()) {
+      // Trigger reply to last message
+      const msgRows = document.querySelectorAll('.chat-msg-row-item');
+      if (msgRows.length > 0) {
+        const lastRow = msgRows[msgRows.length - 1];
+        const lastMsgId = parseInt(lastRow.id.replace('chat-msg-', ''));
+        if (lastMsgId) {
+          const bubble = lastRow.querySelector('.msg-body-wrapper');
+          const text = bubble ? bubble.textContent.trim() : '';
+          const sender = lastRow.querySelector('strong')?.textContent.replace('@', '') || _activeChatPartner;
+          setReplyMessage(lastMsgId, text, sender);
+        }
+      }
+    }
+  }
+}
+
+function handleChatInputTyping() {
+  clearTimeout(_chatTypingTimer);
+  _chatTypingTimer = setTimeout(() => {
+    // Typing stopped
+  }, 3000);
+}
+
+function setChatMediaAttachment(file) {
+  _chatPendingImageFile = file;
+  const previewBar = document.getElementById('chatMediaPreviewBar');
+  const previewImg = document.getElementById('chatMediaPreviewImg');
+  if (previewBar && previewImg) {
+    previewImg.src = URL.createObjectURL(file);
+    previewBar.style.display = 'flex';
+  }
+}
+
+function clearChatMediaAttachment() {
+  _chatPendingImageFile = null;
+  const input = document.getElementById('chatMediaInput');
+  if (input) input.value = '';
+  const previewBar = document.getElementById('chatMediaPreviewBar');
+  if (previewBar) previewBar.style.display = 'none';
+}
+
+function showChatMediaNotice() {
+  const msg = 'Özel mesajlara ve grup sohbetlerine görsel yüklemeye dair çalışmalarımız devam ediyor...';
+  if (typeof window.showAlert === 'function') {
+    window.showAlert(msg);
+  } else if (typeof showToast === 'function') {
+    showToast(msg);
+  } else {
+    alert(msg);
+  }
+}
+
+function handleChatMediaSelected(input) {
+  if (input.files && input.files[0]) {
+    setChatMediaAttachment(input.files[0]);
+  }
 }
 
 // Sol panel: Konuşmaları listele
@@ -59,7 +183,16 @@ async function loadInbox() {
         ? `<span class="inbox-unread-count">${c.unread_count}</span>` 
         : '';
       const key = c.is_group ? `group_${c.id}` : [currentUser.username, c.username].sort().join('_');
-      const decryptedLastMsg = decryptText(c.last_message || '', key);
+      let decryptedLastMsg = decryptText(c.last_message || '', key);
+      const isMeSender = c.last_message_sender_id === currentUser.id;
+
+      if (decryptedLastMsg.startsWith('[POST_SHARE]:')) {
+        decryptedLastMsg = isMeSender ? 'Bir gönderi paylaştın' : 'Bir gönderi paylaştı';
+      } else if (decryptedLastMsg.startsWith('[IMAGE]:')) {
+        decryptedLastMsg = isMeSender ? 'Bir fotoğraf gönderdin' : 'Bir fotoğraf gönderdi';
+      } else if (isMeSender && decryptedLastMsg) {
+        decryptedLastMsg = `Sen: ${decryptedLastMsg}`;
+      }
 
       return `
         <div class="inbox-item ${activeClass}" onclick="openDirectChat('${esc(c.username)}', ${c.is_group}, ${c.id})" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--border-soft);background:#050505;cursor:pointer;position:relative">
@@ -83,6 +216,18 @@ async function loadInbox() {
 
 // Sağ panel: Seçilen kullanıcı ile olan konuşmayı aç
 async function openDirectChat(username, isGroup = 0, id = null) {
+  const myUsername = (typeof currentUser !== 'undefined' && currentUser?.username) || localStorage.getItem('username');
+  if (!isGroup && username && myUsername && username.toLowerCase() === myUsername.toLowerCase()) {
+    if (typeof showToast === 'function') showToast('Kendinizle mesajlaşamazsınız.');
+    return;
+  }
+
+  // Clear previous chat messages instantly so old messages don't confuse the user
+  const chatMsgsEl = document.getElementById('chatMessages');
+  if (chatMsgsEl) {
+    chatMsgsEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:12px;font-weight:700;">Yükleniyor...</div>';
+  }
+
   _activeChatPartner = username;
   _activeChatPartnerPhoto = '';
   _activeChatPartnerDevice = 'desktop';
@@ -94,12 +239,19 @@ async function openDirectChat(username, isGroup = 0, id = null) {
   _activeChatId = id;
   cancelReply();
   
-  // Asynchronously resolve direct partner's profile photo + device type
+  if (typeof syncUrlState === 'function') {
+    const sub = isGroup ? (`group_${id}`) : username;
+    syncUrlState('messages', sub);
+  }
+
+  // Asynchronously resolve direct partner's profile photo + device type & friend status
+  let isFriend = true;
   if (_activeChatType === 'user') {
     try {
-      const [uRes, dRes] = await Promise.all([
-        fetch(`/api/users/${username}`),
-        fetch(`/api/user/${encodeURIComponent(username)}/device`)
+      const [uRes, dRes, fRes] = await Promise.all([
+        fetch(`/api/users/${encodeURIComponent(username)}`),
+        fetch(`/api/user/${encodeURIComponent(username)}/device`),
+        fetch(`/api/messages/${encodeURIComponent(username)}/friendship-status`)
       ]);
       if (uRes.ok) {
         const uData = await uRes.json();
@@ -111,19 +263,54 @@ async function openDirectChat(username, isGroup = 0, id = null) {
         _activeChatPartnerLastSeen = dData.last_seen || null;
         _activeChatPartnerStatus = dData.status || 'online';
       }
+      if (fRes.ok) {
+        const statusData = await fRes.json();
+        isFriend = !!statusData.isFriend;
+      }
     } catch (e) {
       console.warn('Failed to resolve target info:', e);
     }
   }
 
+  // Toggle input bar vs non-friend barrier panel
+  const inputBar = document.getElementById('chatInputBar');
+  const nonFriendBanner = document.getElementById('chatNonFriendBanner');
+  const nonFriendText = document.getElementById('chatNonFriendText');
+  const nonFriendBtn = document.getElementById('chatNonFriendProfileBtn');
+  const groupDetailsBtn = document.getElementById('chatGroupDetailsBtn');
+
+  if (groupDetailsBtn) {
+    groupDetailsBtn.style.display = _activeChatType === 'group' ? 'inline-flex' : 'none';
+  }
+
+  if (isGroup || isFriend) {
+    if (inputBar) inputBar.style.display = 'flex';
+    if (nonFriendBanner) nonFriendBanner.style.display = 'none';
+  } else {
+    if (inputBar) inputBar.style.display = 'none';
+    if (nonFriendBanner) {
+      nonFriendBanner.style.display = 'flex';
+      if (nonFriendText) {
+        nonFriendText.textContent = `@${username} ile mesajlaşabilmek için arkadaş olmalısınız.`;
+      }
+      if (nonFriendBtn) {
+        nonFriendBtn.onclick = () => {
+          if (typeof openUserPage === 'function') openUserPage(username);
+        };
+      }
+    }
+  }
+
   // Mobile responsive layout support
-  const inboxList = document.getElementById('inboxList');
+  const inboxPanel = document.getElementById('inboxPanel');
   const chatArea = document.getElementById('chatArea');
   const placeholder = document.getElementById('chatPlaceholder');
 
   if (window.innerWidth <= 768) {
-    inboxList.style.display = 'none';
+    if (inboxPanel) inboxPanel.style.display = 'none';
     document.body.classList.add('chat-active');
+  } else {
+    if (inboxPanel) inboxPanel.style.display = 'flex';
   }
   if (chatArea) chatArea.style.display = 'flex';
   if (placeholder) placeholder.style.display = 'none';
@@ -139,7 +326,7 @@ async function openDirectChat(username, isGroup = 0, id = null) {
       if (badge) badge.style.display = 'none';
     } else {
       headerUser.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:1px;cursor:pointer" onclick="openUserModal('${esc(username)}')">
+        <div style="display:flex;flex-direction:column;gap:1px;cursor:pointer" onclick="if(typeof openUserPage==='function') openUserPage('${esc(username)}')">
           <span style="font-weight:900;color:#fff;font-size:14px">@${esc(username)}</span>
           <span id="chatDeviceSubtitle" class="chat-device-subtitle"></span>
         </div>
@@ -156,16 +343,29 @@ function updateDeviceIndicator(deviceType, username, lastSeen, status) {
   const statusColorMap = { online: '#4ade80', away: '#fbbf24', dnd: '#ef4444', invisible: '#9ca3af', offline: '#9ca3af' };
   const color = isOnline ? (statusColorMap[status] || '#4ade80') : '#9ca3af';
 
-  const icon = deviceType === 'mobile' ? '📱 Mobil' : '💻 Masaüstü';
+  const iconSvg = deviceType === 'mobile' 
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg> Mobil` 
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Masaüstü`;
   const text = isOnline ? 'Çevrimiçi' : (lastSeen ? `Son Görülme: ${typeof fmtDate === 'function' ? fmtDate(lastSeen) : lastSeen}` : 'Çevrimdışı');
 
   subtitle.innerHTML = `
     <span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:${color};font-weight:600;">
       <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;"></span>
-      ${icon} • ${text}
+      <span style="display:inline-flex;align-items:center;gap:3px;">${iconSvg}</span> • ${text}
     </span>
   `;
 }
+
+  // Load disappearing settings for active chat
+  try {
+    const target = _activeChatType === 'group' ? `group_${_activeChatId}` : username;
+    const sRes = await fetch(`/api/messages/settings/${encodeURIComponent(target)}`);
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      _chatDisappearingHours = sData.disappearing_hours || 24;
+      updateDisappearingHeaderLabel(_chatDisappearingHours);
+    }
+  } catch (e) {}
 
   // Load messages
   await refreshChatMessages();
@@ -176,6 +376,12 @@ function updateDeviceIndicator(deviceType, username, lastSeen, status) {
     updateTotalUnreadMessageCount();
   }
   loadInbox(); // reload inbox list for badge update
+
+  // Auto focus input on desktop
+  if (window.innerWidth > 768) {
+    const input = document.getElementById('chatInput');
+    if (input) input.focus();
+  }
 }
 
 let _lastRenderedMsgIds = [];
@@ -296,6 +502,20 @@ function _updateReadReceipt(container, newId, oldId) {
   }
 }
 
+function triggerDoubleTapHeart(event, messageId) {
+  event.stopPropagation();
+  const bubble = event.currentTarget;
+  if (bubble) {
+    const heart = document.createElement('div');
+    heart.className = 'msg-double-tap-heart';
+    heart.innerHTML = `<svg viewBox="0 0 24 24" fill="#e0245e" width="28" height="28"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+    bubble.style.position = 'relative';
+    bubble.appendChild(heart);
+    setTimeout(() => heart.remove(), 600);
+  }
+  submitReaction(messageId, 'heart');
+}
+
 // Single message bubble renderer (extracted for reuse)
 function renderMessageBubble(m, key, lastReadMsgId) {
   if (m.from_user_id === 0 || !m.from_username) {
@@ -311,16 +531,17 @@ function renderMessageBubble(m, key, lastReadMsgId) {
   const labelColor = isMe ? 'rgba(255,255,255,0.4)' : '#555';
   const decryptedContent = decryptText(m.content, key);
   const isPostShare = decryptedContent.startsWith('[POST_SHARE]:');
+  const hasImage = decryptedContent.includes('[IMAGE]:');
 
   let bubbleClass = isMe ? 'msg-body-wrapper msg-sender-bubble' : 'msg-body-wrapper';
-  let bubbleStyle = `background:${isMe ? '' : '#0a0a0a'};color:#fff;border:${isMe ? 'none' : '1px solid #1a1a1a'};padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:18px;word-break:break-word;cursor:pointer;transition:transform 0.1s; touch-action:pan-y;`;
+  let bubbleStyle = `background:${isMe ? '' : '#0a0a0a'};color:#fff;border:${isMe ? 'none' : '1px solid #1a1a1a'};padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:18px;word-break:break-word;cursor:pointer;transition:transform 0.1s; touch-action:pan-y;position:relative;`;
   
   if (isPostShare) {
     bubbleClass = '';
     bubbleStyle = 'background:transparent; border:none; padding:0; box-shadow:none; cursor:pointer; display:block; touch-action:pan-y;';
   }
 
-  let mainBodyHtml = `<div>${esc(decryptedContent)}</div>`;
+  let mainBodyHtml = '';
   if (isPostShare) {
     const parts = decryptedContent.split(':');
     const postId = parseInt(parts[1]);
@@ -334,6 +555,16 @@ function renderMessageBubble(m, key, lastReadMsgId) {
     if (extraMsg) {
       mainBodyHtml += `<div style="margin-top:6px;font-size:12px;font-weight:600;word-break:break-word;">${esc(extraMsg)}</div>`;
     }
+  } else if (hasImage) {
+    const parts = decryptedContent.split('[IMAGE]:');
+    const textPart = parts[0].trim();
+    const imgUrl = parts[1].trim();
+    mainBodyHtml = `
+      ${textPart ? `<div>${esc(textPart)}</div>` : ''}
+      <img src="${imgUrl}" class="chat-image-attachment" alt="Görsel" onclick="event.stopPropagation(); if(typeof openImageFullscreen==='function') openImageFullscreen('${imgUrl}')">
+    `;
+  } else {
+    mainBodyHtml = `<div>${esc(decryptedContent)}</div>`;
   }
 
   let replyHtml = '';
@@ -341,6 +572,8 @@ function renderMessageBubble(m, key, lastReadMsgId) {
     let decryptedParent = decryptText(m.parent_content, key);
     if (decryptedParent.startsWith('[POST_SHARE]:')) {
       decryptedParent = '📄 Paylaşılan Gönderi';
+    } else if (decryptedParent.includes('[IMAGE]:')) {
+      decryptedParent = '📷 Görsel';
     }
     replyHtml = `
       <div class="msg-reply-bubble" style="cursor:pointer" onclick="event.stopPropagation(); scrollToMessage(${m.parent_id})">
@@ -372,17 +605,35 @@ function renderMessageBubble(m, key, lastReadMsgId) {
     reactionGroups[r.reaction].push(r.username);
   });
 
+function getReactionSvgIcon(key) {
+  const map = {
+    heart: `<svg viewBox="0 0 24 24" fill="#e0245e" width="12" height="12"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`,
+    thumbsup: `<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="12" height="12"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`,
+    star: `<svg viewBox="0 0 24 24" fill="#eab308" width="12" height="12"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    flame: `<svg viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" width="12" height="12"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.38 0 2.5-1.12 2.5-2.5 0-1.75-2.5-4.5-2.5-4.5s-2.5 2.75-2.5 4.5z"/><path d="M12 2C6.5 2 2 6.5 2 12c0 3.31 1.61 6.24 4.1 8.07.41-.65.9-1.24 1.46-1.75.92-.83 2.05-1.32 3.24-1.32s2.32.49 3.24 1.32c.56.51 1.05 1.1 1.46 1.75C18.39 18.24 20 15.31 20 12c0-5.5-4.5-10-10-10z"/></svg>`,
+    bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" width="12" height="12"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`,
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>`
+  };
+  if (map[key]) return map[key];
+  if (key === '❤️') return map.heart;
+  if (key === '👍') return map.thumbsup;
+  if (key === '⭐' || key === '😮') return map.star;
+  if (key === '🔥' || key === '😂') return map.flame;
+  return map.heart;
+}
+
   let reactionsHtml = '';
   if (reactionsList.length > 0) {
     reactionsHtml = `
       <div class="msg-reactions-container" style="align-self:${align};">
-        ${Object.entries(reactionGroups).map(([emoji, users]) => {
+        ${Object.entries(reactionGroups).map(([key, users]) => {
           const count = users.length;
           const namesText = users.join(', ');
+          const svgIcon = getReactionSvgIcon(key);
           return `
-            <div class="msg-reaction-badge" title="${esc(namesText)}" onclick="showReactionDetails(${m.id})">
-              <span>${emoji}</span>
-              ${count > 1 ? `<span style="font-size:8px;font-weight:bold;color:#aaa">${count}</span>` : ''}
+            <div class="msg-reaction-badge" title="${esc(namesText)}" onclick="showReactionDetails(${m.id})" style="display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);cursor:pointer;">
+              <span>${svgIcon}</span>
+              ${count > 1 ? `<span style="font-size:9px;font-weight:bold;color:#aaa">${count}</span>` : ''}
             </div>
           `;
         }).join('')}
@@ -406,6 +657,13 @@ function renderMessageBubble(m, key, lastReadMsgId) {
     return '';
   })();
 
+  const selfDestructBadge = _chatDisappearingHours > 0 ? `
+    <span class="msg-self-destruct-badge" title="Süreli Mesaj (${_chatDisappearingHours}sa)" style="display:inline-flex;align-items:center;gap:3px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>${_chatDisappearingHours >= 24 ? (_chatDisappearingHours/24)+'g' : _chatDisappearingHours+'sa'}</span>
+    </span>
+  ` : '';
+
   return `
     <div id="chat-msg-${m.id}" class="chat-msg-row-item" style="display:flex;align-items:flex-end;gap:8px;align-self:${align};max-width:75%;transition:all 0.3s ease;">
       ${avatarHtml}
@@ -413,7 +671,7 @@ function renderMessageBubble(m, key, lastReadMsgId) {
         <div class="msg-bubble-row">
           <div class="${bubbleClass}" 
                style="${bubbleStyle}"
-               ondblclick="submitReaction(${m.id}, '❤️')"
+               ondblclick="triggerDoubleTapHeart(event, ${m.id})"
                onclick="openMessageActionsMenu(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})"
                ontouchstart="handleTouchStart(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})"
                ontouchmove="handleTouchMove(event)"
@@ -423,11 +681,12 @@ function renderMessageBubble(m, key, lastReadMsgId) {
           </div>
         </div>
         ${reactionsHtml}
-        <div style="font-size:9px;color:${labelColor};font-weight:700;align-self:${align};margin-top:2px;margin-bottom:6px">
-          ${(() => {
+        <div style="font-size:9px;color:${labelColor};font-weight:700;align-self:${align};margin-top:2px;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+          <span>${(() => {
             const dateStr = m.created_at.endsWith('Z') || m.created_at.includes('+') ? m.created_at : m.created_at + 'Z';
             return new Date(dateStr).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-          })()}
+          })()}</span>
+          ${selfDestructBadge}
         </div>
         ${readReceiptHtml}
       </div>
@@ -493,7 +752,26 @@ async function sendChatMessage() {
       await refreshChatMessages();
       loadInbox();
     } else {
-      showToast('Mesaj gönderilemedi');
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || 'Mesaj gönderilemedi');
+      if (res.status === 429) {
+        const input = document.getElementById('msgInput');
+        if (input) {
+          input.disabled = true;
+          const cooldown = data.retryAfter || 15;
+          let count = cooldown;
+          const origPlaceholder = input.placeholder;
+          const timer = setInterval(() => {
+            count--;
+            input.placeholder = `Spam engeli (${count}s)...`;
+            if (count <= 0) {
+              clearInterval(timer);
+              input.disabled = false;
+              input.placeholder = origPlaceholder;
+            }
+          }, 1000);
+        }
+      }
     }
   } catch {
     showToast('Bağlantı hatası');
@@ -507,13 +785,16 @@ function closeChatArea() {
   _lastReadReceiptMsgId = null;
   _lastInboxFingerprint = '';
   cancelReply();
-  const inboxList = document.getElementById('inboxList');
+  if (typeof syncUrlState === 'function') {
+    syncUrlState('messages', '');
+  }
+  const inboxPanel = document.getElementById('inboxPanel');
   const chatArea = document.getElementById('chatArea');
   const placeholder = document.getElementById('chatPlaceholder');
 
   document.body.classList.remove('chat-active');
 
-  if (inboxList) inboxList.style.display = 'flex';
+  if (inboxPanel) inboxPanel.style.display = 'flex';
   if (chatArea) chatArea.style.display = 'none';
   if (placeholder && window.innerWidth > 768) placeholder.style.display = 'flex';
 }
@@ -885,9 +1166,12 @@ async function submitCreateGroup() {
     });
     const data = await res.json();
     if (res.ok) {
-      showToast('Grup oluşturuldu!');
+      showToast('Grup başarıyla oluşturuldu!');
       closeCreateGroupModal();
       await loadInbox();
+      if (data && data.id) {
+        openDirectChat(name, 1, data.id);
+      }
     } else {
       showToast(data.error || 'Hata oluştu');
     }
@@ -1424,7 +1708,7 @@ function renderSharedPostCardInBubble(el, post) {
         <span>${post.comment_count || 0}</span>
       </div>
       <div style="display:flex; align-items:center; gap:4px;">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" style="color:rgba(255,255,255,0.4);"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="color:rgba(255,255,255,0.4);"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         <span>${post.repost_count || 0}</span>
       </div>
     </div>
@@ -1472,7 +1756,7 @@ async function showReactionDetails(messageId) {
             <div style="font-size:10px;color:#555">Seviye ${r.level || 1}</div>
           </div>
         </div>
-        <span style="font-size:20px;">${esc(r.reaction)}</span>
+        <span style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);">${getReactionSvgIcon(r.reaction)}</span>
       </div>
     `).join('');
   } catch {
@@ -1492,6 +1776,18 @@ let _shareActivePostId = null;
 let _shareTargetsCache = [];
 window._shareSelectedTargets = [];
 
+function updateShareSubmitBtnState(count = 0, loading = false) {
+  const btn = document.getElementById('shareSubmitBtn');
+  if (!btn) return;
+  btn.disabled = loading || count === 0;
+  const sendSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+  let text = 'GÖNDER';
+  if (loading) text = 'GÖNDERİLİYOR...';
+  else if (count > 0) text = `GÖNDER (${count})`;
+
+  btn.innerHTML = `${sendSvg}<span class="share-btn-text">${text}</span>`;
+}
+
 async function openSharePostModal(postId) {
   _shareActivePostId = postId;
   window._shareSelectedTargets = [];
@@ -1500,15 +1796,11 @@ async function openSharePostModal(postId) {
   const msgInput = document.getElementById('sharePostMessageInput');
   const searchInput = document.getElementById('sharePostSearchInput');
   const listContainer = document.getElementById('sharePostTargetsList');
-  const btn = document.getElementById('shareSubmitBtn');
 
   if (modal) modal.classList.add('open');
   if (msgInput) msgInput.value = '';
   if (searchInput) searchInput.value = '';
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'GÖNDER';
-  }
+  updateShareSubmitBtnState(0);
   if (listContainer) listContainer.innerHTML = '<div style="grid-column: span 4; font-size:11px;color:#888;padding:24px;text-align:center;">Yükleniyor...</div>';
 
   try {
@@ -1675,22 +1967,13 @@ function toggleShareTarget(targetKey) {
   }
 
   // Update send button state
-  const btn = document.getElementById('shareSubmitBtn');
-  if (btn) {
-    const count = window._shareSelectedTargets.length;
-    btn.disabled = count === 0;
-    btn.textContent = count > 0 ? `GÖNDER (${count})` : 'GÖNDER';
-  }
+  updateShareSubmitBtnState(window._shareSelectedTargets.length);
 }
 
 async function submitMultiSharePost() {
   if (!_shareActivePostId || window._shareSelectedTargets.length === 0) return;
 
-  const btn = document.getElementById('shareSubmitBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'GÖNDERİLİYOR...';
-  }
+  updateShareSubmitBtnState(window._shareSelectedTargets.length, true);
 
   const extraMsg = document.getElementById('sharePostMessageInput').value.trim();
   const shareText = `[POST_SHARE]:${_shareActivePostId}`;
@@ -1741,11 +2024,8 @@ async function submitMultiSharePost() {
     loadInbox();
   } catch {
     showToast('Bazı mesajlar gönderilemedi');
-    if (btn) {
-      const count = window._shareSelectedTargets.length;
-      btn.disabled = count === 0;
-      btn.textContent = count > 0 ? `GÖNDER (${count})` : 'GÖNDER';
-    }
+    const count = window._shareSelectedTargets ? window._shareSelectedTargets.length : 0;
+    updateShareSubmitBtnState(count, false);
   }
 }
 
@@ -1873,3 +2153,110 @@ function handleTouchEnd(event, messageId, content, fromUsername, isMe) {
   
   _swipeActiveEl = null;
 }
+
+// ============================================================
+// DISAPPEARING MESSAGES MODAL LOGIC
+// ============================================================
+function openDisappearingSettingsModal() {
+  const modal = document.getElementById('disappearingSettingsModal');
+  if (modal) {
+    modal.classList.add('open');
+    document.querySelectorAll('.disappearing-check').forEach(el => {
+      const h = parseInt(el.getAttribute('data-hours'));
+      if (h === _chatDisappearingHours) {
+        el.classList.add('selected');
+      } else {
+        el.classList.remove('selected');
+      }
+    });
+  }
+}
+
+function closeDisappearingSettingsModal() {
+  const modal = document.getElementById('disappearingSettingsModal');
+  if (modal) modal.classList.remove('open');
+}
+
+async function selectDisappearingOption(hours) {
+  if (hours === 0) {
+    showToast('Çok yakında abonelik sistemi ile sınırsız süreli mesajları aktif edeceğiz...');
+    return;
+  }
+  _chatDisappearingHours = hours;
+  closeDisappearingSettingsModal();
+  updateDisappearingHeaderLabel(hours);
+
+  if (!_activeChatPartner) return;
+  const target = _activeChatType === 'group' ? `group_${_activeChatId}` : _activeChatPartner;
+
+  try {
+    await fetch(`/api/messages/settings/${encodeURIComponent(target)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ disappearing_hours: hours })
+    });
+    showToast(`Süreli mesajlar ${hours >= 24 ? (hours/24) + ' gün' : hours + ' saat'} olarak ayarlandı.`);
+    await refreshChatMessages();
+  } catch (e) {
+    console.error('Failed to update disappearing settings:', e);
+  }
+}
+
+function updateDisappearingHeaderLabel(hours) {
+  const label = document.getElementById('chatDisappearingLabel');
+  if (!label) return;
+  if (hours === 0) label.textContent = 'Kapalı';
+  else if (hours === 1) label.textContent = '1sa';
+  else if (hours === 24) label.textContent = '24sa';
+  else if (hours === 168) label.textContent = '7gün';
+  else label.textContent = `${hours}sa`;
+}
+
+// ============================================================
+// INBOX USER SEARCH & DESKTOP PANEL TOGGLE
+// ============================================================
+let _inboxSearchTimeout = null;
+function handleInboxSearchInput(query) {
+  clearTimeout(_inboxSearchTimeout);
+  const q = (query || '').trim().toLowerCase();
+  
+  if (!q) {
+    _lastInboxFingerprint = '';
+    loadInbox();
+    return;
+  }
+
+  _inboxSearchTimeout = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/search/users?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return;
+      const users = await res.json();
+      const inboxList = document.getElementById('inboxList');
+      if (!inboxList) return;
+
+      const myName = (typeof currentUser !== 'undefined' && currentUser?.username) || localStorage.getItem('username');
+      const filteredUsers = (users || []).filter(u => !myName || u.username.toLowerCase() !== myName.toLowerCase());
+
+      if (filteredUsers.length === 0) {
+        inboxList.innerHTML = '<div style="padding:16px;text-align:center;color:#666;font-size:11px;font-weight:700">Kullanıcı bulunamadı</div>';
+        return;
+      }
+
+      inboxList.innerHTML = filteredUsers.map(u => `
+        <div class="inbox-item" onclick="openDirectChat('${esc(u.username)}', 0)" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--border-soft);background:#050505;cursor:pointer;position:relative">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            ${renderAvatar(u, 'avatar avatar-sm')}
+            <div style="min-width:0">
+              <div style="font-weight:800;color:#fff;font-size:13px">@${esc(u.username)}</div>
+              <div style="font-size:10px;color:#888">Seviye ${u.level} • ${u.xp} XP</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    } catch (e) {
+      console.error('Failed to search users in inbox:', e);
+    }
+  }, 250);
+}
+
+

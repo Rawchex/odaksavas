@@ -37,8 +37,22 @@ CREATE TABLE IF NOT EXISTS parties (
   owner_id INTEGER,
   name TEXT,
   is_private INTEGER DEFAULT 0,
+  invite_code TEXT UNIQUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS party_bans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  banned_by INTEGER NOT NULL,
+  reason TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(party_id, user_id),
+  FOREIGN KEY (party_id) REFERENCES parties(id),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (banned_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS party_invites (
@@ -60,6 +74,7 @@ CREATE TABLE IF NOT EXISTS party_members (
   user_id INTEGER,
   channel_id INTEGER DEFAULT NULL,
   role VARCHAR DEFAULT 'member',
+  server_muted INTEGER DEFAULT 0,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (party_id) REFERENCES parties(id),
   FOREIGN KEY (user_id) REFERENCES users(id),
@@ -76,6 +91,34 @@ CREATE TABLE IF NOT EXISTS party_channels (
   allow_screen_share INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (party_id) REFERENCES parties(id)
+);
+
+CREATE TABLE IF NOT EXISTS party_voice_moderation (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  muted_by INTEGER NOT NULL,
+  reason TEXT,
+  expires_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(party_id, user_id),
+  FOREIGN KEY (party_id) REFERENCES parties(id),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (muted_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS party_moderation_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_id INTEGER NOT NULL,
+  actor_id INTEGER NOT NULL,
+  target_user_id INTEGER,
+  action TEXT NOT NULL,
+  reason TEXT,
+  metadata TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (party_id) REFERENCES parties(id),
+  FOREIGN KEY (actor_id) REFERENCES users(id),
+  FOREIGN KEY (target_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS friendships (
@@ -172,9 +215,21 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS chat_groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
+  avatar TEXT,
+  disappearing_hours INTEGER DEFAULT 24,
   created_by INTEGER,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user1_id INTEGER NOT NULL,
+  user2_id INTEGER NOT NULL,
+  disappearing_hours INTEGER DEFAULT 24,
+  UNIQUE(user1_id, user2_id),
+  FOREIGN KEY (user1_id) REFERENCES users(id),
+  FOREIGN KEY (user2_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS chat_group_members (

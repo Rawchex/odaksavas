@@ -8,7 +8,10 @@
 let _activePartyId     = null;
 let _partyRefreshInt   = null;
 let _partiesCache      = [];
-let _currentPartyTab   = 'lobby'; // 'lobby' | 'friends'
+let _currentPartyTab   = 'lobby'; // 'lobby' | 'friends' | 'manage'
+let _partyRefreshInFlight = false;
+let _partyRefreshQueued   = false;
+let _partyModalLastHtml   = '';
 
 // ============================================================
 // PARTY MODAL
@@ -18,11 +21,15 @@ async function openPartyModal() {
   const content = document.getElementById('partyModalContent');
   if (!modal) return;
 
+  // Rapid taps previously created concurrent pollers/renders and made the
+  // modal visibly flash on mobile.
+  if (modal.classList.contains('open')) return;
+
   modal.style.display = 'flex';
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
 
-  if (content) {
+  if (content && !content.children.length) {
     content.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#949ba4;font-size:13px;font-weight:700;">YÜKLENİYOR...</div>';
   }
 
@@ -56,7 +63,10 @@ async function openPartyModal() {
 function closePartyModal() {
   const modal = document.getElementById('partyModal');
   if (modal) {
-    modal.classList.remove('open');
+    // The same shell hosts the room browser and the management console.
+    // Reset both modes so a later regular room browse cannot inherit the
+    // console's fixed desktop/mobile dimensions.
+    modal.classList.remove('open', 'room-management-open');
     modal.style.display = 'none';
   }
   document.body.style.overflow = '';
@@ -64,21 +74,59 @@ function closePartyModal() {
     clearInterval(_partyRefreshInt);
     _partyRefreshInt = null;
   }
+  _partyRefreshQueued = false;
+  _partyModalLastHtml = '';
 }
 
 async function refreshPartyModal() {
+  if (_partyRefreshInFlight) {
+    _partyRefreshQueued = true;
+    return;
+  }
+
+  _partyRefreshInFlight = true;
+  try {
+    await renderPartyModalContent();
+  } finally {
+    _partyRefreshInFlight = false;
+    if (_partyRefreshQueued) {
+      _partyRefreshQueued = false;
+      requestAnimationFrame(() => refreshPartyModal());
+    }
+  }
+}
+
+async function renderPartyModalContent() {
   const content = document.getElementById('partyModalContent');
   if (!content) return;
 
+  // Check if user has management permissions
+  let activeParty = _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id);
+  let canManageParty = false;
+  if (activeParty) {
+    try {
+      const detailRes = await fetch(`/api/parties/${activeParty.id}`);
+      if (detailRes.ok) {
+        const party = await detailRes.json();
+        const meMember = party.members.find(m => m.username === currentUser?.username);
+        const isOwner = Boolean(
+          (party.owner_id && currentUser?.id && parseInt(party.owner_id) === parseInt(currentUser.id)) ||
+          (party.owner_name && currentUser?.username && party.owner_name === currentUser.username)
+        );
+        canManageParty = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember.role));
+      }
+    } catch(e) {}
+  }
+
   let html = `
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.08); background:#18191c; flex-shrink:0;">
-      <div style="display:flex; align-items:center; gap:16px;">
-        <div style="font-size:16px; font-weight:800; color:#fff; letter-spacing:0.5px; display:flex; align-items:center; gap:8px;">
+    <div class="focus-rooms-modal-header">
+      <div class="focus-rooms-modal-title-wrap">
+        <div class="focus-rooms-modal-title">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#5865f2" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>ODAK ODALARI</span>
         </div>
-        <div style="height:18px; width:1px; background:rgba(255,255,255,0.12);"></div>
-        <div style="display:flex; gap:8px;">
+        <div class="focus-rooms-modal-divider"></div>
+        <div class="focus-rooms-modal-tabs" role="tablist" aria-label="Odak odaları görünümleri">
           <button class="discord-action-btn ${_currentPartyTab === 'lobby' ? 'primary' : ''}" style="padding:6px 14px; font-size:12px;" onclick="switchPartyTab('lobby')" data-tooltip="Odalar & Aktif Lobi" data-tooltip-pos="bottom">
             Odalar
           </button>
@@ -91,15 +139,17 @@ async function refreshPartyModal() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div style="flex:1; overflow-y:auto; padding:24px; box-sizing:border-box;">
+    <div id="partyModalScrollArea" class="focus-rooms-modal-body">
       <div id="voiceHandoverBanner" class="voice-handover-banner" style="display:none;"></div>
   `;
 
   try {
     if (_currentPartyTab === 'lobby') {
       html += await buildLobbyTabHtml();
-    } else {
+    } else if (_currentPartyTab === 'friends') {
       html += await buildFriendsTabHtml();
+    } else if (_currentPartyTab === 'manage') {
+      html += await buildManageTabHtml();
     }
   } catch (err) {
     html += `<div style="text-align:center;padding:20px;color:#ef4444;font-size:12px">HATA OLUŞTU: ${err.message}</div>`;
@@ -107,7 +157,24 @@ async function refreshPartyModal() {
 
   html += `</div>`; // Close scrollable body
 
-  content.innerHTML = html;
+  // Avoid destroying/rebuilding the same tree on each poll. Besides removing
+  // flicker, this keeps scroll position and any in-progress selection intact.
+  if (_partyModalLastHtml !== html) {
+    const oldScrollArea = content.querySelector('#partyModalScrollArea');
+    const scrollTop = oldScrollArea ? oldScrollArea.scrollTop : 0;
+    const activeElement = document.activeElement;
+    const focusedId = activeElement && content.contains(activeElement) ? activeElement.id : '';
+
+    content.innerHTML = html;
+    _partyModalLastHtml = html;
+
+    const newScrollArea = content.querySelector('#partyModalScrollArea');
+    if (newScrollArea) newScrollArea.scrollTop = scrollTop;
+    if (focusedId) {
+      const replacement = document.getElementById(focusedId);
+      if (replacement && typeof replacement.focus === 'function') replacement.focus({ preventScroll: true });
+    }
+  }
 
   // Trigger multi-device voice handover check
   if (typeof checkAndRenderHandoverButton === 'function') {
@@ -120,9 +187,15 @@ async function refreshPartyModal() {
       populateLobbyInviteFriendsList(activeParty);
     }
   }
+
+  // Load banned users if on manage tab
+  if (_currentPartyTab === 'manage') {
+    setTimeout(() => loadBannedUsers(), 100);
+  }
 }
 
 function switchPartyTab(tab) {
+  if (_currentPartyTab === tab) return;
   _currentPartyTab = tab;
   refreshPartyModal();
 }
@@ -146,21 +219,32 @@ async function buildLobbyTabHtml() {
       (party.owner_name && currentUser?.username && party.owner_name === currentUser.username)
     );
     const meMember = party.members.find(m => m.username === currentUser?.username);
+    const canRename = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember.role));
+    const canAddChannel = isOwner || (meMember && ['owner', 'admin'].includes(meMember.role));
     const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember.role));
 
     html += `
       <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">AKTİF LOBİNİZ</div>
-      <div style="background:#1e1f22; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:20px; margin-bottom:24px;">
+      <div class="focus-room-active-card" style="background:#1e1f22; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:20px; margin-bottom:24px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
           <div style="font-size:18px;font-weight:900;color:#fff;text-transform:uppercase;word-break:break-word">${esc(party.name)}</div>
-          ${canManage ? `
+          ${(canRename || canAddChannel || canManage) ? `
             <div style="display:flex;gap:8px;flex-shrink:0">
-              <button onclick="triggerPartyRenameFromHeader()" class="discord-action-btn icon-only" data-tooltip="Oda Adını Değiştir" data-tooltip-pos="top">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              </button>
-              <button onclick="promptAddChannel()" class="discord-action-btn icon-only" data-tooltip="Alt Ses Kanalı Oluştur" data-tooltip-pos="top">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </button>
+              ${canManage ? `
+                <button onclick="if(window.RoomManagement) RoomManagement.open();" class="discord-action-btn icon-only" data-tooltip="Oda Yönetimi" data-tooltip-pos="top">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+              ` : ''}
+              ${canRename ? `
+                <button onclick="triggerPartyRenameFromHeader()" class="discord-action-btn icon-only" data-tooltip="Oda Adını Değiştir" data-tooltip-pos="top">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+              ` : ''}
+              ${canAddChannel ? `
+                <button onclick="promptAddChannel()" class="discord-action-btn icon-only" data-tooltip="Alt Ses Kanalı Oluştur" data-tooltip-pos="top">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+              ` : ''}
             </div>
           ` : ''}
         </div>
@@ -292,7 +376,7 @@ function buildPublicPartiesListHtml(parties) {
     return `<div style="text-align:center;padding:24px;font-size:12px;color:#949ba4;font-weight:600">AKTİF GENEL LOBİ YOK</div>`;
   }
   return filtered.map(p => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1e1f22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;margin-bottom:8px;">
+    <div class="focus-room-list-item" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1e1f22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;margin-bottom:8px;">
       <div style="flex:1">
         <div style="font-size:15px;font-weight:800;color:#fff">${esc(p.name)}</div>
         <div style="font-size:11px;color:#949ba4;margin-top:2px">Kurucu: <strong style="color:#f2f3f5">@${esc(p.owner_name)}</strong> · ${p.member_count} üye</div>
@@ -313,6 +397,249 @@ function filterPartiesModal() {
   );
 
   container.innerHTML = buildPublicPartiesListHtml(filtered);
+}
+
+// ============================================================
+// MANAGEMENT TAB BUILDER
+// ============================================================
+async function buildManageTabHtml() {
+  const activeParty = _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id);
+  if (!activeParty) {
+    return `<div style="text-align:center;padding:24px;font-size:13px;color:#949ba4;font-weight:600">Aktif bir odanız yok</div>`;
+  }
+
+  const detailRes = await fetch(`/api/parties/${activeParty.id}`);
+  if (!detailRes.ok) throw new Error('Oda bilgisi alınamadı');
+  const party = await detailRes.json();
+
+  const meMember = party.members.find(m => m.username === currentUser?.username);
+  const isOwner = Boolean(
+    (party.owner_id && currentUser?.id && parseInt(party.owner_id) === parseInt(currentUser.id)) ||
+    (party.owner_name && currentUser?.username && party.owner_name === currentUser.username)
+  );
+  const myRole = meMember?.role || (isOwner ? 'owner' : 'member');
+
+  // Permission checks
+  const canManageMembers = ['owner', 'admin'].includes(myRole);
+  const canManageChannels = ['owner', 'admin', 'moderator'].includes(myRole);
+  const canManagePartySettings = ['owner', 'admin'].includes(myRole);
+
+  let html = `
+    <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">ODA BİLGİLERİ</div>
+    <div class="focus-room-active-card" style="background:#1e1f22; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:20px; margin-bottom:24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+        <div style="font-size:18px;font-weight:900;color:#fff;text-transform:uppercase;word-break:break-word">${esc(party.name)}</div>
+        ${canManagePartySettings ? `
+          <button onclick="triggerPartyRenameFromHeader()" class="discord-action-btn icon-only" data-tooltip="Oda Adını Değiştir" data-tooltip-pos="top">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+        ` : ''}
+      </div>
+      <div style="font-size:12px;color:#949ba4;margin-bottom:12px">Kurucu: <strong style="color:#f2f3f5">@${esc(party.owner_name)}</strong> · ${party.members.length} Üye · ${party.channels?.length || 1} Kanal</div>
+      <div style="font-size:11px;color:#6b7280;font-weight:600;">Senin rolün: <span style="color:${myRole === 'owner' ? '#fbbf24' : myRole === 'admin' ? '#c084fc' : myRole === 'moderator' ? '#60a5fa' : '#80848e'}">${myRole === 'owner' ? 'KURUCU' : myRole === 'admin' ? 'YÖNETİCİ' : myRole === 'moderator' ? 'MODERATÖR' : 'ÜYE'}</span></div>
+    </div>
+  `;
+
+  // Channel Management
+  if (canManageChannels) {
+    html += `
+      <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">KANALLAR</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">
+        ${(party.channels || [{id: party.default_channel_id, name: 'Genel'}]).map((ch, idx) => `
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#111214;border:1px solid rgba(255,255,255,0.06);padding:12px 16px;border-radius:12px;">
+            <div style="display:flex;align-items:center;gap:10px">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#949ba4" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <span style="font-size:13px;font-weight:700;color:#fff">${esc(ch.name)}</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+              ${canManageChannels ? `
+                ${idx > 0 ? `
+                  <button onclick="reorderChannel(${ch.id}, -1)" class="discord-action-btn icon-only" style="width:32px;height:32px;padding:0;border-radius:8px;background:#4e5058;" data-tooltip="Yukarı Taşı" data-tooltip-pos="top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                ` : ''}
+                ${idx < (party.channels?.length || 1) - 1 ? `
+                  <button onclick="reorderChannel(${ch.id}, 1)" class="discord-action-btn icon-only" style="width:32px;height:32px;padding:0;border-radius:8px;background:#4e5058;" data-tooltip="Aşağı Taşı" data-tooltip-pos="top">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                ` : ''}
+                <button onclick="promptEditChannel(${ch.id}, '${esc(ch.name)}', ${ch.user_limit || 0})" class="discord-action-btn icon-only" style="width:32px;height:32px;padding:0;border-radius:8px;background:#4e5058;" data-tooltip="Kanalı Düzenle" data-tooltip-pos="top">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+              ` : ''}
+              ${canManagePartySettings && ch.id !== party.default_channel_id ? `
+                <button onclick="deleteChannel(${party.id}, ${ch.id})" class="discord-action-btn icon-only" style="width:32px;height:32px;padding:0;border-radius:8px;background:#da373c;" data-tooltip="Kanalı Sil" data-tooltip-pos="top">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `).join('')}
+        ${canManagePartySettings ? `
+          <button onclick="promptAddChannel()" class="discord-action-btn" style="padding:12px 20px;font-size:13px;font-weight:700;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#ffffff" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span style="color:#ffffff !important;">Yeni Kanal Ekle</span>
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  // Member Management
+  html += `
+    <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">ÜYELER</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${party.members.map(m => {
+        const isMe = m.username === currentUser.username;
+        const canEditThisMember = canManageMembers && !isMe && m.role !== 'owner';
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#111214;border:1px solid rgba(255,255,255,0.06);padding:12px 16px;border-radius:12px;">
+            <div style="display:flex;align-items:center;gap:10px">
+              ${renderAvatar(m, 'avatar avatar-sm')}
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#fff">${esc(m.username)} ${isMe ? '<span style="font-size:10px;color:#949ba4;font-weight:400"> (sen)</span>' : ''}</div>
+                <div style="font-size:10px;color:${m.role === 'owner' ? '#fbbf24' : m.role === 'admin' ? '#c084fc' : m.role === 'moderator' ? '#60a5fa' : '#80848e'};font-weight:700;text-transform:uppercase;letter-spacing:0.3px;">${m.role === 'owner' ? 'KURUCU' : m.role === 'admin' ? 'YÖNETİCİ' : m.role === 'moderator' ? 'MODERATÖR' : 'ÜYE'}</div>
+              </div>
+            </div>
+            ${canEditThisMember ? `
+              <div style="display:flex;gap:6px;">
+                <button onclick="openUserVoiceModal('${esc(m.username)}')" class="discord-action-btn icon-only" style="width:32px;height:32px;padding:0;border-radius:8px;background:#4e5058;" data-tooltip="Üye Yönetimi" data-tooltip-pos="top">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  // Ban Management (only for owner and admin)
+  if (canManageMembers) {
+    html += `
+      <div style="font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; margin-top:24px;">BANLANMIŞ KULLANICILAR</div>
+      <div id="bannedUsersList" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="text-align:center;padding:16px;font-size:12px;color:#949ba4;font-weight:600">Yükleniyor...</div>
+      </div>
+    `;
+  }
+
+  return html;
+}
+
+// Load banned users for the party
+async function loadBannedUsers() {
+  const partyId = window._currentPartyId || _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id)?.id;
+  if (!partyId) return;
+
+  const container = document.getElementById('bannedUsersList');
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/parties/${partyId}/bans`);
+    const bans = await res.json();
+
+    if (!bans || bans.length === 0) {
+      container.innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:#949ba4;font-weight:600">Banlanmış kullanıcı yok</div>';
+      return;
+    }
+
+    container.innerHTML = bans.map(ban => `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#111214;border:1px solid rgba(239,68,68,0.2);padding:12px 16px;border-radius:12px;">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:50%;background:#2d2d2d;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#949ba4;">${ban.username?.charAt(0).toUpperCase() || '?'}</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#fff">${esc(ban.username || 'Bilinmeyen')}</div>
+            <div style="font-size:10px;color:#ef4444;font-weight:600;">Banlayan: @${esc(ban.banned_by_username || 'Sistem')} · ${new Date(ban.created_at).toLocaleDateString('tr-TR')}</div>
+          </div>
+        </div>
+        <button onclick="unbanUser(${partyId}, ${ban.user_id})" class="discord-action-btn icon-only" style="width:32px;height:32px;padding:0;border-radius:8px;background:#23a55a;" data-tooltip="Banı Aç" data-tooltip-pos="top">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+      </div>
+    `).join('');
+  } catch(e) {
+    console.error('Load banned users error:', e);
+    container.innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:#ef4444;font-weight:600">Yüklenemedi</div>';
+  }
+}
+
+// Unban a user
+async function unbanUser(partyId, userId) {
+  if (!confirm('Bu kullanıcının banını açmak istediğine emin misin?')) return;
+
+  try {
+    const res = await fetch(`/api/parties/${partyId}/bans/${userId}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      showToast('Ban açıldı');
+      loadBannedUsers();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Ban açılamadı');
+    }
+  } catch(e) {
+    console.error('Unban error:', e);
+    showToast('Hata oluştu');
+  }
+}
+
+async function deleteChannel(partyId, channelId) {
+  if (!confirm('Bu kanalı silmek istediğine emin misin?')) return;
+
+  try {
+    const res = await fetch(`/api/parties/${partyId}/channels/${channelId}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      showToast('Kanal silindi');
+      refreshPartyModal();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Kanal silinemedi');
+    }
+  } catch(e) {
+    console.error('Delete channel error:', e);
+    showToast('Hata oluştu');
+  }
+}
+
+function promptEditChannel(chanId, currentName, currentLimit) {
+  const partyId = window._currentPartyId || _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id)?.id;
+  if (!partyId) {
+    showToast('Oda bulunamadı');
+    return;
+  }
+  if (typeof openChannelConfigModal === 'function') {
+    openChannelConfigModal('edit_channel', { channelId: chanId, currentName, currentLimit });
+  }
+}
+
+async function reorderChannel(chanId, direction) {
+  const partyId = window._currentPartyId || _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id)?.id;
+  if (!partyId) {
+    showToast('Oda bulunamadı');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/parties/${partyId}/channels/${chanId}/reorder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction })
+    });
+    if (res.ok) {
+      showToast('Kanal sıralaması güncellendi');
+      refreshPartyModal();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Sıralama güncellenemedi');
+    }
+  } catch(e) {
+    console.error('Reorder channel error:', e);
+    showToast('Hata oluştu');
+  }
 }
 
 // ============================================================
@@ -377,17 +704,11 @@ async function buildFriendsTabHtml() {
             const inviteBtn = activeParty
               ? `<button class="discord-action-btn primary" style="padding:6px 12px;font-size:11px" onclick="event.stopPropagation();inviteFriendToParty(${activeParty.id}, '${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısını aktif lobiye çağır" data-tooltip-pos="left">Lobiye Davet Et</button>`
               : '';
-            const onlineDot = f.is_online
-              ? `<div style="background:#23a55a;width:10px;height:10px;border-radius:50%;position:absolute;bottom:-1px;right:-1px;border:2px solid #111214"></div>`
-              : `<div style="background:#80848e;width:10px;height:10px;border-radius:50%;position:absolute;bottom:-1px;right:-1px;border:2px solid #111214"></div>`;
             const dmBtn = `<button class="discord-action-btn" style="padding:6px 12px;font-size:11px" onclick="event.stopPropagation();closePartyModal();showPage('messages');openDirectChat('${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısına direkt mesaj gönder" data-tooltip-pos="top">Mesaj</button>`;
             return `
               <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1e1f22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;cursor:pointer" onclick="closePartyModal();openUserModal('${esc(f.username)}')">
                 <div style="display:flex;align-items:center;gap:12px">
-                  <div style="position:relative">
-                    ${renderAvatar(f, 'avatar avatar-sm')}
-                    ${onlineDot}
-                  </div>
+                  ${renderAvatar(f, 'avatar avatar-sm')}
                   <div>
                     <div style="font-weight:800;color:#fff;font-size:14px">@${esc(f.username)}</div>
                     <div style="font-size:11px;color:#949ba4;margin-top:2px;">Lvl ${f.level || 1} · ${f.is_online ? '<span style="color:#23a55a;font-weight:700">Çevrimiçi</span>' : 'Çevrimdışı'}</div>
@@ -701,6 +1022,7 @@ async function submitCreateParty() {
     
     showToast('Lobi oluşturuldu!');
     if (typeof setActiveParty === 'function') setActiveParty(partyId);
+    if (typeof window.completeFocusRoomOnboarding === 'function') window.completeFocusRoomOnboarding();
     refreshPartyModal();
   } else {
     showToast('Oluşturulamadı');
@@ -712,6 +1034,7 @@ async function joinParty(partyId) {
   if (res.ok) {
     showToast('Lobiye katıldın!');
     if (typeof setActiveParty === 'function') setActiveParty(partyId);
+    if (typeof window.completeFocusRoomOnboarding === 'function') window.completeFocusRoomOnboarding();
     refreshPartyModal();
   } else {
     const d = await res.json().catch(() => ({}));
@@ -766,6 +1089,7 @@ async function acceptPartyInvite(inviteId) {
     showToast('Lobiye katıldın!');
     if (d.partyId) {
       if (typeof setActiveParty === 'function') setActiveParty(d.partyId);
+      if (typeof window.completeFocusRoomOnboarding === 'function') window.completeFocusRoomOnboarding();
       refreshPartyModal();
     }
   }
@@ -786,11 +1110,12 @@ async function startSessionInParty(partyId) {
 // --- INVITE CODE HELPERS ---
 async function copyPartyInviteCode(code) {
   const url = `${window.location.origin}/?join=${code}`;
+  const text = `📢 BLUNK Sesli Odaklanma Odası Daveti!\n🚀 Odama katıl ve benimle birlikte odaklanmaya başla:\n🔗 ${url}`;
   try {
-    await navigator.clipboard.writeText(url);
-    showToast(`Davet bağlantısı kopyalandı! (Kod: ${code})`);
+    await navigator.clipboard.writeText(text);
+    showToast(`Oda davet bağlantısı panoya kopyalandı! 📋`);
   } catch {
-    if (typeof window.showPrompt === 'function') window.showPrompt('Davet Bağlantınız:', url);
+    if (typeof window.showPrompt === 'function') window.showPrompt('Davet Bağlantınız:', text);
   }
 }
 
@@ -808,7 +1133,7 @@ async function promptJoinByCode() {
     if (res.ok) {
       showToast('Odaya katıldınız!');
       refreshPartyModal();
-      if (typeof openPartyUI === 'function') openPartyUI(d.partyId);
+      if (typeof setActiveParty === 'function') setActiveParty(d.partyId);
     } else {
       showToast(d.error || 'Katılım başarısız');
     }

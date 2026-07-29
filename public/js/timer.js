@@ -822,7 +822,7 @@ function updateTimerUI(state, data = {}) {
       startBtn.style.display = 'block';
       stopBtn.style.display  = 'none';
       const partyBtnIdle = document.getElementById('timerPartyBtn');
-      if (partyBtnIdle && !_currentPartyId) partyBtnIdle.style.display = 'flex';
+      if (partyBtnIdle && !_currentPartyId) partyBtnIdle.style.display = 'none';
       
       if (statusChip) { statusChip.className = 'timer-status-chip state-status'; }
       if (typeof updatePresenceUI === 'function') {
@@ -1000,7 +1000,6 @@ async function sendPartyChatMessage() {
   const key = `party_${partyId}`;
   const encryptedContent = encryptText(content, key);
 
-  input.value = '';
   try {
     const res = await fetch(`/api/parties/${partyId}/messages`, {
       method: 'POST',
@@ -1008,7 +1007,26 @@ async function sendPartyChatMessage() {
       body: JSON.stringify({ content: encryptedContent })
     });
     if (res.ok) {
+      input.value = '';
       await fetchPartyMessages(partyId);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      if (typeof showToast === 'function') showToast(data.error || 'Mesaj gönderilemedi');
+      if (res.status === 429) {
+        input.disabled = true;
+        const cooldown = data.retryAfter || 15;
+        let count = cooldown;
+        const origPlaceholder = input.placeholder;
+        const timer = setInterval(() => {
+          count--;
+          input.placeholder = `Spam Engeli (${count}s)...`;
+          if (count <= 0) {
+            clearInterval(timer);
+            input.disabled = false;
+            input.placeholder = origPlaceholder;
+          }
+        }, 1000);
+      }
     }
   } catch (e) {
     console.warn('[PartyChat] Message send error:', e);
@@ -1075,6 +1093,22 @@ function getRoleColor(role) {
   return colors[role] || '#80848e';
 }
 
+function syncPartyTitleMarquee() {
+  const label = document.getElementById('partyFocusLabel');
+  const viewport = label?.querySelector('.party-focus-label-viewport');
+  const text = label?.querySelector('.party-focus-label-text');
+  if (!label || !viewport || !text) return;
+
+  requestAnimationFrame(() => {
+    // The old animation used a fixed 140px destination. Measure the real
+    // overflow so every character reaches the visible edge on every layout.
+    const overflow = Math.max(0, Math.ceil(text.scrollWidth - viewport.clientWidth));
+    text.style.setProperty('--party-title-shift', `${-overflow}px`);
+    text.style.setProperty('--party-title-duration', `${Math.min(24, Math.max(7, overflow / 16 + 5))}s`);
+    text.classList.toggle('is-long-title', overflow > 2);
+  });
+}
+
 function renderPartyDuel(partyData) {
   const party = (partyData && partyData.members) ? partyData : { members: Array.isArray(partyData) ? partyData : [] };
   const members = party.members || [];
@@ -1115,21 +1149,45 @@ function renderPartyDuel(partyData) {
   );
   // canManage: server will do final auth check, client is just UI gating
   const canManage = isOwner || (meMember && ['owner', 'admin', 'moderator'].includes(meMember?.role));
-  const myDisplayRole = meMember?.role || (isOwner ? 'owner' : 'member');
+  const myDisplayRole = isOwner ? 'owner' : (meMember?.role || 'member');
 
   // Set Party Name Header
   const partyName = party.name || 'Odak Odası';
   if (labelEl) {
-    labelEl.innerHTML = `${esc(partyName)} ${canManage ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="margin-left:4px; opacity:0.6; flex-shrink:0;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' : ''}`;
-    if (partyName.length > 14) {
-      labelEl.classList.add('is-long-title');
-    } else {
-      labelEl.classList.remove('is-long-title');
-    }
+    labelEl.innerHTML = `${esc(partyName)}`;
+    syncPartyTitleMarquee();
+    labelEl.innerHTML = `<span class="party-focus-label-viewport"><span class="party-focus-label-text">${esc(partyName)}</span></span>`;
+    syncPartyTitleMarquee();
   }
 
   if (addChanBtn) {
     addChanBtn.style.display = canManage ? 'inline-flex' : 'none';
+  }
+  let moderationBtn = document.getElementById('partyModerationBtn');
+  if (!moderationBtn && addChanBtn?.parentElement) {
+    moderationBtn = document.createElement('button');
+    moderationBtn.id = 'partyModerationBtn';
+    moderationBtn.type = 'button';
+    moderationBtn.className = 'party-hdr-btn';
+    moderationBtn.setAttribute('data-tooltip', 'Oda Yönetimi');
+    moderationBtn.setAttribute('data-tooltip-pos', 'bottom');
+    moderationBtn.setAttribute('aria-label', 'Oda Yönetimi');
+    moderationBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    moderationBtn.onclick = () => {
+      if (window.RoomManagement && typeof window.RoomManagement.open === 'function') {
+        window.RoomManagement.open();
+      } else if (typeof openPartyModal === 'function') {
+        if (typeof switchPartyTab === 'function') switchPartyTab('manage');
+        openPartyModal();
+      }
+    };
+    addChanBtn.parentElement.insertBefore(moderationBtn, addChanBtn.nextSibling);
+  }
+  if (moderationBtn) moderationBtn.style.display = ['owner', 'admin', 'moderator'].includes(myDisplayRole) ? 'inline-flex' : 'none';
+
+  const bottomPartyBtn = document.getElementById('timerPartyBtn');
+  if (bottomPartyBtn) {
+    bottomPartyBtn.style.display = ['owner', 'admin', 'moderator'].includes(myDisplayRole) ? 'flex' : 'none';
   }
 
   // Find user's current channel
@@ -1203,12 +1261,14 @@ function renderPartyDuel(partyData) {
             const roleColor = getRoleColor(m.role);
 
             return `
-              <div class="party-focus-member ${isMe ? 'is-me' : ''} ${canManage ? 'can-drag' : ''}" 
+              <div class="party-focus-member ${isMe ? 'is-me' : ''}" 
                    id="member-card-${m.username}"
-                   onclick="openUserVoiceModal('${esc(m.username)}')"
-                   ${canManage ? `draggable="true" ondragstart="handleMemberDragStart(event, ${m.id})"` : ''}>
+                   aria-label="${esc(m.username)} oda üyesi">
                 <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; overflow:hidden;">
-                  ${renderAvatar(m, 'avatar avatar-xs')}
+                  <div class="voice-avatar-wrap" data-voice-username="${esc(m.username)}">
+                    ${renderAvatar(m, 'avatar avatar-xs')}
+                    <span class="voice-speaking-ring" aria-hidden="true"></span>
+                  </div>
                   <div style="display:flex; flex-direction:column; min-width:0; overflow:hidden;">
                     <span class="party-focus-member-name" style="font-size:13px; color:${isMe ? '#ffffff' : '#dbdee1'}; font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
                       ${esc(m.username)}
@@ -1237,6 +1297,7 @@ function renderPartyDuel(partyData) {
     if (soloPartyRow) soloPartyRow.style.display = 'none';
     const inviteBtn = document.getElementById('timerInvitePartyBtn');
     if (inviteBtn) inviteBtn.style.display = 'inline-flex';
+    if (typeof updatePartyOverlayCollapseBtn === 'function') updatePartyOverlayCollapseBtn();
   } else {
     overlay.classList.remove('in-active-party');
     overlay.style.display = 'none';
@@ -1246,49 +1307,9 @@ function renderPartyDuel(partyData) {
     if (inviteBtn) inviteBtn.style.display = 'none';
   }
 
-  // Sound Notification logic: Scoped strictly to sub-channel entry/exit and switching
-  const myChanId = window._currentChannelId || party.default_channel_id;
-  const currentMyChannelUsers = new Set(
-    (members || [])
-      .filter(m => {
-        const cId = m.channel_id ? parseInt(m.channel_id) : party.default_channel_id;
-        return parseInt(cId) === parseInt(myChanId);
-      })
-      .map(m => m.username)
-  );
-
-  if (window._lastMyChannelId !== undefined) {
-    if (window._lastMyChannelId !== myChanId) {
-      // Current user switched sub-channels!
-      playChannelSound('connect');
-    } else if (window._lastMyChannelUsers !== undefined) {
-      let playedSound = false;
-
-      // Check if another member joined my sub-channel
-      currentMyChannelUsers.forEach(uname => {
-        if (uname !== currentUser?.username && !window._lastMyChannelUsers.has(uname) && !playedSound) {
-          playChannelSound('connect');
-          playedSound = true;
-        }
-      });
-
-      // Check if another member left my sub-channel
-      if (!playedSound) {
-        window._lastMyChannelUsers.forEach(uname => {
-          if (uname !== currentUser?.username && !currentMyChannelUsers.has(uname) && !playedSound) {
-            playChannelSound('disconnect');
-            playedSound = true;
-          }
-        });
-      }
-    }
-  } else {
-    // Initial join to focus room / sub-channel
-    playChannelSound('connect');
-  }
-
-  window._lastMyChannelUsers = currentMyChannelUsers;
-  window._lastMyChannelId = myChanId;
+  // Voice join/leave feedback comes from voice.js now. Party membership and
+  // voice participation are different states; deriving sounds here caused
+  // false chimes whenever the room list was re-rendered.
 
   if (typeof updateLobbyVoiceBadges === 'function') {
     updateLobbyVoiceBadges();
@@ -1683,6 +1704,51 @@ async function joinSubChannel(chanId) {
 
 
 // Drag and Drop Event Handlers
+async function openPartyModerationPanel() {
+  const partyId = window._currentPartyId;
+  if (!partyId) return;
+  document.getElementById('partyModerationPanel')?.remove();
+
+  const panel = document.createElement('section');
+  panel.id = 'partyModerationPanel';
+  panel.className = 'party-moderation-panel';
+  panel.innerHTML = `
+    <div class="party-moderation-head">
+      <div><strong>Oda Moderasyonu</strong><small>Aktif yasaklar ve geri alma işlemleri</small></div>
+      <button type="button" aria-label="Kapat">×</button>
+    </div>
+    <div class="party-moderation-body"><div class="party-moderation-loading">Yasak listesi yükleniyor…</div></div>`;
+  panel.querySelector('.party-moderation-head button').onclick = () => panel.remove();
+  document.body.appendChild(panel);
+
+  const body = panel.querySelector('.party-moderation-body');
+  try {
+    const res = await fetch(`/api/parties/${partyId}/moderation/bans`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Yasak listesi alınamadı');
+    const bans = data.bans || [];
+    body.innerHTML = bans.length ? bans.map(ban => `
+      <article class="party-ban-row">
+        <div class="party-ban-avatar">${esc((ban.username || '?').slice(0, 1).toUpperCase())}</div>
+        <div class="party-ban-copy"><strong>@${esc(ban.username)}</strong><small>${esc(ban.reason || 'Gerekçe belirtilmedi')} · ${esc(ban.banned_by_username || 'Yönetici')}</small></div>
+        <button type="button" data-user-id="${ban.user_id}">Yasağı kaldır</button>
+      </article>`).join('') : '<div class="party-moderation-empty">Bu odada aktif yasak yok.</div>';
+    body.querySelectorAll('[data-user-id]').forEach(button => {
+      button.onclick = async () => {
+        const targetUserId = Number(button.dataset.userId);
+        button.disabled = true;
+        const unban = await fetch(`/api/parties/${partyId}/members/${targetUserId}/ban`, { method: 'DELETE' });
+        const detail = await unban.json().catch(() => ({}));
+        if (!unban.ok) { showToast(detail.error || 'Yasak kaldırılamadı'); button.disabled = false; return; }
+        showToast('Yasak kaldırıldı');
+        openPartyModerationPanel();
+      };
+    });
+  } catch (error) {
+    body.innerHTML = `<div class="party-moderation-empty">${esc(error.message || 'Moderasyon verisi alınamadı')}</div>`;
+  }
+}
+
 function handleMemberDragStart(e, memberUserId) {
   e.stopPropagation();
   e.dataTransfer.setData('text/plain', memberUserId.toString());
@@ -1824,14 +1890,17 @@ async function setActiveParty(partyId, isForceTransfer = false) {
   if (info) info.style.display = 'none';
   if (btn) {
     btn.style.display = 'inline-flex';
+    btn.onclick = () => openPartyManagementModal();
     btn.title = 'Oda Yönetimi';
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
   }
   if (chatBtn) chatBtn.style.display = 'block';
   if (leaveBtn) leaveBtn.style.display = 'flex';
   
-  // Start polling room & initialize WebRTC Voice Chat
+  // Resolve the user's channel before WebRTC starts. Without this first fetch,
+  // a newly joined user briefly negotiated with people in every sub-channel.
   startPartyPoll(partyId);
+  await fetchPartyAndRender(partyId);
   if (typeof initVoiceChat === 'function') {
     initVoiceChat(partyId);
   }
@@ -2007,22 +2076,10 @@ function startStatusChipAnimation() {
 
   const startIdle = (phase) => {
     stopIdle();
-    if (!dotEl) return;
-    // STATUS: gentle breath — grows and shrinks slowly
-    // PROFILE: soft bob — up/down like a floating dot
-    _dotIdle = phase === 'status'
-      ? dotEl.animate([
-          { transform: 'translateY(-50%) scale(1)',    opacity: 1 },
-          { transform: 'translateY(-50%) scale(1.32)', opacity: 0.82 },
-          { transform: 'translateY(-50%) scale(1)',    opacity: 1 }
-        ], { duration: 2800, iterations: Infinity, easing: 'ease-in-out', delay: 400 })
-      : dotEl.animate([
-          { transform: 'translateY(-50%)   scale(1)' },
-          { transform: 'translateY(-57%)   scale(0.88)' },
-          { transform: 'translateY(-52%)   scale(1.06)' },
-          { transform: 'translateY(-50%)   scale(1)' }
-        ], { duration: 2200, iterations: Infinity, easing: 'ease-in-out', delay: 700 });
+    // Idle animasyonları devre dışı — dot sabit kalır
   };
+
+  const STATUS_TR = { online: 'çevrimiçi', away: 'uzakta', dnd: 'rahatsız etme', invisible: 'görünmez' };
 
   const refreshData = () => {
     if (!currentUser) return;
@@ -2031,12 +2088,21 @@ function startStatusChipAnimation() {
     if (dotEl) {
       dotEl.setAttribute('data-status', s);
       dotEl.style.background = c;
-      dotEl.style.boxShadow = `0 0 8px ${c}`;
+      dotEl.style.boxShadow = `0 0 6px ${c}`;
+      // Inline transform temizle — CSS kuralı devralır
+      dotEl.style.transform = '';
       dotEl.style.color = c;
     }
     if (avatarEl) avatarEl.style.backgroundImage = `url('${currentUser.profile_photo || '/uploads/default-avatar.png'}')`;
     if (nameEl)   nameEl.textContent   = `@${currentUser.username || ''}`;
     if (textEl)   textEl.textContent   = LABELS[s] || 'ÇEVRİMİÇİ';
+    if (chip && window._statusTooltips) {
+      const list = window._statusTooltips[s] || window._statusTooltips.online;
+      const template = list[window._statusTooltipIndex] || list[0];
+      const usernameVal = currentUser.username ? `@${currentUser.username}` : 'Sen';
+      const finalTooltip = template.replace(/@username/g, usernameVal);
+      chip.setAttribute('data-tooltip', finalTooltip);
+    }
   };
 
   /* ── Transition: STATUS → PROFILE ── */
@@ -2102,6 +2168,7 @@ function startStatusChipAnimation() {
         { transform: 'translateY(-50%) translateX(1px)  scale(0.93)', opacity: 1, offset: 0.80 },
         { transform: 'translateY(-50%) translateX(0)    scale(1)',    opacity: 1 }
       ], { duration: 510, easing: SPRING, fill: 'forwards' }).finished.then(() => {
+        if (dotEl) dotEl.style.transform = ''; // CSS kuralı devralır
         startIdle('profile');
       }).catch(() => {});
     }
@@ -2162,6 +2229,7 @@ function startStatusChipAnimation() {
         { transform: 'translateY(-50%) translateX(1px)  scale(0.92)', opacity: 1, offset: 0.80 },
         { transform: 'translateY(-50%) translateX(0)    scale(1)',    opacity: 1 }
       ], { duration: 490, easing: SPRING, fill: 'forwards' }).finished.then(() => {
+        if (dotEl) dotEl.style.transform = ''; // CSS kuralı devralır
         startIdle('status');
       }).catch(() => {});
     }
@@ -2469,4 +2537,84 @@ function initDraggablePartyOverlay() {
 
 document.addEventListener('DOMContentLoaded', () => {
   try { initDraggablePartyOverlay(); } catch(e) { console.error('initDraggablePartyOverlay error:', e); }
+  
+  // Real-time clock and date updater (e.g. "29 Temmuz Çarşamba · 12:45")
+  const updateRealTimeClock = () => {
+    const clockEl = document.getElementById('timerRealClock');
+    if (!clockEl) return;
+    const now = new Date();
+    const options = { weekday: 'long', day: 'numeric', month: 'long' };
+    const dateStr = now.toLocaleDateString('tr-TR', options);
+    const timeStr = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    clockEl.textContent = `${dateStr} · ${timeStr}`;
+  };
+  updateRealTimeClock();
+  setInterval(updateRealTimeClock, 1000);
 });
+
+// ─── GLOBAL PARTY INVITE SHARE FUNCTION ────────────────────────
+window.copyPartyInviteLink = async function() {
+  const partyId = window._currentPartyId;
+  if (!partyId) {
+    if (typeof showToast === 'function') showToast('Şu an aktif bir odak odasında değilsiniz.');
+    return;
+  }
+
+  try {
+    let code = window._currentPartyData?.invite_code;
+    if (!code || code === 'null' || code === '') {
+      try {
+        const res = await fetch(`/api/parties/${partyId}`);
+        if (res.ok) {
+          const data = await res.json();
+          code = data.invite_code;
+        }
+      } catch (e) {
+        console.error('Failed to fetch party invite code:', e);
+      }
+    }
+    
+    if (!code || code === 'null' || code === '') {
+      try {
+        const res = await fetch(`/api/parties/${partyId}/regenerate-invite`, { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          code = data.inviteCode;
+        }
+      } catch (e) {
+        console.error('Failed to regenerate party invite code:', e);
+      }
+    }
+
+    if (!code) {
+      code = partyId;
+    }
+
+    const inviteUrl = `${window.location.origin}/?join=${code}`;
+    const inviteText = `📢 BLUNK Sesli Odaklanma Odası Daveti!\n🚀 Odama katıl ve benimle birlikte odaklanmaya başla:\n🔗 ${inviteUrl}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'BLUNK Odak Odası Daveti',
+          text: '📢 BLUNK Sesli Çalışma Odası Daveti!\n🚀 Odama katıl ve benimle birlikte odaklanmaya başla:',
+          url: inviteUrl
+        });
+        return;
+      } catch (shareErr) {
+        // Fallback to clipboard
+      }
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(inviteText);
+      if (typeof showToast === 'function') showToast('Oda davet bağlantısı panoya kopyalandı! 📋');
+    } else {
+      window.prompt('Oda davet bağlantınızı kopyalayın:', inviteText);
+    }
+  } catch (err) {
+    console.error('Error copying invite link:', err);
+    if (typeof showToast === 'function') showToast('Davet bağlantısı oluşturulurken hata meydana geldi.');
+  }
+};
+

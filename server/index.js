@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+// sqlite3 is now abstracted inside db.js
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const path = require('path');
@@ -37,8 +37,7 @@ webpush.setVapidDetails(
 const app = express();
 app.set('trust proxy', 1); // Railway runs behind a proxy
 
-const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'odaksavas.db');
-const db = new sqlite3.Database(DB_PATH);
+const db = require('./db');
 
 // Safe DB Schema Migration for BLUNK features
 db.serialize(() => {
@@ -100,6 +99,65 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR)); // Explicitly serve uploads from persistent dir
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+// Profile page with Open Graph meta tags for social sharing
+app.get('/:username', (req, res) => {
+  const username = req.params.username;
+  // API ve statik dosya yollarını atla
+  if (username.startsWith('api') || username.startsWith('uploads') || username.includes('.')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  db.get('SELECT username, bio, profile_photo, level, xp, total_focus_time FROM users WHERE username = ?', [username], (err, user) => {
+    if (err || !user) {
+      // Kullanıcı bulunamazsa normal index.html'i döndür
+      return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+    }
+
+    // Open Graph meta etiketlerini oluştur
+    const ogTitle = `${user.username} — BLUNK Profili`;
+    const ogDescription = user.bio || 'BLUNK — Arkadaşlarınla sesli çalışma odalarında odaklan, XP kazan, seviye atla.';
+    const ogImage = user.profile_photo || `${req.protocol}://${req.get('host')}/default-avatar.png`;
+    const ogUrl = `${req.protocol}://${req.get('host')}/${user.username}`;
+
+    // index.html'i oku ve meta etiketlerini değiştir
+    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
+    fs.readFile(indexPath, 'utf8', (err, html) => {
+      if (err) {
+        return res.sendFile(indexPath);
+      }
+
+      // Open Graph meta etiketlerini ekle
+      const ogMetaTags = `
+  <meta property="og:title" content="${ogTitle}">
+  <meta property="og:description" content="${ogDescription}">
+  <meta property="og:image" content="${ogImage}">
+  <meta property="og:url" content="${ogUrl}">
+  <meta property="og:type" content="profile">
+  <meta property="og:site_name" content="BLUNK">
+  <meta property="profile:username" content="${user.username}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${ogTitle}">
+  <meta name="twitter:description" content="${ogDescription}">
+  <meta name="twitter:image" content="${ogImage}">
+`;
+
+      // <head> içindeki meta etiketlerinin sonuna ekle
+      const modifiedHtml = html.replace(
+        /(<\/head>)/,
+        ogMetaTags + '\n  $1'
+      );
+
+      // Title'ı güncelle
+      const finalHtml = modifiedHtml.replace(
+        /<title>.*?<\/title>/,
+        `<title>${ogTitle}</title>`
+      );
+
+      res.send(finalHtml);
+    });
+  });
+});
+
 // Health Check endpoint for Railway / Uptime Monitor
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
@@ -147,6 +205,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE party_members ADD COLUMN channel_id INTEGER DEFAULT NULL`, () => {});
   db.run(`ALTER TABLE party_members ADD COLUMN role VARCHAR DEFAULT 'member'`, () => {});
   db.run(`ALTER TABLE party_channels ADD COLUMN allow_screen_share INTEGER DEFAULT 0`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN google_id TEXT`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN email TEXT`, () => {});
 });
 
 // Database setup
@@ -321,6 +381,8 @@ db.serialize(() => {
   db.run('ALTER TABLE posts ADD COLUMN repost_of_post_id INTEGER', () => {});
   db.run('ALTER TABLE posts ADD COLUMN views INTEGER DEFAULT 0', () => {});
   db.run('ALTER TABLE users ADD COLUMN device_type TEXT DEFAULT \'desktop\'', () => {});
+  db.run('ALTER TABLE chat_groups ADD COLUMN disappearing_hours INTEGER DEFAULT 24', () => {});
+  db.run('ALTER TABLE chat_groups ADD COLUMN avatar TEXT', () => {});
 
   // Performance: DB indexes for message queries
   db.run('CREATE INDEX IF NOT EXISTS idx_messages_dm ON messages(from_user_id, to_user_id, group_id)');
@@ -332,9 +394,21 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS chat_groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    avatar TEXT,
+    disappearing_hours INTEGER DEFAULT 24,
     created_by INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS chat_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user1_id INTEGER NOT NULL,
+    user2_id INTEGER NOT NULL,
+    disappearing_hours INTEGER DEFAULT 24,
+    UNIQUE(user1_id, user2_id),
+    FOREIGN KEY (user1_id) REFERENCES users(id),
+    FOREIGN KEY (user2_id) REFERENCES users(id)
   )`);
   
   db.run(`CREATE TABLE IF NOT EXISTS chat_group_members (
@@ -393,6 +467,28 @@ db.serialize(() => {
     created_at DATETIME DEFAULT (datetime('now')),
     UNIQUE(party_id, user_id)
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS party_voice_moderation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    muted_by INTEGER NOT NULL,
+    reason TEXT,
+    expires_at DATETIME,
+    created_at DATETIME DEFAULT (datetime('now')),
+    UNIQUE(party_id, user_id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS party_moderation_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_id INTEGER NOT NULL,
+    actor_id INTEGER NOT NULL,
+    target_user_id INTEGER,
+    action TEXT NOT NULL,
+    reason TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT (datetime('now'))
+  )`);
 });
 
 // Periodic database cleanup for messages and party chats
@@ -403,7 +499,7 @@ function cleanupOldMessages() {
   db.run("DELETE FROM messages WHERE created_at < datetime('now', '-24 hours')", (err) => {
     if (err) console.error('Error cleaning up messages:', err.message);
   });
-  db.run("DELETE FROM party_messages WHERE created_at < datetime('now', '-6 hours')", (err) => {
+  db.run("DELETE FROM party_messages WHERE created_at < datetime('now', '-2 hours')", (err) => {
     if (err) console.error('Error cleaning up party messages:', err.message);
   });
 }
@@ -423,6 +519,49 @@ const auth = (req, res, next) => {
       next();
     });
   });
+};
+
+// --- Anti-Spam Rate Limiter Middleware ---
+const userMessageHistory = new Map(); // userId -> number[] (timestamps)
+const userSpamMutes = new Map();      // userId -> expireTimestamp
+
+const checkSpamLimit = (req, res, next) => {
+  const userId = req.user.id;
+  const now = Date.now();
+
+  // 1. Check if user is currently muted for spamming
+  if (userSpamMutes.has(userId)) {
+    const expireTime = userSpamMutes.get(userId);
+    if (now < expireTime) {
+      const remainingSecs = Math.ceil((expireTime - now) / 1000);
+      return res.status(429).json({
+        error: `Çok hızlı mesaj gönderiyorsunuz! Spam koruması nedeniyle ${remainingSecs} saniye mesaj gönderemezsiniz.`,
+        retryAfter: remainingSecs
+      });
+    } else {
+      userSpamMutes.delete(userId);
+      userMessageHistory.delete(userId);
+    }
+  }
+
+  // 2. Filter history to last 4 seconds
+  let history = userMessageHistory.get(userId) || [];
+  history = history.filter(ts => now - ts < 4000);
+  
+  if (history.length >= 4) {
+    // Trigger 15 second penalty
+    const penaltyUntil = now + 15000;
+    userSpamMutes.set(userId, penaltyUntil);
+    userMessageHistory.delete(userId);
+    return res.status(429).json({
+      error: 'Çok hızlı mesaj gönderiyorsunuz! Spam koruması nedeniyle 15 saniye mesaj gönderemezsiniz.',
+      retryAfter: 15
+    });
+  }
+
+  history.push(now);
+  userMessageHistory.set(userId, history);
+  next();
 };
 
 // --- PUSH NOTIFICATION HELPER ---
@@ -527,11 +666,66 @@ app.post('/api/register', authLimiter, async (req, res) => {
       if (err || !user) return res.status(500).json({ error: 'Kullanıcı oluşturulurken bir hata oluştu.' });
       const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
       res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
-      res.cookie('username', clean, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
       const { password_hash, ...safeUser } = user;
       res.json(safeUser);
     });
   });
+});
+
+// Google Auth Endpoint
+app.post('/api/auth/google', authLimiter, async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) return res.status(400).json({ error: 'Google jetonu (credential) gerekli.' });
+
+  try {
+    const parts = credential.split('.');
+    if (parts.length !== 3) return res.status(400).json({ error: 'Geçersiz Google jetonu formatı.' });
+
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+    const { sub: googleId, email, name, picture } = payload;
+
+    if (!googleId) return res.status(400).json({ error: 'Google jetonundan kimlik alınamadı.' });
+
+    db.get('SELECT * FROM users WHERE google_id = ? OR (email IS NOT NULL AND email = ? AND email != "")', [googleId, email || ''], (err, user) => {
+      if (err) return res.status(500).json({ error: 'Veritabanı hatası oluştu.' });
+
+      if (user) {
+        if (!user.google_id || (!user.profile_photo && picture)) {
+          db.run('UPDATE users SET google_id = COALESCE(google_id, ?), profile_photo = COALESCE(profile_photo, ?) WHERE id = ?', [googleId, picture, user.id]);
+        }
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
+        res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
+        res.cookie('username', user.username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
+        return res.json({ success: true, user });
+      } else {
+        let baseUsername = (name || (email ? email.split('@')[0] : 'user')).toLowerCase().replace(/[^a-z0-9_]/g, '');
+        if (baseUsername.length < 3) baseUsername = 'user';
+        const uniqueUsername = baseUsername + '_' + Math.floor(1000 + Math.random() * 9000);
+
+        db.run(
+          'INSERT INTO users (username, email, google_id, profile_photo) VALUES (?, ?, ?, ?)',
+          [uniqueUsername, email || null, googleId, picture || null],
+          function (err2) {
+            if (err2) {
+              console.error('Google user insert error:', err2);
+              return res.status(500).json({ error: 'Kullanıcı kaydı oluşturulamadı.' });
+            }
+            db.get('SELECT * FROM users WHERE id = ?', [this.lastID], (err3, newUser) => {
+              if (err3 || !newUser) return res.status(500).json({ error: 'Kullanıcı verisi alınamadı.' });
+
+              const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '30d' });
+              res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
+              res.cookie('username', newUser.username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
+              return res.json({ success: true, user: newUser });
+            });
+          }
+        );
+      }
+    });
+  } catch (err) {
+    console.error('Google auth processing error:', err);
+    return res.status(500).json({ error: 'Google girişi işlenirken hata oluştu.' });
+  }
 });
 
 // Şifre oluştur / değiştir
@@ -567,9 +761,9 @@ app.get('/api/search/users', auth, (req, res) => {
   db.all(
     `SELECT id, username, profile_photo, level, xp, status 
      FROM users 
-     WHERE username LIKE ? 
+     WHERE username LIKE ? AND id != ? 
      LIMIT 10`,
-    [searchPattern],
+    [searchPattern, req.user.id],
     (err, rows) => {
       if (err) return res.status(500).json({ error: 'DB hatası' });
       res.json(rows || []);
@@ -1286,7 +1480,7 @@ app.post('/api/parties/join-code', auth, (req, res) => {
   if (!code || !code.trim()) return res.status(400).json({ error: 'Davet kodu girilmelidir' });
   const cleanCode = code.trim();
 
-  db.get('SELECT * FROM parties WHERE invite_code = ? OR id = ?', [cleanCode, parseInt(cleanCode) || 0], (err, party) => {
+  db.get('SELECT * FROM parties WHERE invite_code = ?', [cleanCode], (err, party) => {
     if (!party) return res.status(404).json({ error: 'Geçersiz davet kodu veya oda bulunamadı' });
 
     // Ban check
@@ -1406,6 +1600,33 @@ function checkPartyManagementPermission(partyId, userId, callback) {
   });
 }
 
+const PARTY_ROLE_RANK = { member: 10, moderator: 20, admin: 30, owner: 40 };
+
+function checkPartyModerationPermission(partyId, actorId, targetUserId, callback) {
+  db.get('SELECT owner_id FROM parties WHERE id = ?', [partyId], (err, party) => {
+    if (err || !party) return callback(null, false, 'Oda bulunamadı');
+    if (parseInt(party.owner_id) === parseInt(targetUserId)) return callback(null, false, 'Kurucu üzerinde işlem yapılamaz');
+
+    db.all('SELECT user_id, role FROM party_members WHERE party_id = ? AND user_id IN (?, ?)', [partyId, actorId, targetUserId], (memberErr, rows) => {
+      if (memberErr || !rows || rows.length !== 2) return callback(null, false, 'Üye bulunamadı');
+      const actor = rows.find(row => parseInt(row.user_id) === parseInt(actorId));
+      const target = rows.find(row => parseInt(row.user_id) === parseInt(targetUserId));
+      const actorRole = parseInt(party.owner_id) === parseInt(actorId) ? 'owner' : (actor?.role || 'member');
+      const targetRole = target?.role || 'member';
+      if ((PARTY_ROLE_RANK[actorRole] || 0) < PARTY_ROLE_RANK.moderator) return callback(null, false, 'Moderasyon yetkiniz yok');
+      if ((PARTY_ROLE_RANK[actorRole] || 0) <= (PARTY_ROLE_RANK[targetRole] || 0)) return callback(null, false, 'Eşit veya üst roldeki üye üzerinde işlem yapılamaz');
+      callback(null, true, null, actorRole, targetRole);
+    });
+  });
+}
+
+function writePartyModerationAudit(partyId, actorId, targetUserId, action, reason, metadata = null) {
+  db.run(
+    'INSERT INTO party_moderation_audit (party_id, actor_id, target_user_id, action, reason, metadata) VALUES (?, ?, ?, ?, ?, ?)',
+    [partyId, actorId, targetUserId || null, action, reason || null, metadata ? JSON.stringify(metadata) : null]
+  );
+}
+
 app.get('/api/parties/:id', auth, (req, res) => {
   const partyId = req.params.id;
   db.get('SELECT * FROM parties WHERE id = ?', [partyId], (err, party) => {
@@ -1427,6 +1648,7 @@ app.get('/api/parties/:id', auth, (req, res) => {
               (u.last_seen > datetime('now', '-45 seconds')) as is_online,
               (SELECT id FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as active_session_id,
               (SELECT start_time FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as session_start,
+              EXISTS(SELECT 1 FROM party_voice_moderation pvm WHERE pvm.party_id = pm.party_id AND pvm.user_id = u.id AND (pvm.expires_at IS NULL OR pvm.expires_at > datetime('now'))) as server_muted,
               (SELECT COALESCE(SUM(duration), 0) FROM sessions WHERE user_id = u.id AND party_id = ? AND status = 'completed') as party_total_time
             FROM party_members pm 
             JOIN users u ON pm.user_id = u.id 
@@ -1612,7 +1834,7 @@ app.post('/api/parties/:id/members/:targetUserId/move', auth, (req, res) => {
   const targetUserId = parseInt(req.params.targetUserId);
   const { channelId } = req.body;
 
-  checkPartyManagementPermission(partyId, req.user.id, (err, allowed) => {
+  checkPartyModerationPermission(partyId, req.user.id, targetUserId, (err, allowed, errorMessage) => {
     if (!allowed) return res.status(403).json({ error: 'Kullanıcı taşıma yetkiniz yok' });
 
     db.get('SELECT * FROM party_channels WHERE id = ? AND party_id = ?', [channelId, partyId], (err, chan) => {
@@ -1620,6 +1842,7 @@ app.post('/api/parties/:id/members/:targetUserId/move', auth, (req, res) => {
 
       db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?', [channelId, partyId, targetUserId], () => {
         updateMemoryVoiceChannel(partyId, targetUserId, channelId);
+        writePartyModerationAudit(partyId, req.user.id, targetUserId, 'move_member', null, { channelId: parseInt(channelId) });
         res.json({ success: true, channelId, targetUserId });
       });
     });
@@ -1635,12 +1858,17 @@ app.put('/api/parties/:id/members/:targetUserId/role', auth, (req, res) => {
   const allowedRoles = ['admin', 'moderator', 'member'];
   if (!allowedRoles.includes(role)) return res.status(400).json({ error: 'Geçersiz rol' });
 
-  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, requesterRole) => {
+  checkPartyModerationPermission(partyId, req.user.id, targetUserId, (err, allowed, errorMessage, requesterRole) => {
     if (!allowed || requesterRole === 'moderator') {
       return res.status(403).json({ error: 'Rol atamak için Kurucu veya Yönetici yetkisi gereklidir' });
     }
 
+    if ((PARTY_ROLE_RANK[role] || 0) >= (PARTY_ROLE_RANK[requesterRole] || 0)) {
+      return res.status(403).json({ error: 'Kendi rolünüze eşit veya üst bir rol atayamazsınız' });
+    }
+
     db.run('UPDATE party_members SET role = ? WHERE party_id = ? AND user_id = ?', [role, partyId, targetUserId], () => {
+      writePartyModerationAudit(partyId, req.user.id, targetUserId, 'change_role', null, { role });
       res.json({ success: true, role });
     });
   });
@@ -1650,8 +1878,9 @@ app.put('/api/parties/:id/members/:targetUserId/role', auth, (req, res) => {
 app.delete('/api/parties/:id/members/:targetUserId/kick', auth, (req, res) => {
   const partyId = req.params.id;
   const targetUserId = parseInt(req.params.targetUserId);
+  const { reason } = req.body || {};
 
-  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, requesterRole) => {
+  checkPartyModerationPermission(partyId, req.user.id, targetUserId, (err, allowed, errorMessage, requesterRole) => {
     if (!allowed) return res.status(403).json({ error: 'Kullanıcı atma yetkiniz yok' });
 
     // Check target is not owner
@@ -1666,6 +1895,8 @@ app.delete('/api/parties/:id/members/:targetUserId/kick', auth, (req, res) => {
             return res.status(403).json({ error: 'Bu kullanıcıyı atma yetkiniz yok' });
           }
           db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], () => {
+            if (global.closePartyWebSocket) global.closePartyWebSocket(partyId, targetUserId, 'Bir oda yöneticisi sizi odadan çıkardı');
+            writePartyModerationAudit(partyId, req.user.id, targetUserId, 'kick_member', reason || null);
             db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
               [partyId, `Bir üye odadan atıldı.`]);
             res.json({ success: true });
@@ -1673,6 +1904,8 @@ app.delete('/api/parties/:id/members/:targetUserId/kick', auth, (req, res) => {
         });
       } else {
         db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], () => {
+          if (global.closePartyWebSocket) global.closePartyWebSocket(partyId, targetUserId, 'Bir oda yöneticisi sizi odadan çıkardı');
+          writePartyModerationAudit(partyId, req.user.id, targetUserId, 'kick_member', reason || null);
           db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
             [partyId, `Bir üye odadan atıldı.`]);
           res.json({ success: true });
@@ -1688,7 +1921,7 @@ app.post('/api/parties/:id/members/:targetUserId/ban', auth, (req, res) => {
   const targetUserId = parseInt(req.params.targetUserId);
   const { reason } = req.body || {};
 
-  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, requesterRole) => {
+  checkPartyModerationPermission(partyId, req.user.id, targetUserId, (err, allowed, errorMessage, requesterRole) => {
     if (!allowed || requesterRole === 'moderator') {
       return res.status(403).json({ error: 'Banlama için Kurucu veya Yönetici yetkisi gereklidir' });
     }
@@ -1701,12 +1934,71 @@ app.post('/api/parties/:id/members/:targetUserId/ban', auth, (req, res) => {
         [partyId, targetUserId, req.user.id, reason || null], () => {
           // Remove from members
           db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], () => {
+            if (global.closePartyWebSocket) global.closePartyWebSocket(partyId, targetUserId, 'Bu odadan yasaklandınız');
+            writePartyModerationAudit(partyId, req.user.id, targetUserId, 'ban_member', reason || null);
             db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
               [partyId, `Bir üye odadan yasaklandı.`]);
             res.json({ success: true });
           });
         });
     });
+  });
+});
+
+// Moderation console: owners and admins can review and revoke room bans.
+app.get('/api/parties/:id/moderation/bans', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, role) => {
+    if (!allowed || !['owner', 'admin'].includes(role)) return res.status(403).json({ error: 'Yasak listesini görme yetkiniz yok' });
+    db.all(
+      `SELECT pb.*, u.username, u.profile_photo, moderator.username AS banned_by_username
+       FROM party_bans pb
+       JOIN users u ON u.id = pb.user_id
+       LEFT JOIN users moderator ON moderator.id = pb.banned_by
+       WHERE pb.party_id = ? ORDER BY pb.created_at DESC`,
+      [partyId],
+      (dbErr, bans) => {
+        if (dbErr) return res.status(500).json({ error: 'Yasak listesi alınamadı' });
+        res.json({ bans: bans || [] });
+      }
+    );
+  });
+});
+
+app.delete('/api/parties/:id/members/:targetUserId/ban', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  const targetUserId = parseInt(req.params.targetUserId);
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, role) => {
+    if (!allowed || !['owner', 'admin'].includes(role)) return res.status(403).json({ error: 'Yasak kaldırma yetkiniz yok' });
+    db.run('DELETE FROM party_bans WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], function(dbErr) {
+      if (dbErr) return res.status(500).json({ error: 'Yasak kaldırılamadı' });
+      if (!this.changes) return res.status(404).json({ error: 'Aktif yasak bulunamadı' });
+      writePartyModerationAudit(partyId, req.user.id, targetUserId, 'unban_member');
+      res.json({ success: true });
+    });
+  });
+});
+
+app.get('/api/parties/:id/moderation/audit', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  checkPartyManagementPermission(partyId, req.user.id, (err, allowed, role) => {
+    if (!allowed || !['owner', 'admin', 'moderator'].includes(role)) {
+      return res.status(403).json({ error: 'Moderasyon geçmişini görme yetkiniz yok' });
+    }
+    db.all(
+      `SELECT audit.*, actor.username AS actor_username, target.username AS target_username
+       FROM party_moderation_audit audit
+       LEFT JOIN users actor ON actor.id = audit.actor_id
+       LEFT JOIN users target ON target.id = audit.target_user_id
+       WHERE audit.party_id = ?
+       ORDER BY audit.created_at DESC, audit.id DESC
+       LIMIT 100`,
+      [partyId],
+      (dbErr, rows) => {
+        if (dbErr) return res.status(500).json({ error: 'Moderasyon geçmişi alınamadı' });
+        res.json({ events: rows || [] });
+      }
+    );
   });
 });
 
@@ -1739,7 +2031,7 @@ app.get('/api/parties/:id/live-status', auth, (req, res) => {
   });
 });
 
-app.post('/api/parties/:id/messages', auth, (req, res) => {
+app.post('/api/parties/:id/messages', auth, checkSpamLimit, (req, res) => {
   const { content } = req.body;
   if (!content || !content.trim()) return res.status(400).json({ error: 'Mesaj boş' });
   
@@ -1811,11 +2103,21 @@ app.post('/api/parties/:id/leave', auth, (req, res) => {
         db.run('DELETE FROM party_bans WHERE party_id = ?', [partyId]);
         db.run('DELETE FROM parties WHERE id = ?', [partyId], () => {
           if (global.partyVoiceStates) delete global.partyVoiceStates[partyId];
+          if (global.partyConnections) {
+            const partyConns = global.partyConnections.get(parseInt(partyId));
+            if (partyConns) {
+              partyConns.forEach(conn => {
+                try { conn.ws.close(4004, 'Oda silindi'); } catch(e) {}
+              });
+              global.partyConnections.delete(parseInt(partyId));
+            }
+          }
           res.json({ success: true, deleted: true });
         });
       });
     } else {
       db.run('DELETE FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], () => {
+        if (global.closePartyWebSocket) global.closePartyWebSocket(partyId, req.user.id, 'Oda üyesi değilsiniz');
         db.run('INSERT INTO party_messages (party_id, user_id, content) VALUES (?, 0, ?)',
           [partyId, `@${req.user.username} odadan ayrıldı.`]);
         res.json({ success: true });
@@ -1827,79 +2129,79 @@ app.post('/api/parties/:id/leave', auth, (req, res) => {
 
 // --- PARTY VOICE CHAT SIGNALING & STATE ENDPOINTS ---
 
+// WebRTC bootstrap. Use a deployment-owned coturn service in production;
+// credentials stay in environment variables and are never hard-coded in JS.
+app.get('/api/rtc-config', auth, (req, res) => {
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
+  const turnUrls = String(process.env.TURN_URLS || process.env.TURN_URL || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  const turnUsername = process.env.TURN_USERNAME;
+  const turnCredential = process.env.TURN_CREDENTIAL;
+
+  if (turnUrls.length && turnUsername && turnCredential) {
+    iceServers.push({ urls: turnUrls, username: turnUsername, credential: turnCredential });
+  }
+
+  res.json({ iceServers, iceCandidatePoolSize: 4, hasTurn: turnUrls.length > 0 && !!turnUsername && !!turnCredential });
+});
+
 // Global Active Voice Session Tracker per User
 global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
 
-app.post('/api/parties/:id/voice-state', auth, (req, res) => {
-  try {
-    const partyId = req.params.id;
-    
-    // Check if requester is actual member of party
-    db.get('SELECT id FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
-      if (!member) return res.status(403).json({ error: 'Oda üyesi değilsiniz' });
-
-      const { micMuted, deafened, pingMs, channelId, deviceId, inVoice } = req.body;
-      const userId = req.user.id;
-      const username = req.user.username;
-
-      if (!global.partyVoiceStates) global.partyVoiceStates = {};
-      if (!global.partyVoiceStates[partyId]) {
-        global.partyVoiceStates[partyId] = {};
-      }
-
-      // Update current user state
-      global.partyVoiceStates[partyId][userId] = {
-        username,
-        micMuted: !!micMuted,
-        deafened: !!deafened,
-        channelId: channelId ? parseInt(channelId) : null,
-        pingMs: parseInt(pingMs) || 0,
-        deviceId: deviceId || null,
-        lastSeen: Date.now()
-      };
-
-      // Track active device session ONLY if device is actively in voice channel
-      if (deviceId && (inVoice || channelId)) {
-        global.userActiveVoiceSessions[userId] = {
-          partyId: parseInt(partyId),
-          channelId: channelId ? parseInt(channelId) : null,
-          deviceId: deviceId || null,
-          lastSeen: Date.now()
-        };
-      }
-
-      // Cleanup users that haven't sent state in 15 seconds
-      const now = Date.now();
-      Object.keys(global.partyVoiceStates[partyId]).forEach(uid => {
-        if (now - global.partyVoiceStates[partyId][uid].lastSeen > 15000) {
-          delete global.partyVoiceStates[partyId][uid];
-        }
-      });
-
-      res.json({ members: global.partyVoiceStates[partyId] });
+app.get('/api/parties/:id/access-status', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  db.get('SELECT reason FROM party_bans WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (banErr, ban) => {
+    if (ban) return res.json({ status: 'banned', reason: ban.reason || null });
+    db.get('SELECT id FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (memberErr, member) => {
+      res.json({ status: member ? 'member' : 'removed' });
     });
-  } catch(e) {
-    res.status(500).json({ error: 'Ses durumu güncellenemedi' });
-  }
+  });
 });
 
-// GET active voice session for logged-in user (for device handover detection)
-app.get('/api/user/active-voice-session', auth, (req, res) => {
-  const currentDeviceId = req.query.deviceId;
-  const session = global.userActiveVoiceSessions ? global.userActiveVoiceSessions[req.user.id] : null;
-  const now = Date.now();
+// Server-enforced room mute. This state is authoritative: clients can display
+// it but cannot clear it without a moderator action.
+app.put('/api/parties/:id/members/:targetUserId/voice-mute', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  const targetUserId = parseInt(req.params.targetUserId);
+  const { muted, reason = '', durationMinutes = null } = req.body || {};
 
-  if (session && (now - session.lastSeen < 12000)) {
-    const isOtherDevice = !!(session.deviceId && session.deviceId !== currentDeviceId);
-    return res.json({
-      hasActiveVoice: true,
-      partyId: session.partyId,
-      channelId: session.channelId,
-      deviceId: session.deviceId,
-      isOtherDevice
-    });
+  if (!Number.isInteger(partyId) || !Number.isInteger(targetUserId) || typeof muted !== 'boolean') {
+    return res.status(400).json({ error: 'Geçersiz moderasyon isteği' });
   }
-  return res.json({ hasActiveVoice: false });
+
+  checkPartyModerationPermission(partyId, req.user.id, targetUserId, (err, allowed, errorMessage) => {
+    if (!allowed) return res.status(403).json({ error: errorMessage || 'Bu işlem için yetkiniz yok' });
+    const duration = Math.max(0, Math.min(10080, parseInt(durationMinutes) || 0));
+    const expiresAt = duration ? `datetime('now', '+${duration} minutes')` : 'NULL';
+
+    if (muted) {
+      db.run(
+        `INSERT INTO party_voice_moderation (party_id, user_id, muted_by, reason, expires_at)
+         VALUES (?, ?, ?, ?, ${expiresAt})
+         ON CONFLICT(party_id, user_id) DO UPDATE SET muted_by = excluded.muted_by, reason = excluded.reason, expires_at = excluded.expires_at, created_at = datetime('now')`,
+        [partyId, targetUserId, req.user.id, String(reason || '').trim().slice(0, 240)],
+        dbErr => {
+          if (dbErr) return res.status(500).json({ error: 'Susturma kaydedilemedi' });
+          writePartyModerationAudit(partyId, req.user.id, targetUserId, 'voice_mute', reason, { durationMinutes: duration || null });
+          if (global.partyVoiceStates?.[partyId]?.[targetUserId]) global.partyVoiceStates[partyId][targetUserId].serverMuted = true;
+          res.json({ success: true, muted: true, durationMinutes: duration || null });
+        }
+      );
+    } else {
+      db.run('DELETE FROM party_voice_moderation WHERE party_id = ? AND user_id = ?', [partyId, targetUserId], dbErr => {
+        if (dbErr) return res.status(500).json({ error: 'Susturma kaldırılamadı' });
+        writePartyModerationAudit(partyId, req.user.id, targetUserId, 'voice_unmute', reason);
+        if (global.partyVoiceStates?.[partyId]?.[targetUserId]) global.partyVoiceStates[partyId][targetUserId].serverMuted = false;
+        res.json({ success: true, muted: false });
+      });
+    }
+  });
 });
 
 // POST handover: user claims voice chat on current device (disconnects previous device)
@@ -1910,16 +2212,19 @@ app.post('/api/parties/:id/voice-handover', auth, (req, res) => {
     const username = req.user.username;
     const userId = req.user.id;
 
-    if (!global.partySignals) global.partySignals = {};
-    if (!global.partySignals[partyId]) global.partySignals[partyId] = [];
-
-    // Send handover force-disconnect signal to any existing voice sessions of this user
-    global.partySignals[partyId].push({
-      fromUsername: username,
-      toUsername: username,
-      signal: { _handover: true, newDeviceId: targetDeviceId },
-      timestamp: Date.now()
-    });
+    if (global.partyConnections) {
+      const partyConns = global.partyConnections.get(parseInt(partyId));
+      if (partyConns && partyConns.has(userId)) {
+        const conn = partyConns.get(userId);
+        if (conn.ws.readyState === 1) { // WebSocket.OPEN
+          conn.ws.send(JSON.stringify({
+            type: 'rtc_signal',
+            fromUsername: username,
+            signal: { _handover: true, newDeviceId: targetDeviceId }
+          }));
+        }
+      }
+    }
 
     // Update active device session
     global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
@@ -1937,75 +2242,6 @@ app.post('/api/parties/:id/voice-handover', auth, (req, res) => {
   }
 });
 
-// POST leave voice: clears active session instantly when closing tab/leaving room
-app.post('/api/parties/:id/voice-leave', auth, (req, res) => {
-  try {
-    const partyId = req.params.id;
-    const userId = req.user.id;
-
-    if (global.partyVoiceStates && global.partyVoiceStates[partyId]) {
-      delete global.partyVoiceStates[partyId][userId];
-    }
-    if (global.userActiveVoiceSessions) {
-      delete global.userActiveVoiceSessions[userId];
-    }
-    res.json({ success: true });
-  } catch(e) {
-    res.status(500).json({ error: 'Voice leave failed' });
-  }
-});
-
-app.post('/api/parties/:id/voice-signal', auth, (req, res) => {
-  try {
-    const partyId = req.params.id;
-    const { toUsername, signal } = req.body;
-    const fromUsername = req.user.username;
-
-    if (!global.partySignals) global.partySignals = {};
-    if (!global.partySignals[partyId]) {
-      global.partySignals[partyId] = [];
-    }
-
-    global.partySignals[partyId].push({
-      fromUsername,
-      toUsername,
-      signal,
-      timestamp: Date.now()
-    });
-
-    // Keep signal array clean - limit to last 200 items or delete signals older than 1 minute
-    const now = Date.now();
-    global.partySignals[partyId] = global.partySignals[partyId].filter(sig => now - sig.timestamp < 60000);
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[Server Voice] Error in /voice-signal:', err);
-    res.status(500).json({ error: 'Voice signal post failed', details: err.message });
-  }
-});
-
-app.get('/api/parties/:id/voice-signals', auth, (req, res) => {
-  try {
-    const partyId = req.params.id;
-    const username = req.user.username;
-
-    if (!global.partySignals || !global.partySignals[partyId]) {
-      return res.json([]);
-    }
-
-    // Find signals addressed to current user
-    const mySignals = global.partySignals[partyId].filter(sig => sig.toUsername === username);
-
-    // Remove my signals from the main queue
-    global.partySignals[partyId] = global.partySignals[partyId].filter(sig => sig.toUsername !== username);
-
-    res.json(mySignals);
-  } catch (err) {
-    console.error('[Server Voice] Error in /voice-signals:', err);
-    res.status(500).json({ error: 'Voice signals fetch failed', details: err.message });
-  }
-});
-
 // (duplicate route removed - session start with partyId is handled above)
 
 // --- SCREEN SHARE SIGNALING (reuses in-memory signal queue with type prefix) ---
@@ -2015,7 +2251,7 @@ global.partyScreenShareStates = {}; // partyId -> { username -> { sharing, chann
 app.post('/api/parties/:id/screenshare-state', auth, (req, res) => {
   try {
     const partyId = req.params.id;
-    const { sharing, channelId } = req.body;
+    const { sharing, channelId, validateOnly } = req.body;
     const username = req.user.username;
 
     // Verify membership
@@ -2027,10 +2263,17 @@ app.post('/api/parties/:id/screenshare-state', auth, (req, res) => {
       if (sharing) {
         // Check if channel allows screen share (Managers always allowed, or if channel allows/is default)
         db.get('SELECT allow_screen_share, is_default FROM party_channels WHERE id = ? AND party_id = ?', [channelId, partyId], (err, chan) => {
+          const memberChannelId = parseInt(member.channel_id) || (chan && chan.is_default ? parseInt(channelId) : null);
+          if (!memberChannelId || memberChannelId !== parseInt(channelId)) {
+            return res.status(403).json({ error: 'Yayin yalnizca bulundugunuz alt kanalda acilabilir' });
+          }
           const isManager = ['owner', 'admin', 'moderator'].includes(member.role);
           const isAllowed = isManager || (chan && (chan.allow_screen_share || chan.is_default));
           if (!isAllowed) {
             return res.status(403).json({ error: 'Bu kanalda ekran paylaşımı kapalı' });
+          }
+          if (validateOnly) {
+            return res.json({ success: true, allowed: true });
           }
           global.partyScreenShareStates[partyId][username] = { sharing: true, channelId: parseInt(channelId), ts: Date.now() };
           res.json({ success: true, allowed: true });
@@ -2050,41 +2293,22 @@ app.get('/api/parties/:id/screenshare-state', auth, (req, res) => {
   const partyId = req.params.id;
   db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
     if (!member) return res.status(403).json({ error: 'Yetkisiz' });
-    const states = global.partyScreenShareStates[partyId] || {};
-    const now = Date.now();
-    if (states[req.user.username]) {
-      states[req.user.username].ts = now;
-    }
-    // Cleanup stale (>30s)
-    Object.keys(states).forEach(u => { if (now - states[u].ts > 30000) delete states[u]; });
-    res.json(states);
+    db.get('SELECT id FROM party_channels WHERE party_id = ? AND is_default = 1 LIMIT 1', [partyId], (channelErr, defaultChannel) => {
+      const ownChannelId = parseInt(member.channel_id) || parseInt(defaultChannel?.id);
+      const states = global.partyScreenShareStates[partyId] || {};
+      const now = Date.now();
+      if (states[req.user.username]) states[req.user.username].ts = now;
+      // Cleanup stale (>30s) and expose only streams in the requester's channel.
+      Object.keys(states).forEach(u => { if (now - states[u].ts > 30000) delete states[u]; });
+      const visibleStates = Object.fromEntries(
+        Object.entries(states).filter(([, state]) => parseInt(state.channelId) === ownChannelId)
+      );
+      res.json(visibleStates);
+    });
   });
 });
 
-// Screen share WebRTC signal (reuses partySignals queue with ss_ prefix on type)
-app.post('/api/parties/:id/screenshare-signal', auth, (req, res) => {
-  try {
-    const partyId = req.params.id;
-    const { toUsername, signal } = req.body;
-    const fromUsername = req.user.username;
-
-    if (!global.partySignals) global.partySignals = {};
-    if (!global.partySignals[partyId]) global.partySignals[partyId] = [];
-
-    global.partySignals[partyId].push({
-      fromUsername,
-      toUsername,
-      signal: { ...signal, _ssShare: true },
-      timestamp: Date.now()
-    });
-
-    const now = Date.now();
-    global.partySignals[partyId] = global.partySignals[partyId].filter(s => now - s.timestamp < 60000);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Screenshare signaling is now completely routed through WebSockets. No REST route needed.
 
 
 app.get('/api/notifications', auth, (req, res) => {
@@ -2223,6 +2447,7 @@ app.get('/api/messages/inbox', auth, (req, res) => {
       0 as is_group,
       (u.last_seen > datetime('now', '-2 minutes')) as is_online,
       m.content as last_message,
+      m.from_user_id as last_message_sender_id,
       m.created_at as last_message_time,
       (SELECT COUNT(*) FROM messages WHERE from_user_id = u.id AND to_user_id = ? AND read = 0 AND group_id IS NULL) as unread_count
     FROM users u
@@ -2245,6 +2470,7 @@ app.get('/api/messages/inbox', auth, (req, res) => {
       1 as is_group,
       0 as is_online,
       m.content as last_message,
+      m.from_user_id as last_message_sender_id,
       m.created_at as last_message_time,
       0 as unread_count
     FROM chat_groups g
@@ -2330,7 +2556,7 @@ app.get('/api/messages/group/:id/members', auth, (req, res) => {
   });
 });
 
-app.post('/api/messages/group/:id', auth, (req, res) => {
+app.post('/api/messages/group/:id', auth, checkSpamLimit, (req, res) => {
   const { content, parentId, isShare } = req.body;
   if (!content || !content.trim()) return res.status(400).json({ error: 'Mesaj boş olamaz' });
   
@@ -2368,18 +2594,47 @@ app.get('/api/messages/:username', auth, (req, res) => {
   });
 });
 
-app.post('/api/messages/:username', auth, (req, res) => {
-  const { content, parentId, isShare } = req.body;
-  if (!content || !content.trim()) return res.status(400).json({ error: 'Mesaj içeriği boş olamaz' });
+app.get('/api/messages/:username/friendship-status', auth, (req, res) => {
   db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, targetUser) => {
     if (!targetUser) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-    db.run('INSERT INTO messages (from_user_id, to_user_id, content, parent_id, is_share) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, targetUser.id, content.trim(), parentId || null, isShare ? 1 : 0], function() {
-        // Also create a notification of type "message"
-        db.run('INSERT INTO notifications (user_id, type, from_user_id) VALUES (?, "message", ?)',
-          [targetUser.id, req.user.id]);
-        res.json({ success: true, messageId: this.lastID });
-      });
+    if (targetUser.id === req.user.id) return res.json({ isFriend: true });
+
+    db.get(
+      `SELECT status FROM friendships WHERE user_id = ? AND friend_id = ?`,
+      [req.user.id, targetUser.id],
+      (err, row) => {
+        const isFriend = row && row.status === 'accepted';
+        res.json({ isFriend: !!isFriend, status: row ? row.status : 'none' });
+      }
+    );
+  });
+});
+
+app.post('/api/messages/:username', auth, checkSpamLimit, (req, res) => {
+  const { content, parentId, isShare } = req.body;
+  if (!content || !content.trim()) return res.status(400).json({ error: 'Mesaj içeriği boş olamaz' });
+  
+  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, targetUser) => {
+    if (!targetUser) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+
+    // Check friendship status before allowing message sending
+    db.get(
+      `SELECT status FROM friendships WHERE user_id = ? AND friend_id = ?`,
+      [req.user.id, targetUser.id],
+      (err, friendship) => {
+        if (!friendship || friendship.status !== 'accepted') {
+          return res.status(403).json({ error: 'Yalnızca ekli arkadaşlarınızla mesajlaşabilirsiniz.' });
+        }
+
+        db.run('INSERT INTO messages (from_user_id, to_user_id, content, parent_id, is_share) VALUES (?, ?, ?, ?, ?)',
+          [req.user.id, targetUser.id, content.trim(), parentId || null, isShare ? 1 : 0], function() {
+            // Also create a notification of type "message"
+            db.run('INSERT INTO notifications (user_id, type, from_user_id) VALUES (?, "message", ?)',
+              [targetUser.id, req.user.id]);
+            res.json({ success: true, messageId: this.lastID });
+          });
+      }
+    );
   });
 });
 
@@ -2432,16 +2687,91 @@ app.delete('/api/messages/:id', auth, (req, res) => {
   });
 });
 
+// CHAT IMAGE UPLOAD
+app.post('/api/messages/upload-image', auth, upload.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Görsel yüklenemedi' });
+  const imageUrl = `/uploads/${req.file.filename}`;
+  res.json({ success: true, imageUrl });
+});
+
+// GET / POST DISAPPEARING MESSAGE SETTINGS (DM or Group)
+app.get('/api/messages/settings/:target', auth, (req, res) => {
+  const target = req.params.target;
+  if (target.startsWith('group_')) {
+    const groupId = parseInt(target.replace('group_', ''));
+    db.get('SELECT disappearing_hours, avatar, name FROM chat_groups WHERE id = ?', [groupId], (err, group) => {
+      res.json({ disappearing_hours: group ? (group.disappearing_hours || 24) : 24, avatar: group ? group.avatar : null, name: group ? group.name : '' });
+    });
+  } else {
+    db.get('SELECT id FROM users WHERE username = ?', [target], (err, targetUser) => {
+      if (!targetUser) return res.json({ disappearing_hours: 24 });
+      const u1 = Math.min(req.user.id, targetUser.id);
+      const u2 = Math.max(req.user.id, targetUser.id);
+      db.get('SELECT disappearing_hours FROM chat_settings WHERE user1_id = ? AND user2_id = ?', [u1, u2], (err, row) => {
+        res.json({ disappearing_hours: row ? row.disappearing_hours : 24 });
+      });
+    });
+  }
+});
+
+app.post('/api/messages/settings/:target', auth, (req, res) => {
+  const target = req.params.target;
+  const hours = parseInt(req.body.disappearing_hours) || 24;
+  
+  if (target.startsWith('group_')) {
+    const groupId = parseInt(target.replace('group_', ''));
+    const avatar = req.body.avatar !== undefined ? req.body.avatar : null;
+    let sql = 'UPDATE chat_groups SET disappearing_hours = ?';
+    let params = [hours];
+    if (avatar !== null) {
+      sql += ', avatar = ?';
+      params.push(avatar);
+    }
+    sql += ' WHERE id = ?';
+    params.push(groupId);
+    
+    db.run(sql, params, () => {
+      res.json({ success: true, disappearing_hours: hours, avatar });
+    });
+  } else {
+    db.get('SELECT id FROM users WHERE username = ?', [target], (err, targetUser) => {
+      if (!targetUser) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+      const u1 = Math.min(req.user.id, targetUser.id);
+      const u2 = Math.max(req.user.id, targetUser.id);
+      db.run('INSERT INTO chat_settings (user1_id, user2_id, disappearing_hours) VALUES (?, ?, ?) ON CONFLICT(user1_id, user2_id) DO UPDATE SET disappearing_hours = excluded.disappearing_hours',
+        [u1, u2, hours], () => {
+          res.json({ success: true, disappearing_hours: hours });
+        });
+    });
+  }
+});
+
 // GROUP SETTINGS & MODERATION
 app.put('/api/messages/groups/:id', auth, (req, res) => {
   const groupId = req.params.id;
-  const { name } = req.body;
+  const { name, avatar, disappearing_hours } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Grup adı boş olamaz' });
   
   db.get('SELECT * FROM chat_group_members WHERE group_id = ? AND user_id = ?', [groupId, req.user.id], (err, member) => {
     if (!member) return res.status(403).json({ error: 'Yetkisiz' });
     
-    db.run('UPDATE chat_groups SET name = ? WHERE id = ?', [name.trim(), groupId], () => {
+    const hours = parseInt(disappearing_hours) || 24;
+    db.run('UPDATE chat_groups SET name = ?, avatar = COALESCE(?, avatar), disappearing_hours = ? WHERE id = ?',
+      [name.trim(), avatar || null, hours, groupId], () => {
+        res.json({ success: true });
+      });
+  });
+});
+
+app.delete('/api/messages/groups/:id', auth, (req, res) => {
+  const groupId = req.params.id;
+  db.get('SELECT * FROM chat_groups WHERE id = ?', [groupId], (err, group) => {
+    if (!group) return res.status(404).json({ error: 'Grup bulunamadı' });
+    if (group.created_by !== req.user.id) return res.status(403).json({ error: 'Grubu yalnızca oluşturan kişi silebilir.' });
+
+    db.run('DELETE FROM chat_groups WHERE id = ?', [groupId], () => {
+      db.run('DELETE FROM chat_group_members WHERE group_id = ?', [groupId]);
+      db.run('DELETE FROM messages WHERE group_id = ?', [groupId]);
       res.json({ success: true });
     });
   });
@@ -2607,11 +2937,33 @@ setInterval(() => {
       )
   `);
 
-  // 2. Delete ALL messages and party messages older than 24 hours (privacy/security retention)
+  // 2. Delete messages according to disappearing_hours settings (or 24h default)
+  // Group messages auto-delete
   db.run(`
-    DELETE FROM messages 
-    WHERE created_at < datetime('now', '-24 hours')
+    DELETE FROM messages
+    WHERE group_id IS NOT NULL
+      AND group_id IN (
+        SELECT id FROM chat_groups 
+        WHERE disappearing_hours > 0 
+          AND (julianday('now') - julianday(created_at)) * 24 > disappearing_hours
+      )
   `);
+
+  // Direct DM messages auto-delete
+  db.run(`
+    DELETE FROM messages
+    WHERE group_id IS NULL
+      AND (
+        (julianday('now') - julianday(created_at)) * 24 > COALESCE(
+          (
+            SELECT cs.disappearing_hours FROM chat_settings cs
+            WHERE cs.user1_id = CASE WHEN messages.from_user_id < messages.to_user_id THEN messages.from_user_id ELSE messages.to_user_id END
+              AND cs.user2_id = CASE WHEN messages.from_user_id < messages.to_user_id THEN messages.to_user_id ELSE messages.from_user_id END
+          ), 24
+        )
+      )
+  `);
+
   db.run(`
     DELETE FROM party_messages 
     WHERE created_at < datetime('now', '-24 hours')
@@ -2619,8 +2971,22 @@ setInterval(() => {
 }, 30000);
 
 
+// SPA routing - tüm non-API istekleri index.html'e yönlendir (en sonda, tüm API route'larından sonra)
+app.get('*', (req, res) => {
+  // API isteklerini, statik dosyaları ve uploads'ı atla
+  if (req.path.startsWith('/api') ||
+      req.path.startsWith('/uploads') ||
+      req.path.startsWith('/css') ||
+      req.path.startsWith('/js') ||
+      req.path.startsWith('/audio') ||
+      req.path.includes('.')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   const os = require('os');
   const networkInterfaces = os.networkInterfaces();
   let localIp = '127.0.0.1';
@@ -2646,4 +3012,186 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('   Sunucuyu durdurmak icin CTRL+C');
   console.log('========================================');
   console.log('');
+});
+
+// --- WEBSOCKET SERVER IMPLEMENTATION ---
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ server });
+
+global.partyConnections = new Map();
+global.closePartyWebSocket = (partyId, userId, reason = 'Oda üyesi değilsiniz') => {
+  const partyConns = global.partyConnections.get(parseInt(partyId));
+  if (partyConns && partyConns.has(parseInt(userId))) {
+    const conn = partyConns.get(parseInt(userId));
+    try {
+      conn.ws.close(4004, reason);
+    } catch (e) {}
+  }
+};
+
+wss.on('connection', (ws, req) => {
+  const cookies = {};
+  if (req.headers.cookie) {
+    req.headers.cookie.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      cookies[parts[0].trim()] = decodeURIComponent(parts[1] || '').trim();
+    });
+  }
+
+  const token = cookies.token;
+  if (!token) {
+    ws.close(4001, 'Giriş yapmalısın');
+    return;
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err || !decoded || !decoded.id) {
+      ws.close(4002, 'Geçersiz oturum');
+      return;
+    }
+
+    const userId = decoded.id;
+    const username = decoded.username;
+
+    const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const partyId = parseInt(urlObj.searchParams.get('partyId'));
+
+    if (!partyId) {
+      ws.close(4003, 'partyId gerekli');
+      return;
+    }
+
+    db.get('SELECT id FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, userId], (dbErr, member) => {
+      if (dbErr || !member) {
+        ws.close(4004, 'Oda üyesi değilsiniz');
+        return;
+      }
+
+      db.get(`SELECT id FROM party_voice_moderation WHERE party_id = ? AND user_id = ? AND (expires_at IS NULL OR expires_at > datetime('now'))`, [partyId, userId], (muteErr, muteRow) => {
+        const serverMuted = !muteErr && !!muteRow;
+
+        if (!global.partyVoiceStates) global.partyVoiceStates = {};
+        if (!global.partyVoiceStates[partyId]) {
+          global.partyVoiceStates[partyId] = {};
+        }
+
+        if (!global.partyConnections.has(partyId)) {
+          global.partyConnections.set(partyId, new Map());
+        }
+        
+        const connections = global.partyConnections.get(partyId);
+        if (connections.has(userId)) {
+          try { connections.get(userId).ws.close(4005, 'Başka sekmede bağlandınız'); } catch (e) {}
+        }
+        
+        connections.set(userId, { ws, username });
+        let socketDeviceId = null;
+
+        const broadcastToParty = (data) => {
+          const payload = JSON.stringify(data);
+          const partyConns = global.partyConnections.get(partyId);
+          if (partyConns) {
+            partyConns.forEach((conn) => {
+              if (conn.ws.readyState === 1) { // WebSocket.OPEN
+                conn.ws.send(payload);
+              }
+            });
+          }
+        };
+
+        ws.on('message', (messageStr) => {
+          try {
+            const message = JSON.parse(messageStr);
+            const { type } = message;
+
+            if (type === 'ping') {
+              ws.send(JSON.stringify({ type: 'pong' }));
+              return;
+            }
+
+            if (type === 'voice_state_update') {
+              const { micMuted, deafened, channelId, pingMs, deviceId } = message;
+              if (deviceId) {
+                socketDeviceId = deviceId;
+              }
+              
+              global.partyVoiceStates[partyId][userId] = {
+                username,
+                micMuted: !!micMuted || serverMuted,
+                serverMuted,
+                deafened: !!deafened,
+                channelId: channelId ? parseInt(channelId) : null,
+                pingMs: parseInt(pingMs) || 0,
+                deviceId: deviceId || null,
+                lastSeen: Date.now()
+              };
+
+              if (deviceId && channelId) {
+                global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
+                global.userActiveVoiceSessions[userId] = {
+                  partyId: parseInt(partyId),
+                  channelId: parseInt(channelId),
+                  deviceId: deviceId || null,
+                  lastSeen: Date.now()
+                };
+              } else {
+                if (global.userActiveVoiceSessions) {
+                  delete global.userActiveVoiceSessions[userId];
+                }
+              }
+
+              broadcastToParty({
+                type: 'voice_state_list',
+                members: global.partyVoiceStates[partyId]
+              });
+
+            } else if (type === 'rtc_signal') {
+              const { toUsername, signal } = message;
+              const partyConns = global.partyConnections.get(partyId);
+              if (partyConns) {
+                const targetConn = Array.from(partyConns.values()).find(conn => conn.username === toUsername);
+                if (targetConn && targetConn.ws.readyState === 1) { // WebSocket.OPEN
+                  targetConn.ws.send(JSON.stringify({
+                    type: 'rtc_signal',
+                    fromUsername: username,
+                    signal
+                  }));
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[WS Message Error] Error:', e);
+          }
+        });
+
+        ws.on('close', () => {
+          const partyConns = global.partyConnections.get(partyId);
+          if (partyConns) {
+            partyConns.delete(userId);
+            if (partyConns.size === 0) {
+              global.partyConnections.delete(partyId);
+            }
+          }
+
+          if (global.partyVoiceStates && global.partyVoiceStates[partyId]) {
+            delete global.partyVoiceStates[partyId][userId];
+            broadcastToParty({
+              type: 'voice_state_list',
+              members: global.partyVoiceStates[partyId]
+            });
+          }
+
+          if (global.userActiveVoiceSessions && global.userActiveVoiceSessions[userId]) {
+            if (global.userActiveVoiceSessions[userId].deviceId === socketDeviceId) {
+              delete global.userActiveVoiceSessions[userId];
+            }
+          }
+        });
+
+        ws.on('error', () => {
+          ws.close();
+        });
+      });
+    });
+  });
 });

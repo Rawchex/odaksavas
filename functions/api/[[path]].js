@@ -132,6 +132,49 @@ app.post('/register', async (c) => {
   }
 });
 
+app.post('/auth/google', async (c) => {
+  try {
+    const { credential } = await c.req.json();
+    if (!credential) return c.json({ error: 'Google jetonu gerekli' }, 400);
+
+    const parts = credential.split('.');
+    if (parts.length !== 3) return c.json({ error: 'Geçersiz Google jetonu' }, 400);
+
+    const payload = JSON.parse(atob(parts[1]));
+    const { sub: googleId, email, name, picture } = payload;
+    if (!googleId) return c.json({ error: 'Google jetonundan kimlik doğrulanamadı' }, 400);
+
+    let user = await c.env.DB.prepare('SELECT * FROM users WHERE google_id = ? OR (email IS NOT NULL AND email = ? AND email != "")')
+      .bind(googleId, email || '')
+      .first();
+
+    if (!user) {
+      let baseUsername = (name || (email ? email.split('@')[0] : 'user')).toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (baseUsername.length < 3) baseUsername = 'user';
+      const uniqueUsername = baseUsername + '_' + Math.floor(1000 + Math.random() * 9000);
+
+      await c.env.DB.prepare('INSERT INTO users (username, email, google_id, profile_photo) VALUES (?, ?, ?, ?)')
+        .bind(uniqueUsername, email || null, googleId, picture || null)
+        .run();
+
+      user = await c.env.DB.prepare('SELECT * FROM users WHERE google_id = ?')
+        .bind(googleId)
+        .first();
+    }
+
+    const jwtSecret = c.env.JWT_SECRET || 'odaksavasi_super_secret_jwt_key_2026';
+    const token = await sign({ id: user.id, username: user.username, exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60 }, jwtSecret);
+
+    setCookie(c, 'token', token, { maxAge: 30 * 24 * 60 * 60, httpOnly: true, path: '/', sameSite: 'Lax' });
+    setCookie(c, 'username', user.username, { maxAge: 30 * 24 * 60 * 60, httpOnly: false, path: '/', sameSite: 'Lax' });
+
+    return c.json({ success: true, user });
+  } catch (e) {
+    console.error('Google Auth error:', e);
+    return c.json({ error: 'Google ile giriş hatası' }, 500);
+  }
+});
+
 app.post('/change-password', authMiddleware, async (c) => {
   const user = c.get('user');
   const { oldPassword, newPassword } = await c.req.json();
@@ -168,13 +211,14 @@ app.post('/logout', (c) => {
 
 // 2. User & Profile
 app.get('/search/users', authMiddleware, async (c) => {
+  const user = c.get('user');
   const q = c.req.query('q');
   if (!q) return c.json([]);
 
   const searchPattern = `%${q}%`;
   const { results } = await c.env.DB.prepare(
-    'SELECT id, username, profile_photo, level, xp, status FROM users WHERE username LIKE ? LIMIT 10'
-  ).bind(searchPattern).all();
+    'SELECT id, username, profile_photo, level, xp, status FROM users WHERE username LIKE ? AND id != ? LIMIT 10'
+  ).bind(searchPattern, user.id).all();
 
   return c.json(results || []);
 });
@@ -1232,14 +1276,15 @@ app.delete('/comments/:id', authMiddleware, async (c) => {
 app.post('/parties', authMiddleware, async (c) => {
   const user = c.get('user');
   const { name, isPrivate } = await c.req.json();
+  const inviteCode = Math.random().toString(36).slice(2, 10).toUpperCase();
 
-  const res = await c.env.DB.prepare('INSERT INTO parties (owner_id, name, is_private) VALUES (?, ?, ?)')
-    .bind(user.id, name || 'Yeni Parti', isPrivate ? 1 : 0)
+  const res = await c.env.DB.prepare('INSERT INTO parties (owner_id, name, is_private, invite_code) VALUES (?, ?, ?, ?)')
+    .bind(user.id, name || 'Yeni Parti', isPrivate ? 1 : 0, inviteCode)
     .run();
   const partyId = res.meta.last_row_id || 0;
 
   await c.env.DB.prepare('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)').bind(partyId, user.id).run();
-  return c.json({ partyId });
+  return c.json({ partyId, inviteCode });
 });
 
 app.get('/parties', authMiddleware, async (c) => {
@@ -1325,22 +1370,260 @@ app.get('/parties/:id', authMiddleware, async (c) => {
   if (!party) return c.json({ error: 'Parti bulunamadı' }, 404);
 
   const owner = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(party.owner_id).first();
-  const { results } = await c.env.DB.prepare(`
+  const { results: members } = await c.env.DB.prepare(`
     SELECT u.id, u.username, u.profile_photo, u.level, u.total_focus_time,
+      pm.role, pm.channel_id, pm.server_muted,
+      (u.last_seen > datetime('now', '-2 minutes')) as is_online,
       (SELECT id FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as active_session_id,
       (SELECT start_time FROM sessions WHERE user_id = u.id AND status = 'active' LIMIT 1) as session_start,
       (SELECT COALESCE(SUM(duration), 0) FROM sessions WHERE user_id = u.id AND party_id = ? AND status = 'completed') as party_total_time
-    FROM party_members pm 
-    JOIN users u ON pm.user_id = u.id 
-    WHERE pm.party_id = ? 
+    FROM party_members pm
+    JOIN users u ON pm.user_id = u.id
+    WHERE pm.party_id = ?
     ORDER BY party_total_time DESC
   `).bind(id, id).all();
 
+  const { results: channels } = await c.env.DB.prepare(
+    'SELECT * FROM party_channels WHERE party_id = ? ORDER BY position ASC, id ASC'
+  ).bind(id).all();
+
   return c.json({
     ...party,
-    owner_name: owner.username,
-    members: results || []
+    owner_name: owner?.username,
+    members: members || [],
+    channels: channels || []
   });
+});
+
+// --- Party management endpoints ---
+
+const partyRoleRank = r => ({ member: 10, moderator: 20, admin: 30, owner: 40 })[r] || 0;
+
+async function getMyPartyRole(db, partyId, userId) {
+  const party = await db.prepare('SELECT owner_id FROM parties WHERE id = ?').bind(partyId).first();
+  if (!party) return null;
+  if (party.owner_id === userId) return 'owner';
+  const m = await db.prepare('SELECT role FROM party_members WHERE party_id = ? AND user_id = ?').bind(partyId, userId).first();
+  return m?.role || null;
+}
+
+async function logAudit(db, partyId, actorId, targetId, action, reason) {
+  await db.prepare('INSERT INTO party_moderation_audit (party_id, actor_id, target_user_id, action, reason) VALUES (?, ?, ?, ?, ?)')
+    .bind(partyId, actorId, targetId || null, action, reason || null).run();
+}
+
+// Oda adı değiştir
+app.put('/parties/:id/name', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const { name } = await c.req.json();
+  if (!name?.trim()) return c.json({ error: 'Ad boş olamaz' }, 400);
+  const role = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!role || partyRoleRank(role) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  await c.env.DB.prepare('UPDATE parties SET name = ? WHERE id = ?').bind(name.trim(), id).run();
+  return c.json({ success: true });
+});
+
+// Davet kodu yenile
+app.post('/parties/:id/regenerate-invite', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const role = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!role || partyRoleRank(role) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  const code = Math.random().toString(36).slice(2, 10).toUpperCase();
+  await c.env.DB.prepare('UPDATE parties SET invite_code = ? WHERE id = ?').bind(code, id).run();
+  return c.json({ inviteCode: code });
+});
+
+// Kodla katıl
+app.post('/parties/join-code', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { code } = await c.req.json();
+  if (!code) return c.json({ error: 'Kod gerekli' }, 400);
+  const party = await c.env.DB.prepare('SELECT * FROM parties WHERE invite_code = ?').bind(code.trim().toUpperCase()).first();
+  if (!party) return c.json({ error: 'Geçersiz davet kodu' }, 404);
+  const banned = await c.env.DB.prepare('SELECT id FROM party_bans WHERE party_id = ? AND user_id = ?').bind(party.id, user.id).first();
+  if (banned) return c.json({ error: 'Bu odadan yasaklandınız' }, 403);
+  try {
+    await c.env.DB.prepare('INSERT INTO party_members (party_id, user_id) VALUES (?, ?)').bind(party.id, user.id).run();
+  } catch (e) { /* zaten üye */ }
+  return c.json({ success: true, partyId: party.id });
+});
+
+// Kanal listesi
+app.get('/parties/:id/channels', authMiddleware, async (c) => {
+  const id = c.req.param('id');
+  const { results } = await c.env.DB.prepare('SELECT * FROM party_channels WHERE party_id = ? ORDER BY position ASC, id ASC').bind(id).all();
+  return c.json(results || []);
+});
+
+// Kanal oluştur
+app.post('/parties/:id/channels', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const { name, userLimit = 0, allowScreenShare = false } = await c.req.json();
+  if (!name?.trim()) return c.json({ error: 'Kanal adı boş olamaz' }, 400);
+  const role = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!role || partyRoleRank(role) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  const maxPos = await c.env.DB.prepare('SELECT COALESCE(MAX(position),0) as m FROM party_channels WHERE party_id = ?').bind(id).first();
+  const res = await c.env.DB.prepare('INSERT INTO party_channels (party_id, name, user_limit, allow_screen_share, position) VALUES (?, ?, ?, ?, ?)')
+    .bind(id, name.trim(), Math.min(20, Math.max(0, userLimit)), allowScreenShare ? 1 : 0, (maxPos?.m || 0) + 1).run();
+  return c.json({ channelId: res.meta.last_row_id });
+});
+
+// Kanal düzenle
+app.put('/parties/:id/channels/:cid', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, cid } = c.req.param();
+  const { name, userLimit = 0, allowScreenShare = false } = await c.req.json();
+  if (!name?.trim()) return c.json({ error: 'Kanal adı boş olamaz' }, 400);
+  const role = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!role || partyRoleRank(role) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  await c.env.DB.prepare('UPDATE party_channels SET name = ?, user_limit = ?, allow_screen_share = ? WHERE id = ? AND party_id = ?')
+    .bind(name.trim(), Math.min(20, Math.max(0, userLimit)), allowScreenShare ? 1 : 0, cid, id).run();
+  return c.json({ success: true });
+});
+
+// Kanal sil
+app.delete('/parties/:id/channels/:cid', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, cid } = c.req.param();
+  const role = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!role || partyRoleRank(role) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  const ch = await c.env.DB.prepare('SELECT * FROM party_channels WHERE id = ? AND party_id = ?').bind(cid, id).first();
+  if (!ch) return c.json({ error: 'Kanal bulunamadı' }, 404);
+  if (ch.is_default) return c.json({ error: 'Ana kanal silinemez' }, 400);
+  const defCh = await c.env.DB.prepare('SELECT id FROM party_channels WHERE party_id = ? AND is_default = 1 LIMIT 1').bind(id).first();
+  if (defCh) await c.env.DB.prepare('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND channel_id = ?').bind(defCh.id, id, cid).run();
+  await c.env.DB.prepare('DELETE FROM party_channels WHERE id = ? AND party_id = ?').bind(cid, id).run();
+  return c.json({ success: true });
+});
+
+// Kanal sıralama
+app.put('/parties/:id/channels-reorder', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const { channels } = await c.req.json();
+  const role = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!role || partyRoleRank(role) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  for (const ch of channels) {
+    await c.env.DB.prepare('UPDATE party_channels SET position = ? WHERE id = ? AND party_id = ?').bind(ch.position, ch.id, id).run();
+  }
+  return c.json({ success: true });
+});
+
+// Üye rol değiştir
+app.put('/parties/:id/members/:uid/role', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, uid } = c.req.param();
+  const { role: newRole } = await c.req.json();
+  if (!['member', 'moderator', 'admin'].includes(newRole)) return c.json({ error: 'Geçersiz rol' }, 400);
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 30) return c.json({ error: 'Yetkisiz' }, 403);
+  if (partyRoleRank(newRole) >= partyRoleRank(myRole)) return c.json({ error: 'Kendi rolünüzden yüksek rol veremezsiniz' }, 403);
+  await c.env.DB.prepare('UPDATE party_members SET role = ? WHERE party_id = ? AND user_id = ?').bind(newRole, id, uid).run();
+  await logAudit(c.env.DB, id, user.id, uid, 'change_role', newRole);
+  return c.json({ success: true });
+});
+
+// Üye sustur
+app.put('/parties/:id/members/:uid/voice-mute', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, uid } = c.req.param();
+  const { muted, reason } = await c.req.json();
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  await c.env.DB.prepare('UPDATE party_members SET server_muted = ? WHERE party_id = ? AND user_id = ?').bind(muted ? 1 : 0, id, uid).run();
+  await logAudit(c.env.DB, id, user.id, uid, muted ? 'voice_mute' : 'voice_unmute', reason || null);
+  return c.json({ success: true });
+});
+
+// Üye kanala taşı
+app.post('/parties/:id/members/:uid/move', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, uid } = c.req.param();
+  const { channelId } = await c.req.json();
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  const ch = await c.env.DB.prepare('SELECT id FROM party_channels WHERE id = ? AND party_id = ?').bind(channelId, id).first();
+  if (!ch) return c.json({ error: 'Kanal bulunamadı' }, 404);
+  await c.env.DB.prepare('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?').bind(channelId, id, uid).run();
+  await logAudit(c.env.DB, id, user.id, uid, 'move_member', null);
+  return c.json({ success: true });
+});
+
+// Üye çıkar
+app.delete('/parties/:id/members/:uid/kick', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, uid } = c.req.param();
+  const { reason } = await c.req.json().catch(() => ({}));
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 20) return c.json({ error: 'Yetkisiz' }, 403);
+  const target = await c.env.DB.prepare('SELECT role FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, uid).first();
+  if (!target) return c.json({ error: 'Üye bulunamadı' }, 404);
+  if (partyRoleRank(target.role) >= partyRoleRank(myRole)) return c.json({ error: 'Bu üyeyi çıkaramazsınız' }, 403);
+  await c.env.DB.prepare('DELETE FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, uid).run();
+  await logAudit(c.env.DB, id, user.id, uid, 'kick_member', reason || null);
+  return c.json({ success: true });
+});
+
+// Üye yasakla
+app.post('/parties/:id/members/:uid/ban', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, uid } = c.req.param();
+  const { reason } = await c.req.json();
+  if (!reason || reason.trim().length < 3) return c.json({ error: 'Neden en az 3 karakter olmalı' }, 400);
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 30) return c.json({ error: 'Yetkisiz' }, 403);
+  const target = await c.env.DB.prepare('SELECT role FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, uid).first();
+  if (target && partyRoleRank(target.role) >= partyRoleRank(myRole)) return c.json({ error: 'Bu üyeyi yasaklayamazsınız' }, 403);
+  try {
+    await c.env.DB.prepare('INSERT INTO party_bans (party_id, user_id, banned_by, reason) VALUES (?, ?, ?, ?)').bind(id, uid, user.id, reason.trim()).run();
+  } catch (e) { /* zaten yasaklı */ }
+  await c.env.DB.prepare('DELETE FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, uid).run();
+  await logAudit(c.env.DB, id, user.id, uid, 'ban_member', reason.trim());
+  return c.json({ success: true });
+});
+
+// Yasak kaldır
+app.delete('/parties/:id/members/:uid/ban', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const { id, uid } = c.req.param();
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 30) return c.json({ error: 'Yetkisiz' }, 403);
+  await c.env.DB.prepare('DELETE FROM party_bans WHERE party_id = ? AND user_id = ?').bind(id, uid).run();
+  await logAudit(c.env.DB, id, user.id, uid, 'unban_member', null);
+  return c.json({ success: true });
+});
+
+// Yasak listesi
+app.get('/parties/:id/moderation/bans', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 30) return c.json({ error: 'Yetkisiz' }, 403);
+  const { results } = await c.env.DB.prepare(`
+    SELECT pb.user_id, u.username, pb.reason, pb.created_at
+    FROM party_bans pb JOIN users u ON pb.user_id = u.id
+    WHERE pb.party_id = ? ORDER BY pb.created_at DESC
+  `).bind(id).all();
+  return c.json({ bans: results || [] });
+});
+
+// Moderasyon geçmişi
+app.get('/parties/:id/moderation/audit', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const myRole = await getMyPartyRole(c.env.DB, id, user.id);
+  if (!myRole || partyRoleRank(myRole) < 30) return c.json({ error: 'Yetkisiz' }, 403);
+  const { results } = await c.env.DB.prepare(`
+    SELECT a.*, ua.username as actor_username, ut.username as target_username
+    FROM party_moderation_audit a
+    LEFT JOIN users ua ON a.actor_id = ua.id
+    LEFT JOIN users ut ON a.target_user_id = ut.id
+    WHERE a.party_id = ? ORDER BY a.created_at DESC LIMIT 50
+  `).bind(id).all();
+  return c.json({ events: results || [] });
 });
 
 app.get('/parties/:id/live-status', authMiddleware, async (c) => {
