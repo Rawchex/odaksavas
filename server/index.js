@@ -716,7 +716,7 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
               const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '30d' });
               res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
               res.cookie('username', newUser.username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
-              return res.json({ success: true, user: newUser });
+              return res.json({ success: true, user: newUser, isNewUser: true });
             });
           }
         );
@@ -1155,15 +1155,42 @@ app.get('/api/users/:username/friends', auth, (req, res) => {
 
 
 app.put('/api/profile', auth, (req, res) => {
-  const { bio, height, weight, cv, is_private } = req.body;
+  const { username, bio, height, weight, cv, is_private } = req.body;
   if (bio && bio.length > 500) return res.status(400).json({ error: 'Biyografi çok uzun (Maks: 500 karakter)' });
   if (cv && cv.length > 3000) return res.status(400).json({ error: 'CV çok uzun (Maks: 3000 karakter)' });
-  const isPrivateVal = is_private ? 1 : 0;
-  db.run('UPDATE users SET bio = ?, height = ?, weight = ?, cv = ?, is_private = ? WHERE id = ?', 
-    [bio, height, weight, cv, isPrivateVal, req.user.id], () => {
-    res.json({ success: true });
+  
+  let newUsername = req.user.username;
+  if (username && username.trim()) {
+    const cleanUser = username.trim();
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(cleanUser)) {
+      return res.status(400).json({ error: 'Kullanıcı adı 3-20 karakter arası, harf, rakam ve alt çizgi içermelidir.' });
+    }
+    newUsername = cleanUser;
+  }
+
+  // Check if username is taken by someone else
+  db.get('SELECT id FROM users WHERE username = ? AND id != ?', [newUsername, req.user.id], (err, existing) => {
+    if (err) return res.status(500).json({ error: 'Veritabanı hatası' });
+    if (existing) return res.status(400).json({ error: 'Bu kullanıcı adı zaten başka bir üye tarafından kullanılıyor.' });
+
+    const isPrivateVal = is_private ? 1 : 0;
+    db.run('UPDATE users SET username = ?, bio = ?, height = ?, weight = ?, cv = ?, is_private = ? WHERE id = ?', 
+      [newUsername, bio, height, weight, cv, isPrivateVal, req.user.id], (updateErr) => {
+      if (updateErr) return res.status(500).json({ error: 'Güncelleme hatası' });
+      
+      const token = jwt.sign({ id: req.user.id, username: newUsername }, JWT_SECRET, { expiresIn: '30d' });
+      res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
+      res.cookie('username', newUsername, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
+
+      res.json({ success: true, username: newUsername });
+    });
   });
 });
+
+app.get('/api/user/active-voice-session', auth, (req, res) => {
+  res.json({ active: false });
+});
+
 
 
 app.post('/api/profile/photo', auth, upload.single('photo'), (req, res) => {

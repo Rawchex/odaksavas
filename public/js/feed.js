@@ -72,7 +72,7 @@ function renderFeed() {
            style="display:block"
            data-ad-format="fluid"
            data-ad-layout-key="-fb+5w+4e-db+86"
-           data-ad-client="ca-pub-4259190146952385"
+           data-ad-client="ca-pub-2694418537952605"
            data-ad-slot="auto"></ins>
       <script>
            (adsbygoogle = window.adsbygoogle || []).push({});

@@ -804,6 +804,9 @@ function openProfileSettings() {
       }
     }
 
+    const settingsUsername = document.getElementById('settingsUsername');
+    if (settingsUsername) settingsUsername.value = user.username || '';
+
     const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
     if (settingsPrivateToggle) settingsPrivateToggle.checked = !!user.is_private;
 
@@ -869,6 +872,7 @@ function closeProfileSettingsModal() {
 // SAVE SETTINGS
 // ============================================================
 async function saveSettings() {
+  const username = document.getElementById('settingsUsername')?.value.trim() || '';
   const bio = document.getElementById('settingsBio')?.value.trim() || '';
   const height = parseInt(document.getElementById('settingsHeight')?.value) || null;
   const weight = parseInt(document.getElementById('settingsWeight')?.value) || null;
@@ -882,9 +886,11 @@ async function saveSettings() {
     const res = await fetch('/api/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bio, height, weight, cv, is_private: isPrivate })
+      body: JSON.stringify({ username, bio, height, weight, cv, is_private: isPrivate })
     });
-    if (res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      if (data.username) currentUser.username = data.username;
       currentUser.bio = bio;
       currentUser.height = height;
       currentUser.weight = weight;
@@ -894,7 +900,7 @@ async function saveSettings() {
       closeProfileSettingsModal();
       loadMyProfile();
     } else {
-      showToast('Ayarlar kaydedilemedi');
+      showToast(data.error || 'Ayarlar kaydedilemedi');
     }
   } catch {
     showToast('Bağlantı hatası');

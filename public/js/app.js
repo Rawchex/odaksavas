@@ -119,7 +119,17 @@ function showLogin() {
   }
   const mainAppEl = document.getElementById('mainApp');
   if (mainAppEl) mainAppEl.style.display = 'none';
-  // Focus input
+
+  // Check if first time visiting — if so, show register modal immediately over landing page
+  const hasVisited = localStorage.getItem('blunk_visited');
+  if (!hasVisited) {
+    localStorage.setItem('blunk_visited', '1');
+    setTimeout(() => {
+      openRegisterModal();
+    }, 150);
+  }
+
+  // Focus input & initialize GSI
   setTimeout(() => {
     const inp = document.getElementById('usernameInput');
     if (inp) inp.focus();
@@ -145,9 +155,6 @@ function initGoogleSignIn() {
       use_fedcm_for_prompt: true
     });
     _googleGsiInitialized = true;
-    if (!currentUser) {
-      google.accounts.id.prompt();
-    }
   } catch (e) {
     console.warn('Google Sign-In init warn:', e);
   }
@@ -205,8 +212,19 @@ async function handleGoogleAuthCallback(response) {
     if (res.ok && data.success) {
       currentUser = data.user;
       if (typeof closeRegisterModal === 'function') closeRegisterModal();
-      if (typeof showToast === 'function') showToast('Google ile başarıyla giriş yapıldı! Hoş geldin ' + (currentUser.username || ''));
       showMainApp();
+      
+      // If user was newly created (username contains '_') or user wants to set username
+      if (data.isNewUser) {
+        setTimeout(() => {
+          if (typeof openProfileSettings === 'function') {
+            openProfileSettings();
+            if (typeof showToast === 'function') showToast('Hoş geldin! Lütfen kullanmak istediğin kullanıcı adını belirle.');
+          }
+        }, 500);
+      } else {
+        if (typeof showToast === 'function') showToast('Google ile başarıyla giriş yapıldı! Hoş geldin ' + (currentUser.username || ''));
+      }
     } else {
       const errMsg = data.error || 'Google ile giriş başarısız.';
       showAuthAlert(errMsg, 'authAlertBox');
