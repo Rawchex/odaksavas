@@ -674,7 +674,7 @@ app.post('/api/register', authLimiter, async (req, res) => {
 
 // Google Auth Endpoint
 app.post('/api/auth/google', authLimiter, async (req, res) => {
-  const { credential } = req.body;
+  const { credential, username } = req.body;
   if (!credential) return res.status(400).json({ error: 'Google jetonu (credential) gerekli.' });
 
   try {
@@ -698,28 +698,43 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
         res.cookie('username', user.username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
         return res.json({ success: true, user });
       } else {
-        let baseUsername = (name || (email ? email.split('@')[0] : 'user')).toLowerCase().replace(/[^a-z0-9_]/g, '');
-        if (baseUsername.length < 3) baseUsername = 'user';
-        const uniqueUsername = baseUsername + '_' + Math.floor(1000 + Math.random() * 9000);
-
-        db.run(
-          'INSERT INTO users (username, email, google_id, profile_photo) VALUES (?, ?, ?, ?)',
-          [uniqueUsername, email || null, googleId, picture || null],
-          function (err2) {
-            if (err2) {
-              console.error('Google user insert error:', err2);
-              return res.status(500).json({ error: 'Kullanıcı kaydı oluşturulamadı.' });
-            }
-            db.get('SELECT * FROM users WHERE id = ?', [this.lastID], (err3, newUser) => {
-              if (err3 || !newUser) return res.status(500).json({ error: 'Kullanıcı verisi alınamadı.' });
-
-              const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '30d' });
-              res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
-              res.cookie('username', newUser.username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
-              return res.json({ success: true, user: newUser, isNewUser: true });
-            });
+        let chosenUsername = '';
+        if (username && username.trim()) {
+          const clean = username.trim();
+          if (!/^[a-zA-Z0-9_]{3,20}$/.test(clean)) {
+            return res.status(400).json({ error: 'Kullanıcı adı 3-20 karakter arası, harf, rakam ve alt çizgi içermelidir.' });
           }
-        );
+          chosenUsername = clean;
+        } else {
+          let baseUsername = (name || (email ? email.split('@')[0] : 'user')).toLowerCase().replace(/[^a-z0-9_]/g, '');
+          if (baseUsername.length < 3) baseUsername = 'user';
+          chosenUsername = baseUsername + '_' + Math.floor(1000 + Math.random() * 9000);
+        }
+
+        db.get('SELECT id FROM users WHERE username = ?', [chosenUsername], (checkErr, existing) => {
+          if (existing) {
+            return res.status(400).json({ error: 'Bu kullanıcı adı zaten alınmış. Lütfen başka bir kullanıcı adı seçin.' });
+          }
+
+          db.run(
+            'INSERT INTO users (username, email, google_id, profile_photo) VALUES (?, ?, ?, ?)',
+            [chosenUsername, email || null, googleId, picture || null],
+            function (err2) {
+              if (err2) {
+                console.error('Google user insert error:', err2);
+                return res.status(500).json({ error: 'Kullanıcı kaydı oluşturulamadı.' });
+              }
+              db.get('SELECT * FROM users WHERE id = ?', [this.lastID], (err3, newUser) => {
+                if (err3 || !newUser) return res.status(500).json({ error: 'Kullanıcı verisi alınamadı.' });
+
+                const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '30d' });
+                res.cookie('token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'Lax' });
+                res.cookie('username', newUser.username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false, sameSite: 'Lax' });
+                return res.json({ success: true, user: newUser, isNewUser: true });
+              });
+            }
+          );
+        });
       }
     });
   } catch (err) {

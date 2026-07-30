@@ -203,10 +203,11 @@ async function handleGoogleAuthCallback(response) {
   if (!response || !response.credential) return;
   try {
     if (typeof showToast === 'function') showToast('Google ile giriş yapılıyor...');
+    const regUsername = document.getElementById('regUsernameInput')?.value.trim() || '';
     const res = await fetch('/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential })
+      body: JSON.stringify({ credential: response.credential, username: regUsername })
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
