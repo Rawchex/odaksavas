@@ -179,21 +179,12 @@ window.triggerGoogleSignIn = function() {
       google.accounts.id.initialize({
         client_id: clientId,
         callback: handleGoogleAuthCallback,
+        auto_select: false,
         use_fedcm_for_prompt: true
       });
       _googleGsiInitialized = true;
     }
-    google.accounts.id.prompt((notification) => {
-      if (notification && notification.isNotDisplayed()) {
-        const reason = notification.getNotDisplayedReason();
-        if (reason === 'unregistered_origin') {
-          console.warn(`Google Client ID yetkili kaynak uyarısı (${window.location.origin}).`);
-          if (typeof showToast === 'function') {
-            showToast(`Google Giriş için ${window.location.origin} adresi Google Cloud Console'da Yetkili Kaynak (Authorized Origin) olarak eklenmelidir.`);
-          }
-        }
-      }
-    });
+    google.accounts.id.prompt();
   } catch (err) {
     console.error('Trigger Google Sign-In error:', err);
   }

@@ -839,17 +839,29 @@ app.post('/api/logout', (req, res) => {
 // Delete account and all user data
 app.delete('/api/me', auth, (req, res) => {
   const { password, confirmText } = req.body;
-  if (!password || confirmText !== 'ONAYLIYORUM') {
-    return res.status(400).json({ error: 'Lütfen şifrenizi girin ve ONAYLIYORUM yazarak onaylayın.' });
+  if (confirmText !== 'ONAYLIYORUM') {
+    return res.status(400).json({ error: 'Onaylamak için büyük harflerle ONAYLIYORUM yazmalısınız.' });
   }
 
-  // Get user to verify password
+  // Get user to verify password if they have one set
   db.get('SELECT * FROM users WHERE id = ?', [req.user.id], (err, user) => {
     if (err || !user) return res.status(500).json({ error: 'Sunucu hatası' });
 
-    bcrypt.compare(password, user.password, (err, isMatch) => {
-      if (err || !isMatch) return res.status(400).json({ error: 'Girdiğiniz şifre hatalı.' });
+    // If user registered with password or has set a password, verify password
+    if (user.password) {
+      if (!password) {
+        return res.status(400).json({ error: 'Lütfen şifrenizi girin.' });
+      }
+      bcrypt.compare(password, user.password, (err, isMatch) => {
+        if (err || !isMatch) return res.status(400).json({ error: 'Girdiğiniz şifre hatalı.' });
+        proceedWithAccountDeletion();
+      });
+    } else {
+      // User registered via Google and has no password set
+      proceedWithAccountDeletion();
+    }
 
+    function proceedWithAccountDeletion() {
       db.serialize(() => {
         // Delete all related records
         db.run('DELETE FROM sessions WHERE user_id = ?', [req.user.id]);
@@ -873,7 +885,7 @@ app.delete('/api/me', auth, (req, res) => {
           res.json({ success: true });
         });
       });
-    });
+    }
   });
 });
 

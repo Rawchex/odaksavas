@@ -807,6 +807,11 @@ function openProfileSettings() {
     const settingsUsername = document.getElementById('settingsUsername');
     if (settingsUsername) settingsUsername.value = user.username || '';
 
+    const deletePassGroup = document.getElementById('deleteAccountPasswordGroup');
+    if (deletePassGroup) {
+      deletePassGroup.style.display = user.has_password === false || !user.password ? 'none' : 'block';
+    }
+
     const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
     if (settingsPrivateToggle) settingsPrivateToggle.checked = !!user.is_private;
 
@@ -1068,14 +1073,10 @@ async function deleteOwnAccount() {
   const passwordInput = document.getElementById('deleteAccountPassword');
   const confirmInput  = document.getElementById('deleteAccountConfirmText');
   
-  if (!passwordInput || !confirmInput) return;
-  const password    = passwordInput.value;
+  if (!confirmInput) return;
+  const password    = passwordInput ? passwordInput.value : '';
   const confirmText = confirmInput.value;
 
-  if (!password) {
-    showToast('Lütfen şifrenizi girin.');
-    return;
-  }
   if (confirmText !== 'ONAYLIYORUM') {
     showToast('Onaylamak için büyük harflerle ONAYLIYORUM yazmalısınız.');
     return;
