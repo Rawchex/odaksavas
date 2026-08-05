@@ -1603,6 +1603,15 @@ function selectFeeling(feeling, btnElement) {
   }
 }
 
+function selectCategory(category, btnElement) {
+  _currentCategory = category;
+  // Remove visual selection from any category buttons (if present)
+  try {
+    document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('selected'));
+  } catch (e) {}
+  if (btnElement && btnElement.classList) btnElement.classList.add('selected');
+}
+
 async function submitRating() {
   if (!_currentFeeling) { 
     if (typeof showToast === 'function') showToast('Lütfen nasıl hissettiğinizi seçin'); 

@@ -110,6 +110,19 @@ CREATE TABLE IF NOT EXISTS party_voice_moderation (
   FOREIGN KEY (muted_by) REFERENCES users(id)
 );
 
+-- Track active voice sessions per device for handover and multi-device checks
+CREATE TABLE IF NOT EXISTS voice_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  party_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  device_id TEXT NOT NULL,
+  channel_id INTEGER,
+  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (party_id) REFERENCES parties(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS party_moderation_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   party_id INTEGER NOT NULL,

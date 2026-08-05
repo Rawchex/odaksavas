@@ -209,6 +209,11 @@ function connectVoiceWebSocket(partyId) {
   ws.onmessage = async (event) => {
     try {
       const data = JSON.parse(event.data);
+      // lightweight pong handling for keepalive
+      if (data && data.type === 'pong') {
+        window._lastWsPong = Date.now();
+        return;
+      }
       if (data.type === 'voice_state_list') {
         const serverMembers = data.members || {};
         const ownVoiceState = Object.values(serverMembers).find(member => member.username === currentUser?.username);
@@ -253,6 +258,12 @@ function connectVoiceWebSocket(partyId) {
 
   ws.onclose = async (event) => {
     console.log('[VoiceChat] WebSocket closed:', event.code, event.reason);
+    // If this close was initiated manually (stopVoiceChat), do not auto-reconnect
+    if (window._voiceManualClose) {
+      console.log('[VoiceChat] WebSocket closed due to manual stop — no reconnect');
+      return;
+    }
+
     if (window._currentPartyId === partyId) {
       if (event.code === 4004) {
         const access = await fetch(`/api/parties/${window._currentPartyId}/access-status`).then(r => r.json()).catch(() => ({}));
@@ -274,14 +285,20 @@ function connectVoiceWebSocket(partyId) {
       
       if (event.code !== 1000 && event.code !== 1001) {
         updateVoiceConnectionStatus('issue');
-        // Exponential backoff: 1s → 2s → 4s → 8s → 16s → 30s max
+        // Exponential backoff with jitter and immediate short retry attempt
         window._wsReconnectAttempt = (window._wsReconnectAttempt || 0) + 1;
-        const delay = Math.min(30000, 1000 * Math.pow(2, window._wsReconnectAttempt - 1));
+        const base = 500; // start with 0.5s for fast recovery
+        const exp = Math.min(30000, base * Math.pow(2, window._wsReconnectAttempt - 1));
+        const jitter = Math.floor(Math.random() * Math.min(1000, exp * 0.2));
+        const delay = Math.min(30000, exp + jitter);
         console.log(`[VoiceChat] Reconnecting in ${delay}ms (attempt ${window._wsReconnectAttempt})`);
+        // If offline, wait for 'online' event instead
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          console.log('[VoiceChat] Offline — waiting for network to reconnect');
+          return;
+        }
         setTimeout(() => {
-          if (window._currentPartyId === partyId) {
-            connectVoiceWebSocket(partyId);
-          }
+          if (window._currentPartyId === partyId) connectVoiceWebSocket(partyId);
         }, delay);
       } else {
         updateVoiceConnectionStatus('disconnected');
@@ -295,9 +312,89 @@ function connectVoiceWebSocket(partyId) {
   };
 }
 
+// Keepalive and network/visibility handlers to improve reconnection behavior
+(function setupVoiceNetworkHandlers() {
+  if (window._voiceNetworkHandlersSetup) return; window._voiceNetworkHandlersSetup = true;
+
+  // Periodic ping to server — if no pong seen, force socket close to trigger reconnect
+  setInterval(() => {
+    try {
+      const ws = window._voiceSocket;
+      if (!ws) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
+      // If last pong is older than 15s, close and let reconnect logic run
+      if (window._lastWsPong && Date.now() - window._lastWsPong > 15000) {
+        console.warn('[VoiceChat] No WS pong — forcing reconnect');
+        try { ws.close(); } catch(e) {}
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'ping' }));
+    } catch (e) {}
+  }, 5000);
+
+  // Reconnect immediately when network comes back
+  window.addEventListener('online', () => {
+    console.log('[VoiceChat] Network online — attempting reconnect');
+    if (window._currentPartyId) connectVoiceWebSocket(window._currentPartyId);
+  });
+
+  // Mark issue when going offline
+  window.addEventListener('offline', () => {
+    console.warn('[VoiceChat] Network offline');
+    updateVoiceConnectionStatus('issue');
+  });
+
+  // When tab becomes visible, try to resume audio context and reconnect
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
+      if (window._currentPartyId && (!window._voiceSocket || window._voiceSocket.readyState !== WebSocket.OPEN)) {
+        connectVoiceWebSocket(window._currentPartyId);
+      }
+    }
+  });
+
+})();
+
+// ICE connection extra resiliency: try restartIce on transient disconnects
+const _origCreatePeerConnection = createPeerConnection;
+async function createPeerConnection(targetUsername, isInitiator) {
+  await _origCreatePeerConnection(targetUsername, isInitiator);
+  const pc = window._peerConnections[targetUsername];
+  if (!pc) return;
+  pc.addEventListener('connectionstatechange', async () => {
+    try {
+      if (pc.connectionState === 'disconnected') {
+        // gentle restart first
+        if (typeof pc.restartIce === 'function') {
+          console.log('[VoiceChat] Attempting ICE restart for', targetUsername);
+          try { pc.restartIce(); } catch (e) {}
+          setTimeout(async () => {
+            if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected' || pc.connectionState === 'failed') {
+              await retryPeerConnection(targetUsername);
+            }
+          }, 2000);
+        } else {
+          await retryPeerConnection(targetUsername);
+        }
+      }
+    } catch (e) { }
+  });
+}
+
 // ─── INIT ────────────────────────────────────────────────────
 async function initVoiceChat(partyId) {
   if (!partyId) return;
+  // Prevent rapid re-init when already connecting/connected to same party
+  if (window._currentPartyId === partyId && (window._voiceConnState === 'connecting' || window._voiceConnState === 'connected')) {
+    console.log('[VoiceChat] initVoiceChat ignored — already connecting/connected for party:', partyId);
+    return;
+  }
+  // Cooldown after an explicit stop to avoid loops
+  if (window._voiceStopCooldown && Date.now() - window._voiceStopCooldown < 1500) {
+    console.log('[VoiceChat] initVoiceChat blocked by recent stop cooldown');
+    return;
+  }
   console.log('[VoiceChat] Initializing for party:', partyId);
 
   window._currentPartyId = partyId;
@@ -377,6 +474,14 @@ async function initVoiceChat(partyId) {
     connectVoiceWebSocket(partyId);
     startScreenShareStatePolling(partyId);
 
+    // Notify server this device has started a voice session for handover/visibility
+    try {
+      fetch(`/api/parties/${partyId}/voice-start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: getDeviceSessionId(), channelId: window._currentChannelId || null }) }).catch(() => {});
+    } catch (e) {}
+
+    // Clear manual close flag once we've successfully started connecting
+    window._voiceManualClose = false;
+
   } catch(err) {
     console.error('[VoiceChat] Mic access failed:', err);
     updateVoiceConnectionStatus('issue');
@@ -387,6 +492,9 @@ async function initVoiceChat(partyId) {
 function stopVoiceChat(resetPartyId = true) {
   console.log('[VoiceChat] Stopping. resetPartyId:', resetPartyId);
   window._voiceInitToken++;
+  // Mark manual close so onclose handlers do not auto-reconnect immediately
+  window._voiceManualClose = true;
+  window._voiceStopCooldown = Date.now();
   const pId = window._currentPartyId;
   if (resetPartyId && window._currentPartyId) {
     if (typeof playChannelSound === 'function') playChannelSound('disconnect');
@@ -395,7 +503,8 @@ function stopVoiceChat(resetPartyId = true) {
 
   if (pId) {
     try {
-      fetch(`/api/parties/${pId}/voice-leave`, { method: 'POST' }).catch(() => {});
+      const body = { deviceId: getDeviceSessionId() };
+      fetch(`/api/parties/${pId}/voice-stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
     } catch(e) {}
   }
 
@@ -463,7 +572,8 @@ function stopVoiceChat(resetPartyId = true) {
 window.addEventListener('beforeunload', () => {
   if (window._currentPartyId) {
     try {
-      navigator.sendBeacon(`/api/parties/${window._currentPartyId}/voice-leave`);
+      const data = JSON.stringify({ deviceId: getDeviceSessionId() });
+      navigator.sendBeacon(`/api/parties/${window._currentPartyId}/voice-stop`, data);
     } catch(e) {}
   }
 });

@@ -203,10 +203,110 @@ app.get('/me', authMiddleware, async (c) => {
   return c.json(c.get('user'));
 });
 
+// Public RTC config endpoint to return STUN/TURN servers for clients
+app.get('/rtc-config', async (c) => {
+  const env = c.env;
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ];
+  // Support common TURN env vars if present
+  const turnUrl = env.TURN_URL || env.TURN_URI || env.TURN_SERVER;
+  const turnUser = env.TURN_USERNAME || env.TURN_USER;
+  const turnPass = env.TURN_PASSWORD || env.TURN_PASS || env.TURN_CREDENTIAL;
+  if (turnUrl) {
+    const turn = { urls: turnUrl };
+    if (turnUser && turnPass) {
+      turn.username = turnUser;
+      turn.credential = turnPass;
+    }
+    iceServers.push(turn);
+  }
+  return c.json({ iceServers, iceCandidatePoolSize: 4 });
+});
+
 app.post('/logout', (c) => {
   deleteCookie(c, 'token', { path: '/' });
   deleteCookie(c, 'username', { path: '/' });
   return c.json({ success: true });
+});
+
+// Informational endpoint used by clients to check if this user's other device
+// has an active voice session. Minimal implementation: always returns no active
+// voice. Can be extended to check persistent voice session state if added.
+app.get('/user/active-voice-session', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const deviceId = c.req.query('deviceId') || null;
+  try {
+    const row = await c.env.DB.prepare('SELECT party_id, channel_id, device_id, started_at FROM voice_sessions WHERE user_id = ? ORDER BY started_at DESC LIMIT 1')
+      .bind(user.id).first();
+    if (row && row.device_id && row.device_id !== deviceId) {
+      return c.json({ hasActiveVoice: true, isOtherDevice: true, partyId: row.party_id, channelId: row.channel_id });
+    }
+  } catch (e) {}
+  return c.json({ hasActiveVoice: false, isOtherDevice: false, partyId: null, channelId: null });
+});
+
+// Client calls this when leaving a voice session to ensure server-side cleanup.
+app.post('/parties/:id/voice-leave', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  // Verify membership
+  const member = await c.env.DB.prepare('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, user.id).first();
+  if (!member) return c.json({ error: 'Yetkisiz' }, 403);
+  // No persistent voice table — nothing to clear. Return success.
+  return c.json({ success: true });
+});
+
+// Handover request: transfer voice session to another device for same user.
+// Minimal implementation: verify membership and accept the request.
+app.post('/parties/:id/voice-handover', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const { targetDeviceId = null, channelId = null } = body || {};
+  const member = await c.env.DB.prepare('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, user.id).first();
+  if (!member) return c.json({ error: 'Yetkisiz' }, 403);
+
+  // In a fuller implementation this would signal other devices or update
+  // server-side voice session ownership. For now, just acknowledge.
+  return c.json({ success: true, transferredTo: targetDeviceId || null, channelId: channelId || null });
+});
+
+// Voice session lifecycle: start/stop for tracking active device sessions
+app.post('/parties/:id/voice-start', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const deviceId = body.deviceId || null;
+  const channelId = body.channelId || null;
+  if (!deviceId) return c.json({ error: 'deviceId required' }, 400);
+  const member = await c.env.DB.prepare('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, user.id).first();
+  if (!member) return c.json({ error: 'Yetkisiz' }, 403);
+  try {
+    // Remove any previous sessions for this user & party
+    await c.env.DB.prepare('DELETE FROM voice_sessions WHERE party_id = ? AND user_id = ?').bind(id, user.id).run();
+    await c.env.DB.prepare('INSERT INTO voice_sessions (party_id, user_id, device_id, channel_id, started_at, last_seen) VALUES (?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))')
+      .bind(id, user.id, deviceId, channelId).run();
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: 'DB error' }, 500); }
+});
+
+app.post('/parties/:id/voice-stop', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const deviceId = body.deviceId || null;
+  const member = await c.env.DB.prepare('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?').bind(id, user.id).first();
+  if (!member) return c.json({ error: 'Yetkisiz' }, 403);
+  try {
+    if (deviceId) {
+      await c.env.DB.prepare('DELETE FROM voice_sessions WHERE party_id = ? AND user_id = ? AND device_id = ?').bind(id, user.id, deviceId).run();
+    } else {
+      await c.env.DB.prepare('DELETE FROM voice_sessions WHERE party_id = ? AND user_id = ?').bind(id, user.id).run();
+    }
+    return c.json({ success: true });
+  } catch (e) { return c.json({ error: 'DB error' }, 500); }
 });
 
 // 2. User & Profile
