@@ -102,6 +102,15 @@ cleanPages.forEach(page => {
   });
 });
 
+// Redirect www requests to the canonical non-www hostname
+app.use((req, res, next) => {
+  const host = req.headers.host || '';
+  if (host.startsWith('www.')) {
+    return res.redirect(301, `https://${host.slice(4)}${req.originalUrl}`);
+  }
+  next();
+});
+
 // Serve static files
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR)); // Explicitly serve uploads from persistent dir
