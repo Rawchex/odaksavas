@@ -45,6 +45,8 @@ window._lastAudibleVoiceMembers = null;
 window._voiceStateBusy     = false;
 window._voiceStateQueued   = false;
 let _signalPollingSpeed     = 250;
+window._localMicGainNode    = null;
+window._localProcessedStream = null;
 
 function getMicAudioConstraints(deviceId = window._selectedMicId) {
   const processing = window._voiceProcessing || {};
@@ -58,6 +60,33 @@ function getMicAudioConstraints(deviceId = window._selectedMicId) {
   };
   if (deviceId && deviceId !== 'default') audio.deviceId = { exact: deviceId };
   return audio;
+}
+
+// Build a gain pipeline for the local microphone so input volume slider works
+function createMicGainPipeline(rawStream) {
+  if (!window._audioContext || !rawStream) return;
+  try {
+    // Clean up previous pipeline if exists
+    if (window._localProcessedStream) {
+      window._localProcessedStream.getTracks().forEach(t => t.stop());
+    }
+    window._localMicGainNode = null;
+    window._localProcessedStream = null;
+
+    const source = window._audioContext.createMediaStreamSource(rawStream);
+    const gainNode = window._audioContext.createGain();
+    const inputVol = Number(safeStorage.getItem('os_voice_input_volume') || 1);
+    gainNode.gain.value = Math.max(0, Math.min(2, inputVol));
+    const dest = window._audioContext.createMediaStreamDestination();
+    source.connect(gainNode);
+    gainNode.connect(dest);
+    window._localMicGainNode = gainNode;
+    window._localProcessedStream = dest.stream;
+  } catch(e) {
+    console.warn('[VoiceChat] Mic gain pipeline failed:', e);
+    window._localMicGainNode = null;
+    window._localProcessedStream = null;
+  }
 }
 
 function updateVoiceConnectionStatus(state) {
@@ -164,6 +193,7 @@ function connectVoiceWebSocket(partyId) {
 
   ws.onopen = () => {
     console.log('[VoiceChat] WebSocket connected');
+    window._wsReconnectAttempt = 0; // Reset backoff on successful connect
     updateVoiceConnectionStatus('connected');
     triggerVoiceStateUpdate();
 
@@ -244,11 +274,15 @@ function connectVoiceWebSocket(partyId) {
       
       if (event.code !== 1000 && event.code !== 1001) {
         updateVoiceConnectionStatus('issue');
+        // Exponential backoff: 1s → 2s → 4s → 8s → 16s → 30s max
+        window._wsReconnectAttempt = (window._wsReconnectAttempt || 0) + 1;
+        const delay = Math.min(30000, 1000 * Math.pow(2, window._wsReconnectAttempt - 1));
+        console.log(`[VoiceChat] Reconnecting in ${delay}ms (attempt ${window._wsReconnectAttempt})`);
         setTimeout(() => {
           if (window._currentPartyId === partyId) {
             connectVoiceWebSocket(partyId);
           }
-        }, 3000);
+        }, delay);
       } else {
         updateVoiceConnectionStatus('disconnected');
       }
@@ -320,7 +354,10 @@ async function initVoiceChat(partyId) {
 
     // AudioContext
     try {
-      window._audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      window._audioContext = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 48000,
+        latencyHint: 'interactive'
+      });
       if (window._audioContext.state === 'suspended') {
         const resume = () => {
           if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
@@ -331,6 +368,9 @@ async function initVoiceChat(partyId) {
         document.addEventListener('touchstart', resume);
       }
     } catch(e) { console.warn('[VoiceChat] AudioContext init failed:', e); }
+
+    // Build mic input gain pipeline so input volume slider actually works
+    createMicGainPipeline(window._localStream);
 
     if (currentUser?.username) setupUserSpeechAnalyser(currentUser.username, window._localStream);
 
@@ -377,14 +417,30 @@ function stopVoiceChat(resetPartyId = true) {
     window._localStream.getTracks().forEach(t => t.stop());
     window._localStream = null;
   }
+  // Stop processed stream (mic gain pipeline)
+  if (window._localProcessedStream) {
+    window._localProcessedStream.getTracks().forEach(t => t.stop());
+    window._localProcessedStream = null;
+  }
+  window._localMicGainNode = null;
 
   // Close peer connections
   Object.keys(window._peerConnections).forEach(u => { try { window._peerConnections[u].close(); } catch(e){} });
   window._peerConnections = {};
 
+  // Disconnect all AudioNodes properly to prevent ghost audio
+  Object.keys(window._userAudioNodes).forEach(u => {
+    const nodes = window._userAudioNodes[u];
+    if (nodes) {
+      try { if (nodes.source) nodes.source.disconnect(); } catch(_){}
+      try { if (nodes.gainNode) nodes.gainNode.disconnect(); } catch(_){}
+      try { if (nodes.analyser) nodes.analyser.disconnect(); } catch(_){}
+    }
+  });
+
   // Remove audio elements
   Object.keys(window._userAudioElements).forEach(u => {
-    try { window._userAudioElements[u].pause(); window._userAudioElements[u].remove(); } catch(e){}
+    try { window._userAudioElements[u].pause(); window._userAudioElements[u].srcObject = null; window._userAudioElements[u].remove(); } catch(e){}
   });
   window._userAudioElements = {};
   window._userAudioNodes    = {};
@@ -738,9 +794,11 @@ async function createPeerConnection(targetUsername, isInitiator) {
   const pc = new RTCPeerConnection(RTC_CONFIG);
   window._peerConnections[targetUsername] = pc;
 
-  // Add local audio tracks
+  // Always send raw mic stream to peers — no AudioContext dependency.
+  // The gain pipeline is for local monitoring/speech detection only.
+  // This ensures audio is never silent due to suspended AudioContext.
   if (window._localStream) {
-    window._localStream.getTracks().forEach(track => pc.addTrack(track, window._localStream));
+    window._localStream.getAudioTracks().forEach(track => pc.addTrack(track, window._localStream));
   }
 
   // ICE candidates
@@ -804,13 +862,19 @@ async function createPeerConnection(targetUsername, isInitiator) {
       audio.id = `remote-audio-${targetUsername}`;
       document.body.appendChild(audio);
       window._userAudioElements[targetUsername] = audio;
+
+      // Apply saved output device (headphones/speaker) to new audio element
+      const savedOutputId = safeStorage.getItem('os_selected_output_id');
+      if (savedOutputId && savedOutputId !== 'default' && typeof audio.setSinkId === 'function') {
+        audio.setSinkId(savedOutputId).catch(() => {});
+      }
     }
 
     if (audio.srcObject !== remoteStream) audio.srcObject = remoteStream;
-    // WebAudio is the single playback path when available. Muting before
-    // play prevents a brief native-audio + WebAudio double signal (echo).
-    audio.muted = !!window._audioContext;
-    applyUserVolume(targetUsername);
+    // Start muted — setupUserSpeechAnalyser will create the WebAudio path,
+    // then applyUserVolume decides the final state (WebAudio or native fallback).
+    audio.muted = true;
+    audio.volume = 0;
 
     const playPromise = audio.play();
     if (playPromise !== undefined) {
@@ -827,6 +891,10 @@ async function createPeerConnection(targetUsername, isInitiator) {
     }
 
     setupUserSpeechAnalyser(targetUsername, remoteStream);
+    // Apply correct volume — if WebAudio nodes were created, they own playback.
+    // If WebAudio failed (no AudioContext), applyUserVolume unmutes native audio
+    // element as fallback so the user can still hear the remote peer.
+    applyUserVolume(targetUsername);
   };
 
   if (isInitiator) {
@@ -869,6 +937,16 @@ function closePeerConnection(username) {
       delete window._peerConnections[username];
     }
   } catch(e){}
+  // Disconnect AudioNodes properly to prevent ghost audio pipelines
+  try {
+    const nodes = window._userAudioNodes[username];
+    if (nodes) {
+      if (nodes.source) nodes.source.disconnect();
+      if (nodes.gainNode) nodes.gainNode.disconnect();
+      if (nodes.analyser) nodes.analyser.disconnect();
+    }
+    delete window._userAudioNodes[username];
+  } catch(e){}
   try {
     const audio = window._userAudioElements[username];
     if (audio) {
@@ -878,7 +956,6 @@ function closePeerConnection(username) {
       delete window._userAudioElements[username];
     }
   } catch(e){}
-  try { delete window._userAudioNodes[username]; } catch(e){}
   try { delete window._peerIceQueues[username]; } catch(e){}
   if (window._peerReconnectTimers[username]) {
     clearTimeout(window._peerReconnectTimers[username]);
@@ -943,11 +1020,19 @@ function applyUserVolume(username) {
   const userPrefVol = window._userVolumes[username] !== undefined ? window._userVolumes[username] : getUserVolume(username);
   const effectiveVol = (isLocallyMuted || window._deafened) ? 0 : userPrefVol * (window._voiceOutputVolume ?? 1);
 
-  if (window._userAudioNodes[username]?.gainNode) {
-    try { window._userAudioNodes[username].gainNode.gain.value = effectiveVol; } catch(e){}
-  }
+  const nodes = window._userAudioNodes[username];
   const audio = window._userAudioElements[username];
-  if (audio) {
+
+  if (nodes?.gainNode) {
+    // WebAudio pipeline owns playback — keep native element permanently muted
+    // to prevent double-audio echo when volume changes
+    try { nodes.gainNode.gain.value = effectiveVol; } catch(e){}
+    if (audio) {
+      audio.muted = true;
+      audio.volume = 0;
+    }
+  } else if (audio) {
+    // Fallback: no WebAudio available, use native element directly
     audio.volume = Math.max(0, Math.min(1.0, effectiveVol));
     audio.muted  = effectiveVol === 0;
   }
@@ -1033,6 +1118,9 @@ function setMicMuteState(muted) {
   window._micMuted = muted;
   if (window._localStream) {
     window._localStream.getAudioTracks().forEach(track => { track.enabled = !muted; });
+  }
+  if (window._localProcessedStream) {
+    window._localProcessedStream.getAudioTracks().forEach(track => { track.enabled = !muted; });
   }
   Object.values(window._peerConnections || {}).forEach(pc => {
     try { pc.getSenders().forEach(sender => { if (sender.track?.kind === 'audio') sender.track.enabled = !muted; }); } catch(e){}
@@ -1137,7 +1225,12 @@ function syncVoiceSettingsPopover() {
 function handleVoiceInputVolume(value) {
   const v = Math.max(0, Math.min(100, Number(value) || 0));
   const out = document.getElementById('voiceInputVolumeValue'); if (out) out.textContent = `${v}%`;
-  safeStorage.setItem('os_voice_input_volume', String(v / 100));
+  const gain = v / 100;
+  safeStorage.setItem('os_voice_input_volume', String(gain));
+  // Apply gain to live mic pipeline in real-time
+  if (window._localMicGainNode) {
+    try { window._localMicGainNode.gain.value = gain; } catch(e){}
+  }
 }
 
 function handleVoiceOutputVolume(value) {
@@ -1197,7 +1290,14 @@ async function selectVoiceProfile(profile) {
 function setupUserSpeechAnalyser(username, mediaStream) {
   if (!window._audioContext) return;
   try {
-    if (window._userAudioNodes[username]) return;
+    // Cleanup existing nodes first to prevent double-pipeline on reconnect
+    const existing = window._userAudioNodes[username];
+    if (existing) {
+      try { if (existing.source) existing.source.disconnect(); } catch(_){}
+      try { if (existing.gainNode) existing.gainNode.disconnect(); } catch(_){}
+      try { if (existing.analyser) existing.analyser.disconnect(); } catch(_){}
+      delete window._userAudioNodes[username];
+    }
 
     const source   = window._audioContext.createMediaStreamSource(mediaStream);
     const analyser = window._audioContext.createAnalyser();
@@ -1208,14 +1308,19 @@ function setupUserSpeechAnalyser(username, mediaStream) {
 
     if (!isMe) {
       const userPrefVol = getUserVolume(username);
-      gainNode.gain.value = (!!window._userLocalMuted[username] || window._deafened) ? 0 : userPrefVol;
+      const effectiveVol = (!!window._userLocalMuted[username] || window._deafened) ? 0 : userPrefVol * (window._voiceOutputVolume ?? 1);
+      gainNode.gain.value = effectiveVol;
       source.connect(gainNode);
       gainNode.connect(analyser);
       analyser.connect(window._audioContext.destination);
+      // Native element stays muted — WebAudio is the sole playback path
       const audio = window._userAudioElements[username];
-      if (audio) audio.muted = true; // WebAudio handles playback
+      if (audio) {
+        audio.muted = true;
+        audio.volume = 0;
+      }
     } else {
-      gainNode.gain.value = 0; // No echo
+      gainNode.gain.value = 0; // Never play own voice back
       source.connect(gainNode);
       gainNode.connect(analyser);
     }
@@ -2007,6 +2112,45 @@ function getOrCreateSSPeerConnection(targetUsername) {
     }
   };
 
+  // ICE state monitoring for screen share connections
+  pc.oniceconnectionstatechange = () => {
+    const state = pc.iceConnectionState;
+    console.log(`[ScreenShare ICE] ${targetUsername}: ${state}`);
+    if (state === 'failed') {
+      console.warn(`[ScreenShare] ICE failed for ${targetUsername}`);
+      // If we're viewing their stream, try re-requesting
+      if (window._ssCurrentSharer === targetUsername && targetUsername !== currentUser?.username) {
+        try { pc.close(); } catch(_){}
+        delete window._ssConnections[targetUsername];
+        delete window._ssRemoteStreams[targetUsername];
+        // Auto-retry after brief delay
+        setTimeout(() => {
+          if (window._ssCurrentSharer === targetUsername) {
+            sendScreenShareSignal(targetUsername, { type: 'ss-request' });
+          }
+        }, 2000);
+      }
+    } else if (state === 'disconnected') {
+      // Grace period before treating as failed
+      setTimeout(() => {
+        const current = window._ssConnections[targetUsername];
+        if (current && current.iceConnectionState === 'disconnected') {
+          console.warn(`[ScreenShare] ICE still disconnected for ${targetUsername}, closing`);
+          try { current.close(); } catch(_){}
+          delete window._ssConnections[targetUsername];
+          delete window._ssRemoteStreams[targetUsername];
+          if (window._ssCurrentSharer === targetUsername && targetUsername !== currentUser?.username) {
+            setTimeout(() => {
+              if (window._ssCurrentSharer === targetUsername) {
+                sendScreenShareSignal(targetUsername, { type: 'ss-request' });
+              }
+            }, 1000);
+          }
+        }
+      }, 5000);
+    }
+  };
+
   pc.ontrack = (event) => {
     console.log('[ScreenShare WebRTC] Received remote track from:', targetUsername, event.streams);
     const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
@@ -2432,14 +2576,31 @@ function closeScreenShareViewer() {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
+    // Stop video playback and release stream reference
+    const video = document.getElementById('ssVideo');
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+    }
     overlay.classList.remove('open', 'mini-mode', 'is-fullscreen', 'cover-fit');
     setTimeout(() => { try { overlay.style.display = 'none'; } catch(e){} }, 300);
+  }
+
+  // Clean up SS audio gain context
+  if (window._ssGainNode) {
+    try { window._ssGainNode.disconnect(); } catch(_){}
+    window._ssGainNode = null;
+  }
+  if (window._ssAudioContext) {
+    try { window._ssAudioContext.close(); } catch(_){}
+    window._ssAudioContext = null;
   }
 
   if (window._ssCurrentSharer && window._ssCurrentSharer !== currentUser?.username && window._ssConnections[window._ssCurrentSharer]) {
     try { window._ssConnections[window._ssCurrentSharer].close(); } catch(e){}
     delete window._ssConnections[window._ssCurrentSharer];
     delete window._ssRemoteStreams[window._ssCurrentSharer];
+    delete window._ssIceQueues[window._ssCurrentSharer];
   }
   window._ssCurrentSharer = null;
 }
