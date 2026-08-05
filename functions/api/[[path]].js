@@ -457,14 +457,14 @@ app.get('/uploads/:filename', async (c) => {
 // 3. Sessions
 app.post('/sessions/start', authMiddleware, async (c) => {
   const user = c.get('user');
-  const { partyId = null } = await c.req.json().catch(() => ({}));
+  const { partyId = null, mode = 'free', targetDuration = 0, breakDuration = 0, category = null, activity = null } = await c.req.json().catch(() => ({}));
 
   await c.env.DB.prepare("UPDATE sessions SET status = 'abandoned', end_time = datetime('now') WHERE user_id = ? AND status = 'active'")
     .bind(user.id)
     .run();
 
-  const res = await c.env.DB.prepare("INSERT INTO sessions (user_id, start_time, status, party_id) VALUES (?, datetime('now'), 'active', ?)")
-    .bind(user.id, partyId)
+  const res = await c.env.DB.prepare("INSERT INTO sessions (user_id, start_time, status, party_id, mode, target_duration, break_duration, category, activity) VALUES (?, datetime('now'), 'active', ?, ?, ?, ?, ?, ?)")
+    .bind(user.id, partyId, mode, targetDuration, breakDuration, category, activity)
     .run();
 
   return c.json({ sessionId: res.meta.last_row_id || 0 });
@@ -476,14 +476,17 @@ app.post('/sessions/end/:id', authMiddleware, async (c) => {
   
   // Support JSON and Form Data
   let violation = false;
+  let customDuration = null;
   try {
     const contentType = c.req.header('content-type') || '';
     if (contentType.includes('application/json')) {
       const body = await c.req.json();
       violation = body.violation === true || body.violation === 'true';
+      customDuration = body.customDuration ? parseInt(body.customDuration, 10) : null;
     } else {
       const body = await c.req.parseBody();
       violation = body.violation === true || body.violation === 'true';
+      customDuration = body.customDuration ? parseInt(body.customDuration, 10) : null;
     }
   } catch(e) {}
 
@@ -495,7 +498,9 @@ app.post('/sessions/end/:id', authMiddleware, async (c) => {
 
   const now = new Date();
   const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
-  const duration = Math.floor((now - start) / 1000);
+  let rawDuration = customDuration !== null && !isNaN(customDuration) ? customDuration : Math.floor((now - start) / 1000);
+  if (isNaN(rawDuration) || rawDuration < 0) rawDuration = 0;
+  const duration = Math.min(rawDuration, 43200);
   const status = violation ? 'violated' : 'completed';
 
   await c.env.DB.prepare("UPDATE sessions SET end_time = datetime('now'), duration = ?, status = ? WHERE id = ?")
@@ -520,17 +525,17 @@ app.post('/sessions/end/:id', authMiddleware, async (c) => {
         .bind(newTotalXp, newLevel, totalFocus, user.id)
         .run();
 
-      return c.json({ duration, xpGained, bonusGained: bonus, newLevel, status, total_focus_time: totalFocus });
+      return c.json({ duration, xpGained, bonusGained: bonus, newLevel, status, total_focus_time: totalFocus, mode: session.mode, target_duration: session.target_duration, break_duration: session.break_duration });
     } else {
       const totalFocus = (user.total_focus_time || 0) + duration;
       await c.env.DB.prepare('UPDATE users SET total_focus_time = ? WHERE id = ?')
         .bind(totalFocus, user.id)
         .run();
-      return c.json({ duration, xpGained: 0, bonusGained: 0, newLevel: user.level, status, total_focus_time: totalFocus });
+      return c.json({ duration, xpGained: 0, bonusGained: 0, newLevel: user.level, status, total_focus_time: totalFocus, mode: session.mode, target_duration: session.target_duration, break_duration: session.break_duration });
     }
   }
 
-  return c.json({ duration, status, xpGained: 0, bonusGained: 0, total_focus_time: user.total_focus_time || 0 });
+  return c.json({ duration, status, xpGained: 0, bonusGained: 0, total_focus_time: user.total_focus_time || 0, mode: session.mode, target_duration: session.target_duration, break_duration: session.break_duration });
 });
 
 app.get('/sessions/active', authMiddleware, async (c) => {

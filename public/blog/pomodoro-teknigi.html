@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pomodoro Tekniği Nedir? Nasıl Kullanılır? Eksiksiz Rehber | BLUNK Blog</title>
+  <meta name="description" content="Pomodoro tekniği nedir, nasıl uygulanır? 25+5 dakika döngüsünün bilimsel temeli, faydaları, ders çalışmada nasıl kullanılır ve BLUNK ile nasıl yapılır — eksiksiz Türkçe rehber.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://blunk.com.tr/blog/pomodoro-teknigi.html">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=1.0.0">
+  <script src="/js/theme.js"></script>
+  <script src="/js/navbar.js"></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Pomodoro Tekniği Nedir? Nasıl Kullanılır? Eksiksiz Rehber",
+    "author": { "@type": "Organization", "name": "BLUNK" },
+    "publisher": { "@type": "Organization", "name": "BLUNK", "url": "https://blunk.com.tr" },
+    "datePublished": "2026-07-31",
+    "inLanguage": "tr-TR"
+  }
+  </script>
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2694418537952605" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #08090c;
+      --text: #c5c6c7;
+      --text-muted: #8a9099;
+      --heading: #ffffff;
+      --card-bg: rgba(255,255,255,0.025);
+      --card-border: rgba(255,255,255,0.07);
+      --nav-bg: rgba(8,9,12,0.88);
+      --nav-border: rgba(255,255,255,0.08);
+    }
+
+    html.light-mode {
+      --bg: #f4f3f8;
+      --text: #333645;
+      --text-muted: #62667d;
+      --heading: #12131c;
+      --card-bg: #ffffff;
+      --card-border: rgba(108,99,255,0.12);
+      --nav-bg: rgba(244,243,248,0.92);
+      --nav-border: rgba(108,99,255,0.12);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.7;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* Standard Navigation */
+    .site-nav {
+      position: sticky; top: 0; z-index: 1000;
+      background: var(--nav-bg);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--nav-border);
+      padding: 14px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      font-size: 22px; font-weight: 900; letter-spacing: 3px;
+      background: linear-gradient(135deg, #a855f7, #6c63ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; font-weight: 600; transition: color 0.2s; }
+    .nav-links a:hover, .nav-links a.active { color: var(--heading); }
+    
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+
+    .theme-toggle-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--heading);
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; transition: all 0.2s;
+    }
+    .theme-toggle-btn:hover { transform: scale(1.1); }
+
+    .nav-cta {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      color: #fff !important; padding: 9px 20px; border-radius: 20px;
+      font-size: 12px; font-weight: 800; border: none; cursor: pointer;
+      box-shadow: 0 4px 15px rgba(108,99,255,0.3); transition: transform 0.2s;
+    }
+    .nav-cta:hover { transform: scale(1.04); }
+
+    .article-layout { max-width: 1100px; margin: 0 auto; padding: 52px 24px 80px; display: grid; grid-template-columns: 1fr 280px; gap: 52px; }
+    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 28px; }
+    .breadcrumb a { color: var(--text-muted); text-decoration: none; font-weight: 600; }
+    
+    .article-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+    .article-tag { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; }
+    .tag-pomodoro { background: rgba(168,85,247,0.12); color: #a855f7; border: 1px solid rgba(168,85,247,0.25); }
+    .tag-verimlilik { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
+
+    .article-title { font-size: clamp(24px, 4vw, 38px); font-weight: 900; color: var(--heading); letter-spacing: -0.8px; line-height: 1.2; margin-bottom: 16px; }
+    .article-lead { font-size: 17px; color: var(--text-muted); line-height: 1.7; margin-bottom: 20px; font-style: italic; border-left: 3px solid #a855f7; padding-left: 16px; }
+    .article-meta-bar { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--card-border); flex-wrap: wrap; }
+
+    .article-content h2 { font-size: 22px; font-weight: 800; color: var(--heading); letter-spacing: -0.4px; margin: 40px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--card-border); }
+    .article-content h3 { font-size: 16px; font-weight: 700; color: var(--heading); margin: 28px 0 10px; }
+    .article-content p { font-size: 15px; color: var(--text); line-height: 1.85; margin-bottom: 18px; }
+    .article-content ul, .article-content ol { margin: 0 0 18px 22px; }
+    .article-content li { font-size: 15px; color: var(--text); line-height: 1.8; margin-bottom: 8px; }
+    .article-content a { color: #8b5cf6; text-decoration: none; border-bottom: 1px dashed #8b5cf6; }
+
+    .highlight-box { background: rgba(168,85,247,0.08); border: 1px solid rgba(168,85,247,0.2); border-radius: 16px; padding: 22px; margin: 24px 0; }
+    .highlight-box .hb-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #a855f7; margin-bottom: 8px; }
+    .highlight-box p { font-size: 14px; color: var(--text); margin: 0; }
+
+    .steps-grid { display: flex; flex-direction: column; gap: 12px; margin: 20px 0; }
+    .step-card { display: flex; gap: 16px; align-items: flex-start; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 18px; }
+    .step-num { flex-shrink: 0; width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, rgba(108,99,255,0.3), rgba(168,85,247,0.2)); border: 1px solid rgba(108,99,255,0.4); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; color: #a78bfa; }
+    .step-card h4 { font-size: 14px; font-weight: 700; color: var(--heading); margin-bottom: 4px; }
+    .step-card p { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+    .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 18px; text-align: center; }
+    .stat-card .snum { font-size: 26px; font-weight: 900; color: #a78bfa; letter-spacing: -1px; }
+    .stat-card .slbl { font-size: 11px; color: var(--text-muted); font-weight: 600; margin-top: 2px; }
+
+    /* Ultra-sleek CTA Card */
+    .cta-box-premium {
+      background: linear-gradient(135deg, rgba(108,99,255,0.15) 0%, rgba(168,85,247,0.15) 100%);
+      border: 1px solid rgba(168,85,247,0.3);
+      border-radius: 24px;
+      padding: 36px 28px;
+      text-align: center;
+      margin: 40px 0;
+      box-shadow: 0 12px 30px rgba(108,99,255,0.15);
+    }
+    .cta-badge { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #a855f7; background: rgba(168,85,247,0.15); padding: 5px 14px; border-radius: 20px; margin-bottom: 14px; border: 1px solid rgba(168,85,247,0.3); }
+    .cta-box-premium h3 { font-size: 20px; font-weight: 900; color: var(--heading); margin-bottom: 10px; }
+    .cta-box-premium p { font-size: 14px; color: var(--text-muted); margin-bottom: 22px; line-height: 1.6; max-width: 540px; margin-left: auto; margin-right: auto; }
+    .cta-btn-premium { display: inline-block; background: linear-gradient(135deg, #6c63ff, #a855f7); color: #fff !important; font-size: 13px; font-weight: 800; padding: 13px 32px; border-radius: 25px; text-decoration: none; border: none; box-shadow: 0 4px 20px rgba(108,99,255,0.4); transition: transform 0.2s; }
+    .cta-btn-premium:hover { transform: scale(1.05); }
+
+    .article-sidebar { display: flex; flex-direction: column; gap: 18px; }
+    .sidebar-widget { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 20px; }
+    .sidebar-widget h3 { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #a855f7; margin-bottom: 12px; }
+    .toc-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .toc-list a { font-size: 12.5px; color: var(--text-muted); text-decoration: none; font-weight: 600; display: block; padding: 3px 0; border-left: 2px solid transparent; padding-left: 10px; }
+    .toc-list a:hover { color: #a855f7; border-left-color: #a855f7; }
+
+    footer { border-top: 1px solid var(--card-border); padding: 36px 24px; text-align: center; }
+    @media (max-width: 768px) { .article-layout { grid-template-columns: 1fr; } .stat-row { grid-template-columns: 1fr; } .nav-links { display: none; } }
+  </style>
+</head>
+<body>
+
+  <div id="blunkNavbar"></div>
+
+  <main>
+    <div class="article-layout">
+      <article itemscope itemtype="https://schema.org/BlogPosting">
+        <nav class="breadcrumb">
+          <a href="/">Ana Sayfa</a> <span>›</span> <a href="/blog/">Blog</a> <span>›</span> <span>Pomodoro Tekniği</span>
+        </nav>
+
+        <header>
+          <div class="article-tags">
+            <span class="article-tag tag-pomodoro">Pomodoro</span>
+            <span class="article-tag tag-verimlilik">Verimlilik</span>
+          </div>
+          <h1 class="article-title" itemprop="headline">Pomodoro Tekniği Nedir? Nasıl Kullanılır? Eksiksiz Rehber</h1>
+          <p class="article-lead">25 dakika çalış, 5 dakika mola ver — kulağa basit gelen bu teknik neden bu kadar etkili? Psikoloji biliminin desteklediği Pomodoro yöntemini ve BLUNK üzerinde arkadaşlarınla nasıl uygulayacağını öğren.</p>
+          <div class="article-meta-bar">
+            <span>📅 31 Temmuz 2026</span>
+            <span>⏱️ 8 dakika okuma</span>
+          </div>
+        </header>
+
+        <div style="margin-bottom: 32px;">
+          <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-2694418537952605" data-ad-slot="auto" data-ad-format="auto" data-full-width-responsive="true"></ins>
+          <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        </div>
+
+        <div class="article-content" itemprop="articleBody">
+          <h2 id="nedir">Pomodoro Tekniği Nedir?</h2>
+          <p>Pomodoro Tekniği, 1980'lerin sonunda İtalyan girişimci Francesco Cirillo tarafından geliştirilen zaman yönetimi ve üretkenlik metodudur. Tekniğin özü: <strong>25 dakika kesintisiz çalış, 5 dakika mola ver.</strong> Her 4 Pomodoro sonrası 15-30 dakikalık uzun bir mola verilir.</p>
+
+          <div class="highlight-box">
+            <div class="hb-title">📊 Araştırma Destekli</div>
+            <p>Düzenli molalar beynin öğrendiği bilgiyi konsolide etmesine ve odak kapasitesini yenilemesine olanak tanır.</p>
+          </div>
+
+          <h2 id="nasil-uygulanir">Pomodoro Tekniği Nasıl Uygulanır?</h2>
+          <div class="steps-grid">
+            <div class="step-card">
+              <div class="step-num">1</div>
+              <div>
+                <h4>Yapılacaklar Listesi Hazırla</h4>
+                <p>Bugün tamamlamak istediğin görevleri listele.</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">2</div>
+              <div>
+                <h4>Zamanlayıcıyı 25 Dakikaya Kur</h4>
+                <p>Bildirimleri kapat ve sadece önündeki göreve odaklan.</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">3</div>
+              <div>
+                <h4>5 Dakikalık Mola Ver</h4>
+                <p>Ekrana bakmayı bırak, ayağa kalk ve kısa bir yürüyüş yap.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-card">
+              <div class="snum">23 dk</div>
+              <div class="slbl">Kesinti sonrası yeniden odaklanma süresi</div>
+            </div>
+            <div class="stat-card">
+              <div class="snum">%40</div>
+              <div class="slbl">Verimlilikteki ortalama artış</div>
+            </div>
+            <div class="stat-card">
+              <div class="snum">1987</div>
+              <div class="slbl">Tekniğin keşfedildiği yıl</div>
+            </div>
+          </div>
+
+          <h2 id="blunk">BLUNK ile Arkadaşlarınla Pomodoro Nasıl Yapılır?</h2>
+          <p>Yalnız Pomodoro yapmak etkilidir; ancak <a href="/blog/co-working-etkisi.html">Co-Working Etkisi ve Sosyal Kolaylaştırma</a> prensibi sayesinde arkadaşlarınla senkronize zamanlayıcı üzerinden Pomodoro yapmak dikkati en üst seviyeye çıkarır.</p>
+
+          <div class="cta-box-premium">
+            <div class="cta-badge">🍅 Senkronize Pomodoro</div>
+            <h3>Şimdi Bir Pomodoro Seansı Başlat</h3>
+            <p>BLUNK'a ücretsiz kayıt ol, bir sesli oda aç ve ilk Pomodoro seansını arkadaşlarınla birlikte tamamla.</p>
+            <a href="/" class="cta-btn-premium">Hemen Başla →</a>
+          </div>
+        </div>
+      </article>
+
+      <aside class="article-sidebar">
+        <div class="sidebar-widget">
+          <h3>İçindekiler</h3>
+          <ul class="toc-list">
+            <li><a href="#nedir">Pomodoro Nedir?</a></li>
+            <li><a href="#nasil-uygulanir">Nasıl Uygulanır?</a></li>
+            <li><a href="#blunk">BLUNK ile Pomodoro</a></li>
+          </ul>
+        </div>
+        <div class="sidebar-widget">
+          <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-2694418537952605" data-ad-slot="auto" data-ad-format="auto" data-full-width-responsive="true"></ins>
+          <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="nav-brand" style="margin-bottom:14px; display:inline-block;">BLUNK</div>
+    <p style="font-size:11px; color:var(--text-muted);">© 2026 BLUNK — blunkcomtr@gmail.com</p>
+  </footer>
+</body>
+</html>

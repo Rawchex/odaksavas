@@ -591,7 +591,7 @@ async function checkAndRenderHandoverButton(partyId) {
             </svg>
           </div>
           <div class="voice-handover-card-title">Sesli Sohbet Başka Cihazda Aktif</div>
-          <div class="voice-handover-card-desc">Şu an bilgisayarınız veya başka bir cihazınız bu odak odasında sesli sohbette. Sesi bu cihaza devralmak için aşağıdaki butona basın.</div>
+          <div class="voice-handover-card-desc">Şu an bilgisayaçrınız veya başka bir cihazınız bu odak odasında sesli sohbette. Sesi bu cihaza devralmak için aşağıdaki butona basın.</div>
           <button class="voice-handover-btn-lg" onclick="transferVoiceToCurrentDevice(${_handoverTargetPartyId}, ${_handoverTargetChannelId || 'null'})">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
               <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
@@ -1527,7 +1527,7 @@ async function openUserVoiceModal(username) {
     const serverMuteButton = document.getElementById('uvServerMuteBtn');
     if (serverMuteButton) {
       const serverMuted = !!targetMember?.server_muted;
-      serverMuteButton.textContent = serverMuted ? 'ODA GENELİ SUSTURMAYI KALDIR' : 'ODA GENELİNDE SUSTUR';
+      serverMuteButton.textContent = serverMuted ? 'ODA GENELİ SUSTURMAYI KALDIR' : 'ODA GENELİÖNDE SUSTUR';
       serverMuteButton.dataset.muted = String(serverMuted);
       serverMuteButton.style.display = canManage ? 'block' : 'none';
       serverMuteButton.style.color = serverMuted ? '#a7f3c1' : '#ffb3b5';
@@ -2536,6 +2536,10 @@ function startScreenShareStatePolling(partyId) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sharing: true, channelId: window._currentChannelId })
         }).catch(() => {});
+      }
+
+      if (document.hidden && !window._screenStream) {
+        return;
       }
 
       const res = await fetch(`/api/parties/${partyId}/screenshare-state`);

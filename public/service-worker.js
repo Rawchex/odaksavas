@@ -3,11 +3,13 @@ self.addEventListener('push', function(event) {
     const data = event.data.json();
     const options = {
       body: data.body,
-      icon: '/default-avatar.png',
-      badge: '/default-avatar.png',
-      vibrate: [100, 50, 100],
+      icon: data.icon || '/favicon.svg',
+      badge: data.badge || '/favicon.svg',
+      vibrate: [150, 50, 100],
+      tag: data.tag || 'blunk-notification',
+      renotify: true,
       data: {
-        url: '/'
+        url: data.url || '/'
       }
     };
     

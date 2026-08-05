@@ -106,6 +106,20 @@ const RoomManagement = {
       return;
     }
 
+    try {
+      const res = await fetch(`/api/parties/${partyId}`);
+      if (res.ok) {
+        this.party = await res.json();
+      }
+    } catch (e) {
+      console.warn('Oda detayları alınırken hata oluştu:', e);
+    }
+
+    if (!this.canManage) {
+      if (typeof showToast === 'function') showToast('Oda yönetimi için yetkiniz bulunmamaktadır.');
+      return;
+    }
+
     this.modal = document.getElementById('partyModal');
     this.content = document.getElementById('partyModalContent');
     if (!this.modal || !this.content) return;
@@ -120,21 +134,6 @@ const RoomManagement = {
     this.memberSearch = '';
     this.memberFilter = 'all';
     this.content.innerHTML = '<div class="rm-loading">Yükleniyor…</div>';
-
-    try {
-      const res = await fetch(`/api/parties/${partyId}`);
-      if (res.ok) {
-        this.party = await res.json();
-      }
-    } catch (e) {
-      console.warn('Oda detayları alınırken hata oluştu:', e);
-    }
-
-    if (this.roleRank(this.role) < 20) {
-      if (typeof showToast === 'function') showToast('Oda yönetimi için yetkiniz yok.');
-      this.closeModal();
-      return;
-    }
 
     await this.refresh();
   },

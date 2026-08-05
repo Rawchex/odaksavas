@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hakkımızda | BLUNK — Sosyal Odak ve Pomodoro Platformu</title>
+  <meta name="description" content="BLUNK nedir? Seninle aynı hedeflere çalışan insanlarla tanışabileceğin, sesli odaklanma odaları ve Pomodoro zamanlayıcısıyla üretkenliğini artırabileceğin Türkiye'nin sosyal odak platformu.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://blunk.com.tr/about">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
+  <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=1.0.0">
+  <script src="/js/theme.js"></script>
+  <script src="/js/navbar.js"></script>
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Hakkımızda — BLUNK">
+  <meta property="og:description" content="BLUNK, seninle aynı hedeflere çalışan insanlarla tanışabileceğin sosyal odak ve Pomodoro platformudur.">
+  <meta property="og:url" content="https://blunk.com.tr/about">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://blunk.com.tr/default-avatar.png">
+
+  <!-- Schema.org -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    "name": "BLUNK Hakkımızda",
+    "url": "https://blunk.com.tr/about",
+    "description": "BLUNK nedir, nasıl çalışır ve kimler için tasarlandı.",
+    "publisher": {
+      "@type": "Organization",
+      "name": "BLUNK",
+      "url": "https://blunk.com.tr",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "blunkcomtr@gmail.com",
+        "contactType": "customer support",
+        "availableLanguage": "Turkish"
+      }
+    }
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #08090c;
+      --text: #c5c6c7;
+      --text-muted: #8a9099;
+      --heading: #ffffff;
+      --card-bg: rgba(255,255,255,0.03);
+      --card-border: rgba(255,255,255,0.08);
+      --nav-bg: rgba(8,9,12,0.92);
+      --nav-border: rgba(255,255,255,0.07);
+    }
+
+    html.light-mode {
+      --bg: #f4f3f8;
+      --text: #333645;
+      --text-muted: #62667d;
+      --heading: #12131c;
+      --card-bg: #ffffff;
+      --card-border: rgba(108,99,255,0.12);
+      --nav-bg: rgba(244,243,248,0.92);
+      --nav-border: rgba(108,99,255,0.12);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* ─── Nav ─── */
+    .site-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--nav-bg);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover, .nav-links a.active { color: var(--heading); }
+
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+
+    .theme-toggle-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--heading);
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; transition: all 0.2s;
+    }
+    .theme-toggle-btn:hover { transform: scale(1.1); }
+
+    .nav-cta {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      color: #fff !important;
+      padding: 9px 20px;
+      border-radius: 20px;
+      font-size: 12px !important;
+      font-weight: 800 !important;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(108,99,255,0.3);
+      transition: transform 0.2s;
+    }
+    .nav-cta:hover { transform: scale(1.04); }
+
+    /* ─── Hero ─── */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 60px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(108,99,255,0.12);
+      border: 1px solid rgba(108,99,255,0.3);
+      color: #a78bfa;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #a855f7;
+      box-shadow: 0 0 8px #a855f7;
+    }
+
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 900;
+      line-height: 1.15;
+      color: var(--heading);
+      letter-spacing: -1px;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: 17px;
+      color: var(--text-muted);
+      max-width: 620px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ─── Container ─── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ─── Section ─── */
+    .section {
+      padding: 60px 0;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #a855f7;
+      margin-bottom: 12px;
+    }
+
+    .section h2 {
+      font-size: clamp(22px, 3.5vw, 32px);
+      font-weight: 800;
+      color: var(--heading);
+      letter-spacing: -0.5px;
+      margin-bottom: 16px;
+    }
+
+    .section p {
+      font-size: 15px;
+      color: var(--text);
+      line-height: 1.8;
+      margin-bottom: 16px;
+    }
+
+    /* ─── What Is BLUNK ─── */
+    .what-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
+    }
+
+    .what-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .what-card:hover {
+      background: rgba(108,99,255,0.06);
+      border-color: rgba(108,99,255,0.3);
+    }
+
+    .what-icon {
+      font-size: 28px;
+      margin-bottom: 14px;
+    }
+
+    .what-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--heading);
+      margin-bottom: 8px;
+    }
+
+    .what-card p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    /* ─── How It Works ─── */
+    .steps {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(108,99,255,0.3), rgba(168,85,247,0.2));
+      border: 1px solid rgba(108,99,255,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 900;
+      color: #a78bfa;
+    }
+
+    .step-body h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--heading);
+      margin-bottom: 6px;
+    }
+
+    .step-body p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    /* ─── Who Is It For ─── */
+    .audience-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .audience-pill {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .audience-pill .pill-emoji { font-size: 20px; }
+
+    .audience-pill-text h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--heading);
+      margin-bottom: 2px;
+    }
+
+    .audience-pill-text p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* ─── Values ─── */
+    .values-list {
+      margin-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .value-item {
+      display: flex;
+      gap: 14px;
+      padding: 20px;
+      background: var(--card-bg);
+      border-radius: 14px;
+      border: 1px solid var(--card-border);
+    }
+
+    .value-check {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(168,85,247,0.15);
+      border: 1px solid rgba(168,85,247,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #a855f7;
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .value-body h4 { font-size: 14px; font-weight: 700; color: var(--heading); margin-bottom: 4px; }
+    .value-body p { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+
+    /* ─── Footer ─── */
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 40px 24px;
+      text-align: center;
+    }
+
+    .footer-brand {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .footer-nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px 20px;
+      margin-bottom: 20px;
+      list-style: none;
+    }
+
+    .footer-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.2s;
+    }
+
+    .footer-nav a:hover { color: var(--heading); }
+
+    .footer-copy {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 600px) {
+      .nav-links { display: none; }
+      .hero { padding: 60px 20px 40px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="blunkNavbar"></div>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-badge">Hakkımızda</div>
+    <h1>Türkiye'nin <span>Sosyal Odak</span> Platformu</h1>
+    <p class="hero-desc">
+      BLUNK, seninle aynı hedeflere — aynı sınava, aynı projeye, aynı hayallere — çalışan insanlarla tanışabileceğin; sesli odaklanma odaları ve Pomodoro tekniğiyle üretkenliğini artırabileceğin ücretsiz bir topluluk platformudur.
+    </p>
+  </header>
+
+  <main>
+
+    <!-- BLUNK Nedir -->
+    <section class="section" aria-labelledby="what-heading">
+      <div class="container">
+        <div class="section-label">Platform</div>
+        <h2 id="what-heading">BLUNK Nedir?</h2>
+        <p>
+          BLUNK, yalnız çalışmanın sıkıcılığını ve motivasyon düşüklüğünü ortadan kaldırmak için tasarlanmış sosyal bir üretkenlik platformudur. Discord'un sesli oda altyapısını, Pomodoro tekniğinin zaman yönetimi gücünü ve bir sosyal ağın topluluk ruhunu bir araya getirerek benzersiz bir öğrenme ve çalışma deneyimi sunar.
+        </p>
+        <p>
+          Platformumuzda YKS, KPSS, ALES, LGS, TUS hazırlayan öğrencilerden yazılım projelerine odaklanan geliştiricilere; dil öğrenenlerden akademik araştırma yapan öğrencilere kadar binlerce kullanıcı her gün birlikte çalışıyor. Herkes kendi hedefine odaklanırken, aynı zamanda birbirini motive ediyor.
+        </p>
+
+        <div class="what-grid">
+          <article class="what-card">
+            <div class="what-icon">🎙️</div>
+            <h3>Sesli Çalışma Odaları</h3>
+            <p>Gerçek zamanlı WebRTC teknolojisiyle desteklenen yüksek kaliteli sesli odalarda arkadaşlarınla aynı masada oturuyormuş gibi çalışın.</p>
+          </article>
+          <article class="what-card">
+            <div class="what-icon">⏱️</div>
+            <h3>Senkronize Pomodoro</h3>
+            <p>Oda üyeleriyle eş zamanlı çalışan Pomodoro zamanlayıcısı sayesinde konsantrasyon dönemlerini ve molalarını birlikte yönetin.</p>
+          </article>
+          <article class="what-card">
+            <div class="what-icon">⚡</div>
+            <h3>XP & Seviye Sistemi</h3>
+            <p>Odaklandığınız her dakika size XP kazandırır. Seviye atlayın, liderlik tablosunda yerinizi alın ve çalışma motivasyonunuzu canlı tutun.</p>
+          </article>
+          <article class="what-card">
+            <div class="what-icon">🏆</div>
+            <h3>Canlı Liderlik Tablosu</h3>
+            <p>Haftalık ve aylık liderlik tablolarında çalışma sürenizi arkadaşlarınızla karşılaştırın; rekabetçi bir ortamda daha verimli çalışın.</p>
+          </article>
+          <article class="what-card">
+            <div class="what-icon">📰</div>
+            <h3>Topluluk Feed'i</h3>
+            <p>Çalışma notlarınızı, başarılarınızı ve motivasyon içeriklerinizi toplulukla paylaşın. Takip ettiğiniz kişilerin gönderilerini keşfedin.</p>
+          </article>
+          <article class="what-card">
+            <div class="what-icon">💬</div>
+            <h3>Doğrudan Mesajlaşma</h3>
+            <p>Arkadaşlarınızla birebir ve grup sohbetleri yapın. Çalışma planlarınızı koordine edin, birbirinizi destekleyin.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Nasıl Çalışır -->
+    <section class="section" aria-labelledby="how-heading">
+      <div class="container">
+        <div class="section-label">Kullanım</div>
+        <h2 id="how-heading">Nasıl Çalışır?</h2>
+        <p>BLUNK'a başlamak yalnızca birkaç dakika alır. İşte adım adım nasıl çalıştığı:</p>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h3>Hesap Oluştur veya Google ile Giriş Yap</h3>
+              <p>E-posta ve şifre ile saniyeler içinde ücretsiz hesap oluşturun ya da tek tıkla Google hesabınızla giriş yapın. Herhangi bir kredi kartı veya abonelik gerektirmez.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h3>Profilini Düzenle ve Hedefini Belirle</h3>
+              <p>Çalışma alanını (YKS, Yazılım, Dil Öğrenme vb.), biyografini ve profil fotoğrafını ekle. Diğer kullanıcılar hedefini görüp seninle iletişime geçebilir.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h3>Odak Odasına Katıl veya Kendi Odanı Oluştur</h3>
+              <p>Mevcut herkese açık odaları keşfet ve katıl; ya da arkadaşlarınla özel bir oda oluşturup davet linki paylaş. Odalarda sesli iletişim, ekran paylaşımı ve sohbet mevcut.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <h3>Pomodoro Seansını Başlat</h3>
+              <p>Oda üyeleriyle senkronize Pomodoro zamanlayıcısını başlat. 25 dakika odaklan, 5 dakika mola ver. Her tamamlanan seans XP kazandırır.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <h3>XP Kazan, Seviye Atla, Büyü</h3>
+              <p>Odaklandığın her dakika için XP kazanırsın. Liderlik tablosuna bakarak ilerlemeyi takip et, çalışma arkadaşları edin ve topluluğu büyüt.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Kimler İçin -->
+    <section class="section" aria-labelledby="audience-heading">
+      <div class="container">
+        <div class="section-label">Hedef Kitle</div>
+        <h2 id="audience-heading">Kimler İçin?</h2>
+        <p>
+          BLUNK, çalışmak, öğrenmek veya üretmek isteyen herkes için tasarlanmıştır. Aşağıdaki gruplardan birindeysen bu platform tam sana göre:
+        </p>
+
+        <div class="audience-grid">
+          <div class="audience-pill">
+            <span class="pill-emoji">📚</span>
+            <div class="audience-pill-text">
+              <h4>YKS / LGS Adayları</h4>
+              <p>Aynı sınava hazırlananlarla birlikte çalış</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">🏛️</span>
+            <div class="audience-pill-text">
+              <h4>KPSS / ALES / DGS</h4>
+              <p>Kamu sınavı çalışma grupları kur</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">💻</span>
+            <div class="audience-pill-text">
+              <h4>Yazılımcılar</h4>
+              <p>Kod yazarken sessiz bir topluluğun içinde ol</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">🌍</span>
+            <div class="audience-pill-text">
+              <h4>Dil Öğrenenler</h4>
+              <p>YDT, İngilizce, Almanca, Japonca grupları</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">🎓</span>
+            <div class="audience-pill-text">
+              <h4>Üniversite Öğrencileri</h4>
+              <p>Vize/final dönemlerinde birlikte çalış</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">🏥</span>
+            <div class="audience-pill-text">
+              <h4>TUS / DUS Adayları</h4>
+              <p>Tıp ve diş uzmanlık sınavı grupları</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">✍️</span>
+            <div class="audience-pill-text">
+              <h4>İçerik Üreticiler</h4>
+              <p>Yazarlar, tasarımcılar, araştırmacılar</p>
+            </div>
+          </div>
+          <div class="audience-pill">
+            <span class="pill-emoji">🎯</span>
+            <div class="audience-pill-text">
+              <h4>Herkes</h4>
+              <p>Odaklanmak isteyen, üreten herkes</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Değerlerimiz -->
+    <section class="section" aria-labelledby="values-heading">
+      <div class="container">
+        <div class="section-label">İlkelerimiz</div>
+        <h2 id="values-heading">Neden BLUNK?</h2>
+        <p>BLUNK'u tasarlarken kullanıcılarımızın sadece daha verimli çalışmasını değil, daha mutlu bir deneyim yaşamasını hedefledik.</p>
+
+        <div class="values-list">
+          <div class="value-item">
+            <div class="value-check">✓</div>
+            <div class="value-body">
+              <h4>Tamamen Ücretsiz</h4>
+              <p>BLUNK'un tüm özellikleri — sesli odalar, Pomodoro zamanlayıcısı, mesajlaşma, XP sistemi — herhangi bir ücret olmaksızın sonsuza kadar kullanılabilir. Herkesin kaliteli bir çalışma ortamına hakkı vardır.</p>
+            </div>
+          </div>
+          <div class="value-item">
+            <div class="value-check">✓</div>
+            <div class="value-body">
+              <h4>Gizlilik Odaklı</h4>
+              <p>Kullanıcı verilerinizi asla üçüncü taraflara satmıyoruz. Kişisel bilgileriniz yalnızca hizmetimizi sunmak için kullanılır. Hesabınızı istediğiniz zaman silebilirsiniz.</p>
+            </div>
+          </div>
+          <div class="value-item">
+            <div class="value-check">✓</div>
+            <div class="value-body">
+              <h4>Topluluk Odaklı Tasarım</h4>
+              <p>Her özellik, gerçek kullanıcıların geri bildirimleri doğrultusunda geliştirilmektedir. Topluluk ihtiyaçları önceliğimizdir; reklam gelirleri değil.</p>
+            </div>
+          </div>
+          <div class="value-item">
+            <div class="value-check">✓</div>
+            <div class="value-body">
+              <h4>Güvenli Ortam</h4>
+              <p>Taciz, nefret söylemi ve zararlı içeriklere karşı aktif moderasyon politikamız mevcuttur. Tüm kullanıcılar saygılı bir topluluk standardına uymakla yükümlüdür.</p>
+            </div>
+          </div>
+          <div class="value-item">
+            <div class="value-check">✓</div>
+            <div class="value-body">
+              <h4>Sürekli Gelişim</h4>
+              <p>Platformu düzenli olarak güncelliyor; yeni özellikler ekliyor, performansı ve güvenilirliği artırıyoruz. Kullanıcı önerileri her zaman dikkate alınmaktadır.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Misyon -->
+    <section class="section" aria-labelledby="mission-heading">
+      <div class="container">
+        <div class="section-label">Misyon</div>
+        <h2 id="mission-heading">Misyonumuz</h2>
+        <p>
+          Türkiye'de milyonlarca öğrenci ve profesyonel her gün yalnız başına çalışıyor; motivasyon sorunlarıyla, yoğunluk kaybıyla, üretkenlik eksikliğiyle mücadele ediyor. Sosyal medya platformları dikkat dağıtıcı olduğundan, geleneksel kütüphaneler erişilebilir olmadığından, çalışma grupları organize etmek zor olduğundan bu kişiler yalnızlaşıyor.
+        </p>
+        <p>
+          BLUNK tam bu boşluğu doldurmak için doğdu. <strong style="color:#fff;">Birlikte daha iyi çalışıyoruz</strong> — bu sadece bir slogan değil, platformumuzun her özelliğine işlenmiş bir gerçek. Sesli odalar, paylaşımlı zamanlayıcılar ve XP sistemi; yalnızlığı birlikteliğe, sıkıcılığı oyuna, motivasyonsuzluğu rekabete dönüştürür.
+        </p>
+        <p>
+          Hedefimiz, Türkiye'nin en büyük online çalışma topluluğunu inşa etmek ve her yaştan, her hedeften çalışan insanın bir araya geldiği güvenli, ilham verici bir dijital ortam yaratmaktır.
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer role="contentinfo">
+    <div class="footer-brand">BLUNK</div>
+    <nav aria-label="Footer navigasyon">
+      <ul class="footer-nav">
+        <li><a href="/">Ana Sayfa</a></li>
+        <li><a href="/about">Hakkımızda</a></li>
+        <li><a href="/contact">İletişim</a></li>
+        <li><a href="/privacy">Gizlilik Politikası</a></li>
+        <li><a href="/terms">Kullanım Şartları</a></li>
+      </ul>
+    </nav>
+    <p class="footer-copy">© 2026 BLUNK. Odaklan, Üret, Başar. — <a href="mailto:blunkcomtr@gmail.com" style="color:#555; text-decoration:none;">blunkcomtr@gmail.com</a></p>
+  </footer>
+
+</body>
+</html>

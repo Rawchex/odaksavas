@@ -44,6 +44,10 @@ async function openPartyModal() {
       return;
     }
 
+    if (document.hidden) {
+      return;
+    }
+
     // Skip refresh if user is typing in any input inside the modal
     const activeEl = document.activeElement;
     if (activeEl && activeEl.tagName === 'INPUT' && modal.contains(activeEl)) {
@@ -780,7 +784,7 @@ async function sendFriendReqFromSearch(username, btn) {
   const res = await fetch(`/api/friends/request/${encodeURIComponent(username)}`, { method: 'POST' });
   if (res.ok) {
     showToast('Arkadaşlık isteği gönderildi!');
-    if (btn) { btn.textContent = 'GÖNDERİLDİ'; btn.style.opacity = '0.5'; }
+    if (btn) { btn.textContent = 'GÖÖNDERİLDİ'; btn.style.opacity = '0.5'; }
   } else {
     const d = await res.json().catch(() => ({}));
     showToast(d.error || 'Gönderilemedi');

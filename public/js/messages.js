@@ -195,14 +195,14 @@ async function loadInbox() {
       }
 
       return `
-        <div class="inbox-item ${activeClass}" onclick="openDirectChat('${esc(c.username)}', ${c.is_group}, ${c.id})" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--border-soft);background:#050505;cursor:pointer;position:relative">
+        <div class="inbox-item ${activeClass}" onclick="openDirectChat('${esc(c.username)}', ${c.is_group}, ${c.id})" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;position:relative">
           <div style="display:flex;align-items:center;gap:10px;min-width:0">
             <div>
-              ${c.is_group ? '<div class="avatar avatar-sm" style="background:#333;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;">G</div>' : renderAvatar(c, 'avatar avatar-sm')}
+              ${c.is_group ? '<div class="avatar avatar-sm" style="background:var(--t-bg-tab);color:var(--t-text-primary);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;">G</div>' : renderAvatar(c, 'avatar avatar-sm')}
             </div>
             <div style="min-width:0">
-              <div style="font-weight:800;color:#fff;font-size:13px">${esc(c.username)}</div>
-              <div style="font-size:10px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">${esc(decryptedLastMsg)}</div>
+              <div class="inbox-item-name" style="font-weight:800;font-size:13px">${esc(c.username)}</div>
+              <div class="inbox-item-preview" style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">${esc(decryptedLastMsg)}</div>
             </div>
           </div>
           ${unreadBadge}
@@ -534,7 +534,7 @@ function renderMessageBubble(m, key, lastReadMsgId) {
   const hasImage = decryptedContent.includes('[IMAGE]:');
 
   let bubbleClass = isMe ? 'msg-body-wrapper msg-sender-bubble' : 'msg-body-wrapper';
-  let bubbleStyle = `background:${isMe ? '' : '#0a0a0a'};color:#fff;border:${isMe ? 'none' : '1px solid #1a1a1a'};padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:18px;word-break:break-word;cursor:pointer;transition:transform 0.1s; touch-action:pan-y;position:relative;`;
+  let bubbleStyle = `padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:18px;word-break:break-word;cursor:pointer;transition:transform 0.1s; touch-action:pan-y;position:relative;`;
   
   if (isPostShare) {
     bubbleClass = '';
@@ -802,14 +802,17 @@ function closeChatArea() {
 // Polling interval trigger
 function startChatPolling() {
   stopChatPolling();
+  
+  const chatDelay = document.hidden ? 60000 : 4000;
   _chatPollInterval = setInterval(async () => {
     if (activePage === 'messages') {
       await loadInbox();
       await refreshChatMessages();
     }
-  }, 4000);
+  }, chatDelay);
 
-  // Device type + status poll — every 30s
+  // Device type + status poll — every 30s (60s if hidden)
+  const deviceDelay = document.hidden ? 60000 : 30000;
   _devicePollInterval = setInterval(async () => {
     if (activePage === 'messages' && _activeChatPartner && _activeChatType === 'user') {
       try {
@@ -823,13 +826,25 @@ function startChatPolling() {
         }
       } catch {}
     }
-  }, 30000);
+  }, deviceDelay);
 }
 
 function stopChatPolling() {
   if (_chatPollInterval) { clearInterval(_chatPollInterval); _chatPollInterval = null; }
   if (_devicePollInterval) { clearInterval(_devicePollInterval); _devicePollInterval = null; }
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (activePage === 'messages') {
+    if (document.hidden) {
+      startChatPolling();
+    } else {
+      loadInbox().catch(() => {});
+      refreshChatMessages().catch(() => {});
+      startChatPolling();
+    }
+  }
+});
 
 // Device icon + subtitle renderer
 // isActive: user seen within 2 min AND status not 'invisible'
@@ -866,16 +881,16 @@ function updateDeviceIndicator(device, username, lastSeen, status) {
     // Reset color classes — always monochrome
     badge.className = 'chat-device-badge';
     const tip = isActive
-      ? (isMobile ? `@${username} şu an mobilde` : `@${username} şu an bilgisayarda`)
-      : (isMobile ? `@${username} en son mobildeydi` : `@${username} en son bilgisayardaydı`);
+      ? (isMobile ? `@${username} şu an mobilde` : `@${username} şu an bilgisayaçrda`)
+      : (isMobile ? `@${username} en son mobildeydi` : `@${username} en son bilgisayaçrdaydı`);
     badge.setAttribute('title', tip);
   }
 
   if (subtitle) {
     if (isActive) {
-      subtitle.textContent = isMobile ? 'şu an mobilde ·' : 'şu an bilgisayarda ·';
+      subtitle.textContent = isMobile ? 'şu an mobilde ·' : 'şu an bilgisayaçrda ·';
     } else {
-      subtitle.textContent = isMobile ? 'en son mobilde ·' : 'en son bilgisayardaydı ·';
+      subtitle.textContent = isMobile ? 'en son mobilde ·' : 'en son bilgisayaçrdaydı ·';
     }
     subtitle.className = 'chat-device-subtitle';
   }
@@ -890,8 +905,8 @@ function showDevicePopup() {
   const isActive = _isPartnerActive(_activeChatPartnerLastSeen, _activeChatPartnerStatus);
   const partner = _activeChatPartner || 'Kullanıcı';
 
-  const deviceLabel = isMobile ? 'Mobil Cihaz' : 'Bilgisayar';
-  const deviceDetail = isMobile ? 'telefon veya tablet' : 'masaüstü veya dizüstü bilgisayar';
+  const deviceLabel = isMobile ? 'Mobil Cihaz' : 'Bilgisayaçr';
+  const deviceDetail = isMobile ? 'telefon veya tablet' : 'masaüstü veya dizüstü bilgisayaçr';
   const stateText = isActive
     ? `@${esc(partner)} şu anda <strong>${deviceDetail}</strong> üzerinden bağlanıyor.`
     : `@${esc(partner)} en son <strong>${deviceDetail}</strong> üzerinden bağlanmıştı.`;
@@ -1381,7 +1396,7 @@ function renderForwardTargets(targets) {
             : renderAvatar(t, 'avatar avatar-sm')}
           <span style="font-weight:800;font-size:13px;color:#fff">${esc(t.username)}</span>
         </div>
-        <button class="mono-btn-primary" style="width:auto;padding:6px 12px;font-size:9px;font-weight:800;">GÖNDER</button>
+        <button class="mono-btn-primary" style="width:auto;padding:6px 12px;font-size:9px;font-weight:800;">GÖÖNDER</button>
       </div>
     `;
   }).join('');
@@ -1770,7 +1785,7 @@ function closeReactionDetailsModal() {
 }
 
 // ============================================================
-// INSTAGRAM STYLE POST SHARING MODAL & RECOMMENDED LIST
+// INSTAGRAM STYLE POST SHARING MODAL & RECOMMEÖNDED LIST
 // ============================================================
 let _shareActivePostId = null;
 let _shareTargetsCache = [];
@@ -1781,9 +1796,9 @@ function updateShareSubmitBtnState(count = 0, loading = false) {
   if (!btn) return;
   btn.disabled = loading || count === 0;
   const sendSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
-  let text = 'GÖNDER';
-  if (loading) text = 'GÖNDERİLİYOR...';
-  else if (count > 0) text = `GÖNDER (${count})`;
+  let text = 'GÖÖNDER';
+  if (loading) text = 'GÖÖNDERİLİYOR...';
+  else if (count > 0) text = `GÖÖNDER (${count})`;
 
   btn.innerHTML = `${sendSvg}<span class="share-btn-text">${text}</span>`;
 }
@@ -1821,6 +1836,51 @@ function closeSharePostModal() {
   if (modal) modal.classList.remove('open');
   _shareActivePostId = null;
   window._shareSelectedTargets = [];
+}
+
+// ─── EXTERNAL SHARING HELPERS ────────────────────────────────
+function getPostShareUrl(postId) {
+  const id = postId || _shareActivePostId;
+  return `${window.location.origin}/feed?post=${id}`;
+}
+
+function sharePostToWhatsApp() {
+  const url = getPostShareUrl();
+  const text = encodeURIComponent(`BLUNK üzerindeki bu gönderiye göz at: ${url}`);
+  window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+}
+
+function sharePostToInstagram() {
+  const url = getPostShareUrl();
+  if (navigator.share) {
+    navigator.share({
+      title: 'BLUNK Gönderisi',
+      text: 'BLUNK üzerindeki bu gönderiyi incele!',
+      url: url
+    }).catch(() => {});
+  } else {
+    copyPostShareLink();
+    if (typeof showToast === 'function') {
+      showToast('Bağlantı kopyalandı! Hikayenizde paylaşabilirsiniz.');
+    }
+  }
+}
+
+function copyPostShareLink() {
+  const url = getPostShareUrl();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      if (typeof showToast === 'function') showToast('Bağlantı panoya kopyalandı! 📋');
+    });
+  } else {
+    const inp = document.createElement('input');
+    inp.value = url;
+    document.body.appendChild(inp);
+    inp.select();
+    document.execCommand('copy');
+    inp.remove();
+    if (typeof showToast === 'function') showToast('Bağlantı kopyalandı! 📋');
+  }
 }
 
 let _shareSearchTimeout = null;
@@ -1932,7 +1992,7 @@ function renderShareTargets(targets) {
         </div>
       `;
     } else {
-      avatarMarkup = renderAvatar({ username: t.username, profile_photo: t.profile_photo }, 'share-avatar-img');
+      avatarMarkup = renderAvatar({ username: t.username, profile_photo: t.profile_photo }, 'avatar avatar-md');
     }
 
     const labelText = t.is_group ? t.username : `@${t.username}`;

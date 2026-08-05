@@ -20,18 +20,32 @@ async function loadMyProfile() {
   content.innerHTML = '<div class="loading-row">YÜKLENİYOR...</div>';
 
   try {
-    const res = await fetch(`/api/users/${currentUser.username}`);
+    if (!currentUser || !currentUser.username) {
+      const meRes = await fetch('/api/me', { cache: 'no-store' });
+      if (meRes.ok) {
+        currentUser = await meRes.json();
+      }
+    }
+
+    if (!currentUser || !currentUser.username) {
+      content.innerHTML = '<div class="empty-state"><div class="empty-title">Profil yüklenemedi</div></div>';
+      return;
+    }
+
+    const cleanName = currentUser.username.replace(/^@/, '').trim();
+    const res = await fetch(`/api/users/${encodeURIComponent(cleanName)}`);
     if (!res.ok) throw new Error();
     const user = await res.json();
     currentUser = { ...currentUser, ...user };
     renderMyProfile(user);
-  } catch {
+  } catch (err) {
+    console.error('[Profile] loadMyProfile error:', err);
     content.innerHTML = '<div class="empty-state"><div class="empty-title">Profil yüklenemedi</div></div>';
   }
 }
 
 // ============================================================
-// RENDER MY PROFILE
+// REÖNDER MY PROFILE
 // ============================================================
 function renderMyProfile(user) {
   const content = document.getElementById('myProfileContent');
@@ -47,11 +61,11 @@ function renderMyProfile(user) {
   let tabContentHtml = '';
   if (_profileActiveTab === 'posts') {
     tabContentHtml = posts.length === 0
-      ? `<div class="profile-empty-tab">HENÜZ GÖNDERİ YOK</div>`
+      ? `<div class="profile-empty-tab">Blunk ile hiç bir şey paylaşmadın... (lütfen paylaş lütfeeennn!!!)</div>`
       : `<div class="profile-post-grid">${posts.map(p => renderPostGridItem(p, true, false)).join('')}</div>`;
   } else if (_profileActiveTab === 'sessions') {
     tabContentHtml = sessions.length === 0
-      ? `<div class="profile-empty-tab">HENÜZ ODAK OTURUMU YOK</div>`
+      ? `<div class="profile-empty-tab">Blunk ile hiç odak oturumu başlatmadın...</div>`
       : `<div class="profile-sessions-list">${sessions.slice(0, 30).map(s => {
           const detailParts = [];
           if (s.feeling) detailParts.push(`<span class="session-detail-feeling">${esc(s.feeling)}</span>`);
@@ -64,11 +78,20 @@ function renderMyProfile(user) {
                </div>`
             : '';
 
+          const noteHtml = s.note
+            ? `<div class="session-row-note" style="margin-top: 8px; font-size: 11px; color: var(--text-2); font-style: italic; background: rgba(255,255,255,0.02); border-left: 2px solid rgba(255,255,255,0.15); padding: 4px 8px; border-radius: 0 4px 4px 0; word-break: break-word;">
+                 "${esc(s.note)}"
+               </div>`
+            : '';
+
           return `
           <div class="session-row" style="flex-direction:column; align-items:stretch; padding:16px 20px;">
             <div style="display:flex; align-items:center; justify-content:space-between;">
               <div>
-                <div class="session-row-time">${fmtTime(s.duration || 0)}</div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <div class="session-row-time">${fmtTime(s.duration || 0)}</div>
+                  <span class="session-mode-badge" style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:2px 6px; border-radius:4px; background:${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)'}; color:${s.mode === 'pomodoro' ? '#ef4444' : 'var(--text-3)'}; border:1px solid ${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.1)'};">${s.mode === 'pomodoro' ? 'POMODORO' : 'SERBEST'}</span>
+                </div>
                 <div class="session-row-date">${fmtDate(s.start_time)}</div>
               </div>
               <div class="session-badge ${s.status === 'completed' ? 'ok' : 'fail'}">
@@ -76,6 +99,7 @@ function renderMyProfile(user) {
               </div>
             </div>
             ${detailsHtml}
+            ${noteHtml}
           </div>`;
         }).join('')}</div>`;
   } else if (_profileActiveTab === 'reposts') {
@@ -112,10 +136,17 @@ function renderMyProfile(user) {
       <div class="profile-insta-meta">
         ${user.is_private ? '<div style="margin-bottom:8px"><span class="profile-private-dot">🔒 Gizli Hesap</span></div>' : ''}
         ${user.bio ? `<div class="profile-insta-bio">${esc(user.bio)}</div>` : ''}
-        <div class="profile-insta-details">
-          ${user.height ? `<span>📏 ${user.height}cm</span>` : ''}
-          ${user.weight ? `<span>⚖️ ${user.weight}kg</span>` : ''}
-          <span>⏱️ ${fmtTime(user.total_focus_time || 0)}</span>
+        <div class="profile-insta-details" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${user.height ? `<span>📏 ${user.height}cm</span>` : ''}
+            ${user.weight ? `<span>⚖️ ${user.weight}kg</span>` : ''}
+            <span>⏱️ ${fmtTime(user.total_focus_time || 0)}</span>
+          </div>
+          <!-- Multi-Theme Selector Dropdown / Menu -->
+          <button onclick="toggleBlunkTheme(event)" style="display:flex; align-items:center; gap:6px; background:var(--t-bg-card); border:1px solid var(--t-border-subtle); color:var(--t-text-primary); padding:6px 12px; border-radius:18px; font-size:12px; font-weight:700; cursor:pointer; outline:none; transition:background 0.2s;">
+            <span id="profileThemeIcon" style="display:flex; align-items:center;"></span>
+            <span id="profileThemeText"></span>
+          </button>
         </div>
         <div class="profile-xp-row" style="display:flex; align-items:center; gap:10px; margin-top:12px;">
           <span class="lvl-badge">LVL ${user.level}</span>
@@ -143,6 +174,10 @@ function renderMyProfile(user) {
       ${tabContentHtml}
     </div>
   `;
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  if (typeof updateThemeToggleIcons === 'function') {
+    updateThemeToggleIcons(currentTheme);
+  }
 }
 
 // ============================================================
@@ -180,35 +215,87 @@ async function openPostModal(postId, isOwn, isRepost) {
   // Disable body scroll to prevent background scrolling
   document.body.style.overflow = 'hidden';
 
-  // Skeleton loader
+  // Backdrop
   const el = document.createElement('div');
   el.id = 'profilePostPreview';
   el.className = 'pdetail-backdrop';
   el.onclick = (e) => { if (e.target === el) closeProfilePostPreview(); };
 
-  const sheet = document.createElement('div');
-  sheet.className = 'pdetail-sheet';
-  sheet.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">YÜKLENİYOR...</div>';
-  el.appendChild(sheet);
+  // Scroll Container for Feed Queue
+  const scrollBox = document.createElement('div');
+  scrollBox.className = 'pdetail-scroll-queue';
+  scrollBox.style.cssText = 'width:100%; height:100%; overflow-y:auto; scroll-snap-type:y mandatory; display:flex; flex-direction:column; align-items:center; padding:40px 0; gap:24px;';
+  
+  el.appendChild(scrollBox);
   document.body.appendChild(el);
-  requestAnimationFrame(() => sheet.classList.add('open'));
+
+  // Store queue state
+  window._modalFeedQueue = {
+    loadedIds: new Set([postId]),
+    offset: 0,
+    isLoading: false,
+    hasMore: true
+  };
+
+  // Render initial target post
+  const firstSheet = document.createElement('div');
+  firstSheet.className = 'pdetail-sheet';
+  firstSheet.style.scrollSnapAlign = 'center';
+  firstSheet.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">YÜKLENİYOR...</div>';
+  scrollBox.appendChild(firstSheet);
+  requestAnimationFrame(() => firstSheet.classList.add('open'));
 
   try {
     const res = await fetch(`/api/posts/${postId}`);
     if (!res.ok) throw new Error();
     const post = await res.json();
-
-    renderPostDetailSheet(sheet, post, isOwn, isRepost);
+    renderPostDetailSheet(firstSheet, post, isOwn, isRepost);
   } catch {
-    // Fallback: use cached data
     const list = isRepost ? _profileUserReposts : _profileUserPosts;
     const post = (list || []).find(p => p.id === postId);
     if (post) {
-      renderPostDetailSheet(sheet, post, isOwn, isRepost);
+      renderPostDetailSheet(firstSheet, post, isOwn, isRepost);
     } else {
-      sheet.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">Gönderi yüklenemedi</div></div>';
+      firstSheet.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">Gönderi yüklenemedi</div></div>';
     }
   }
+
+  // Infinite Scroll Handler for Discover Queue inside modal
+  scrollBox.addEventListener('scroll', async () => {
+    const state = window._modalFeedQueue;
+    if (!state || state.isLoading || !state.hasMore) return;
+
+    if (scrollBox.scrollTop + scrollBox.clientHeight >= scrollBox.scrollHeight - 400) {
+      state.isLoading = true;
+      try {
+        const res = await fetch(`/api/feed/discover?limit=10&offset=${state.offset}`);
+        if (res.ok) {
+          const nextPosts = await res.json();
+          state.offset += 10;
+          let addedCount = 0;
+          
+          nextPosts.forEach(p => {
+            if (!state.loadedIds.has(p.id)) {
+              state.loadedIds.add(p.id);
+              addedCount++;
+              const sheetNode = document.createElement('div');
+              sheetNode.className = 'pdetail-sheet open';
+              sheetNode.style.scrollSnapAlign = 'center';
+              renderPostDetailSheet(sheetNode, p, p.username === currentUser?.username, false);
+              scrollBox.appendChild(sheetNode);
+            }
+          });
+
+          if (addedCount === 0 && nextPosts.length < 10) {
+            state.hasMore = false;
+          }
+        }
+      } catch (e) {
+        console.warn('Queue feed load error:', e);
+      }
+      state.isLoading = false;
+    }
+  });
 }
 
 window.openPostModal = openPostModal;
@@ -227,7 +314,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   const authorObj = { username: post.username, profile_photo: authorPhoto };
 
   const likersHtml = likers.length > 0 ? `
-    <div class="pdetail-likers" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:#bbb">
+    <div class="pdetail-likers" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--t-text-muted)">
       <div class="pdetail-likers-avatars" style="display:flex;margin-right:2px">
         ${likers.slice(0, 3).map(l => renderAvatar({ username: l.username, profile_photo: l.profile_photo }, 'avatar avatar-xs')).join('')}
       </div>
@@ -248,7 +335,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   });
 
   const commentsHtml = parents.length === 0
-    ? `<div class="pdetail-no-comment" style="color:#666;font-size:13px;text-align:center;padding:24px 0">Henüz yorum yok. İlk yorumu sen yaz!</div>`
+    ? `<div class="pdetail-no-comment" style="color:var(--t-text-muted);font-size:13px;text-align:center;padding:24px 0">Henüz yorum yok. İlk yorumu sen yaz!</div>`
     : parents.map(c => renderPdetailCommentTree(c, childrenMap[c.id] || [], post)).join('');
 
   sheet.innerHTML = `
@@ -343,7 +430,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
     <!-- Detail 3-dot menu panel -->
     <div id="pdetailMenuOverlay-${post.id}" class="profile-menu-overlay" onclick="closeDetailMenu(${post.id})" style="display:none"></div>
     <div id="pdetailMenuPanel-${post.id}" class="profile-post-menu-panel" style="display:none">
-      <div class="profile-post-menu-title">GÖNDERİ YÖNETİMİ</div>
+      <div class="profile-post-menu-title">GÖÖNDERİ YÖNETİMİ</div>
       <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(displayContent)}\`)">Düzenle</button>
       <button class="profile-post-menu-item" onclick="pdetailShareFromMenu(${post.id})">Mesajda paylaş</button>
       <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">Gönderiyi sil</button>
@@ -404,7 +491,7 @@ function pdetailEditPost(postId, currentContent) {
   const header = document.createElement('div');
   header.className = 'profile-edit-modal-header';
   header.innerHTML = `
-    <span>GÖNDERİYİ DÜZENLE</span>
+    <span>GÖÖNDERİYİ DÜZENLE</span>
     <button class="profile-edit-modal-close" onclick="document.getElementById('pdetailEditSheet')?.remove()">✕</button>
   `;
 
@@ -706,10 +793,10 @@ function renderPdetailCommentTree(c, replies, post) {
         ${renderAvatar({ username: c.username, profile_photo: c.profile_photo }, 'avatar avatar-xs')}
         <div class="pdetail-comment-body" style="flex:1">
           <div class="pdetail-comment-meta" style="margin-bottom:2px;">
-            <span class="pdetail-comment-user" style="font-weight:700;color:#fff;cursor:pointer;" onclick="openUserPage('${esc(c.username)}')">${esc(c.username)}</span>
-            <span style="font-size:10px;color:#555;margin-left:6px;">${fmtPostTime(c.created_at)}</span>
+            <span class="pdetail-comment-user" style="font-weight:700;color:var(--t-text-primary);cursor:pointer;" onclick="openUserPage('${esc(c.username)}')">${esc(c.username)}</span>
+            <span style="font-size:10px;color:var(--t-text-muted);margin-left:6px;">${fmtPostTime(c.created_at)}</span>
           </div>
-          <span class="pdetail-comment-text" style="font-size:13px;color:#ddd;word-break:break-word;">${esc(c.content)}</span>
+          <span class="pdetail-comment-text" style="font-size:13px;color:var(--t-text-secondary);word-break:break-word;">${esc(c.content)}</span>
           <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
             <button
               class="comment-like-btn ${c.user_liked ? 'liked' : ''}"
@@ -730,8 +817,8 @@ function renderPdetailCommentTree(c, replies, post) {
 
       ${hasReplies ? `
         <div class="pdetail-replies-wrapper" style="margin-left:36px;margin-top:6px;">
-          <button class="pdetail-replies-toggle-btn" onclick="togglePdetailRepliesContainer(this, ${c.id})" style="background:none;border:none;color:#888;cursor:pointer;padding:4px 0;font-size:10px;font-weight:600;display:flex;align-items:center;gap:6px">
-            <span class="line" style="display:inline-block;width:16px;height:1px;background:#333"></span>
+          <button class="pdetail-replies-toggle-btn" onclick="togglePdetailRepliesContainer(this, ${c.id})" style="background:none;border:none;color:var(--t-text-muted);cursor:pointer;padding:4px 0;font-size:10px;font-weight:600;display:flex;align-items:center;gap:6px">
+            <span class="line" style="display:inline-block;width:16px;height:1px;background:var(--t-border-strong)"></span>
             <span class="text">Yanıtları gör (${replies.length})</span>
           </button>
           <div class="pdetail-replies-list" id="pdetail-replies-list-${c.id}">
@@ -750,10 +837,10 @@ function renderPdetailReplyItem(r, post) {
       ${renderAvatar({ username: r.username, profile_photo: r.profile_photo }, 'avatar avatar-xs')}
       <div class="pdetail-comment-body" style="flex:1">
         <div class="pdetail-comment-meta" style="margin-bottom:2px;">
-          <span class="pdetail-comment-user" style="font-weight:700;color:#fff;cursor:pointer;" onclick="openUserPage('${esc(r.username)}')">${esc(r.username)}</span>
-          <span style="font-size:10px;color:#555;margin-left:6px;">${fmtPostTime(r.created_at)}</span>
+          <span class="pdetail-comment-user" style="font-weight:700;color:var(--t-text-primary);cursor:pointer;" onclick="openUserPage('${esc(r.username)}')">${esc(r.username)}</span>
+          <span style="font-size:10px;color:var(--t-text-muted);margin-left:6px;">${fmtPostTime(r.created_at)}</span>
         </div>
-        <span class="pdetail-comment-text" style="font-size:13px;color:#ddd;word-break:break-word;">${esc(r.content)}</span>
+        <span class="pdetail-comment-text" style="font-size:13px;color:var(--t-text-secondary);word-break:break-word;">${esc(r.content)}</span>
         <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
           <button
             class="comment-like-btn ${r.user_liked ? 'liked' : ''}"
@@ -804,6 +891,12 @@ function openProfileSettings() {
       }
     }
 
+    const removeBtn = document.getElementById('settingsRemovePhotoBtn');
+    if (removeBtn) {
+      const hasPhoto = user && user.profile_photo && !user.profile_photo.includes('default-avatar.png');
+      removeBtn.style.display = hasPhoto ? 'inline-flex' : 'none';
+    }
+
     const settingsUsername = document.getElementById('settingsUsername');
     if (settingsUsername) settingsUsername.value = user.username || '';
 
@@ -814,6 +907,11 @@ function openProfileSettings() {
 
     const settingsPrivateToggle = document.getElementById('settingsPrivateToggle');
     if (settingsPrivateToggle) settingsPrivateToggle.checked = !!user.is_private;
+
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    if (typeof updateThemeToggleIcons === 'function') {
+      updateThemeToggleIcons(currentTheme);
+    }
 
     const settingsBio = document.getElementById('settingsBio');
     if (settingsBio) settingsBio.value = user.bio || '';
@@ -854,7 +952,12 @@ function openProfileSettings() {
     }
 
     console.log("Displaying profile settings modal.");
+    modal.classList.add('open');
     modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
+    modal.style.zIndex = '999999';
   } catch (err) {
     console.error("Error in openProfileSettings:", err);
     if (typeof showToast === 'function') {
@@ -864,13 +967,26 @@ function openProfileSettings() {
     }
     // Fallback opening
     const modal = document.getElementById('profileSettingsModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+      modal.classList.add('open');
+      modal.style.display = 'flex';
+      modal.style.opacity = '1';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
+      modal.style.zIndex = '999999';
+    }
   }
 }
 
 function closeProfileSettingsModal() {
   const modal = document.getElementById('profileSettingsModal');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+    modal.style.opacity = '0';
+    modal.style.visibility = 'hidden';
+    modal.style.pointerEvents = 'none';
+  }
 }
 
 // ============================================================
@@ -968,6 +1084,9 @@ async function uploadProfilePhoto(input) {
       if (settingsAvatarContainer) {
         settingsAvatarContainer.innerHTML = typeof renderAvatar === 'function' ? renderAvatar(currentUser, 'avatar avatar-xl') : '';
       }
+
+      const removeBtn = document.getElementById('settingsRemovePhotoBtn');
+      if (removeBtn) removeBtn.style.display = 'inline-flex';
       
       loadMyProfile();
     } else {
@@ -978,6 +1097,37 @@ async function uploadProfilePhoto(input) {
   }
   input.value = '';
 }
+
+// REMOVE PROFILE PHOTO
+// ============================================================
+async function removeProfilePhoto() {
+  if (!currentUser || !currentUser.profile_photo || currentUser.profile_photo.includes('default-avatar.png')) {
+    if (typeof showToast === 'function') showToast('Zaten yüklenmiş profil fotoğrafınız yok');
+    return;
+  }
+  try {
+    const res = await fetch('/api/profile/photo', { method: 'DELETE' });
+    if (res.ok) {
+      currentUser.profile_photo = null;
+      if (typeof showToast === 'function') showToast('Profil fotoğrafı kaldırıldı');
+      
+      const settingsAvatarContainer = document.getElementById('settingsAvatarContainer');
+      if (settingsAvatarContainer && typeof renderAvatar === 'function') {
+        settingsAvatarContainer.innerHTML = renderAvatar(currentUser, 'avatar avatar-xl');
+      }
+
+      const removeBtn = document.getElementById('settingsRemovePhotoBtn');
+      if (removeBtn) removeBtn.style.display = 'none';
+
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+    } else {
+      if (typeof showToast === 'function') showToast('Fotoğraf kaldırılamadı');
+    }
+  } catch {
+    if (typeof showToast === 'function') showToast('Bağlantı hatası');
+  }
+}
+window.removeProfilePhoto = removeProfilePhoto;
 // ============================================================
 async function setUserStatus(status, isAuto = false) {
   try {

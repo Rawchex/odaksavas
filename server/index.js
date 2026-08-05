@@ -94,20 +94,36 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Serve contact, about, privacy, terms clean routes
+const cleanPages = ['contact', 'about', 'privacy', 'terms'];
+cleanPages.forEach(page => {
+  app.get(`/${page}`, (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', `${page}.html`));
+  });
+});
+
 // Serve static files
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR)); // Explicitly serve uploads from persistent dir
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Profile page with Open Graph meta tags for social sharing
-app.get('/:username', (req, res) => {
+app.get(['/:username', '/u/:username', '/profile/:username', '/profil/:username'], (req, res) => {
   const username = req.params.username;
+
   // API ve statik dosya yollarını atla
-  if (username.startsWith('api') || username.startsWith('uploads') || username.includes('.')) {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.includes('.')) {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  db.get('SELECT username, bio, profile_photo, level, xp, total_focus_time FROM users WHERE username = ?', [username], (err, user) => {
+  // Özel sistem sayfalarını index.html'e yönlendir (tam eşleşme kontrolü ile)
+  const reservedPaths = ['contact', 'about', 'privacy', 'terms', 'sayac', 'sayaç', 'sayaçc', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'profile', 'u', 'blog'];
+  const pathFirstSegment = req.path.split('/').filter(Boolean)[0];
+  if (reservedPaths.includes(pathFirstSegment)) {
+    return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  }
+
+  db.get('SELECT username, bio, profile_photo, level, xp, total_focus_time FROM users WHERE LOWER(username) = LOWER(?)', [username], (err, user) => {
     if (err || !user) {
       // Kullanıcı bulunamazsa normal index.html'i döndür
       return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
@@ -163,6 +179,22 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
+// Public Stats endpoint — no auth required, used for landing page
+app.get('/api/public-stats', (req, res) => {
+  db.get('SELECT COUNT(*) as userCount FROM users', [], (err, u) => {
+    db.get('SELECT COUNT(*) as sessionCount, COALESCE(SUM(duration),0) as totalMinutes FROM sessions WHERE status = ?', ['completed'], (err2, s) => {
+      db.get('SELECT COUNT(*) as postCount FROM posts', [], (err3, p) => {
+        res.json({
+          users: (u && u.userCount) || 0,
+          sessions: (s && s.sessionCount) || 0,
+          totalFocusHours: Math.floor(((s && s.totalMinutes) || 0) / 60),
+          posts: (p && p.postCount) || 0
+        });
+      });
+    });
+  });
+});
+
 // Process Error Safety (Prevent server crashes on unhandled errors)
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[SERVER WARN] Unhandled Rejection:', reason);
@@ -207,6 +239,7 @@ db.serialize(() => {
   db.run(`ALTER TABLE party_channels ADD COLUMN allow_screen_share INTEGER DEFAULT 0`, () => {});
   db.run(`ALTER TABLE users ADD COLUMN google_id TEXT`, () => {});
   db.run(`ALTER TABLE users ADD COLUMN email TEXT`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN birth_date TEXT`, () => {});
 });
 
 // Database setup
@@ -233,9 +266,22 @@ db.serialize(() => {
     duration INTEGER,
     status TEXT,
     party_id INTEGER,
+    mode TEXT DEFAULT 'free',
+    target_duration INTEGER DEFAULT 0,
+    break_duration INTEGER DEFAULT 0,
+    feeling TEXT,
+    category TEXT,
+    activity TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (party_id) REFERENCES parties(id)
   )`);
+  db.run('ALTER TABLE sessions ADD COLUMN mode TEXT', () => {});
+  db.run('ALTER TABLE sessions ADD COLUMN target_duration INTEGER', () => {});
+  db.run('ALTER TABLE sessions ADD COLUMN break_duration INTEGER', () => {});
+  db.run('ALTER TABLE sessions ADD COLUMN note TEXT', () => {});
+  db.run('ALTER TABLE sessions ADD COLUMN pomo_state TEXT DEFAULT "focusing"', () => {});
+  db.run('ALTER TABLE sessions ADD COLUMN pomo_round INTEGER DEFAULT 0', () => {});
+  db.run('ALTER TABLE sessions ADD COLUMN state_start_time DATETIME', () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS parties (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -568,17 +614,53 @@ const checkSpamLimit = (req, res, next) => {
 const sendPushNotification = (userId, payload) => {
   db.all('SELECT subscription FROM web_push_subscriptions WHERE user_id = ?', [userId], (err, rows) => {
     if (err || !rows || rows.length === 0) return;
+    const uniqueSubs = [];
+    const endpoints = new Set();
     rows.forEach(row => {
       try {
         const sub = JSON.parse(row.subscription);
-        webpush.sendNotification(sub, JSON.stringify(payload)).catch(e => {
-          if (e.statusCode === 404 || e.statusCode === 410) {
-            // Subscription has expired or is no longer valid
-            db.run('DELETE FROM web_push_subscriptions WHERE subscription = ?', [row.subscription]);
-          }
-        });
+        if (sub.endpoint && !endpoints.has(sub.endpoint)) {
+          endpoints.add(sub.endpoint);
+          uniqueSubs.push(sub);
+        }
       } catch(e) {}
     });
+
+    uniqueSubs.forEach(sub => {
+      webpush.sendNotification(sub, JSON.stringify(payload)).catch(e => {
+        if (e.statusCode === 404 || e.statusCode === 410) {
+          db.run('DELETE FROM web_push_subscriptions WHERE subscription = ?', [JSON.stringify(sub)]);
+        }
+      });
+    });
+  });
+};
+
+const sendDetailedSessionAbandonedNotification = (userId, pomoRound) => {
+  db.get('SELECT username, profile_photo FROM users WHERE id = ?', [userId], (err, user) => {
+    if (err || !user) return;
+    
+    const title = `🚨 Seans İptal Edildi - @${user.username}`;
+    const body = `Pomodoro ${pomoRound + 1}. turunda fazla mesai limitine ulaştınız. Odaklanma zincirinizi korumak için hemen yeni bir seans başlatın! 🔥`;
+    
+    const icon = (user.profile_photo && !user.profile_photo.includes('default-avatar.png')) ? user.profile_photo : '/favicon.svg';
+    const payload = {
+      title,
+      body,
+      type: 'session_abandoned',
+      icon,
+      badge: '/favicon.svg',
+      tag: 'session-abandoned',
+      url: '/'
+    };
+    
+    db.run(
+      'INSERT INTO notifications (user_id, type, from_user_id) VALUES (?, "session_abandoned", 0)',
+      [userId],
+      () => {
+        sendPushNotification(userId, payload);
+      }
+    );
   });
 };
 
@@ -836,6 +918,24 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// Update birth date (server-side age is always computed from this, never trusted from client)
+app.patch('/api/me/birth-date', auth, (req, res) => {
+  const { birth_date } = req.body;
+  if (!birth_date || !/^\d{4}-\d{2}-\d{2}$/.test(birth_date)) {
+    return res.status(400).json({ error: 'Geçerli bir doğum tarihi gerekli (YYYY-MM-DD)' });
+  }
+  const bd = new Date(birth_date);
+  if (isNaN(bd.getTime())) return res.status(400).json({ error: 'Geçersiz tarih' });
+  const ageMins = (Date.now() - bd.getTime()) / (365.25 * 24 * 3600 * 1000);
+  if (ageMins < 10 || ageMins > 120) return res.status(400).json({ error: 'Geçersiz yaş aralığı' });
+
+  db.run('UPDATE users SET birth_date = ? WHERE id = ?', [birth_date, req.user.id], (err) => {
+    if (err) return res.status(500).json({ error: 'Güncellenemedi' });
+    res.json({ success: true });
+  });
+});
+
+
 // Delete account and all user data
 app.delete('/api/me', auth, (req, res) => {
   const { password, confirmText } = req.body;
@@ -893,10 +993,20 @@ app.delete('/api/me', auth, (req, res) => {
 // Sessions
 app.post('/api/sessions/start', auth, (req, res) => {
   const partyId = req.body.partyId || null;
+  const mode = req.body.mode || 'free';
+  const targetDuration = parseInt(req.body.targetDuration || '0', 10) || 0;
+  const breakDuration = parseInt(req.body.breakDuration || '0', 10) || 0;
+  // Activity fields can now be set at session START (not just end)
+  const feeling  = req.body.feeling  || null;
+  const category = req.body.category || null;
+  const activity = req.body.activity || null;
+
   db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE user_id = ? AND status = "active"', [req.user.id], () => {
-    db.run('INSERT INTO sessions (user_id, start_time, status, party_id) VALUES (?, datetime("now"), "active", ?)', [req.user.id, partyId], function() {
-      res.json({ sessionId: this.lastID });
-    });
+    db.run(
+      'INSERT INTO sessions (user_id, start_time, status, party_id, mode, target_duration, break_duration, feeling, category, activity, pomo_state, pomo_round, state_start_time) VALUES (?, datetime("now"), "active", ?, ?, ?, ?, ?, ?, ?, "focusing", 0, datetime("now"))',
+      [req.user.id, partyId, mode, targetDuration, breakDuration, feeling, category, activity],
+      function() { res.json({ sessionId: this.lastID }); }
+    );
   });
 });
 
@@ -904,6 +1014,7 @@ app.post('/api/sessions/end/:id', auth, upload.none(), (req, res) => {
   const { id } = req.params;
   // Support both JSON body (normal stop) and FormData (sendBeacon on page close)
   const violation = req.body.violation === true || req.body.violation === 'true';
+  const customDuration = req.body.customDuration ? parseInt(req.body.customDuration, 10) : null;
   
   // Strict check: Only query active sessions belonging to this user
   db.get('SELECT * FROM sessions WHERE id = ? AND user_id = ? AND status = "active"', [id, req.user.id], (err, session) => {
@@ -913,7 +1024,7 @@ app.post('/api/sessions/end/:id', auth, upload.none(), (req, res) => {
     
     const now = new Date();
     const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
-    let rawDuration = Math.floor((now - start) / 1000);
+    let rawDuration = customDuration !== null && !isNaN(customDuration) ? customDuration : Math.floor((now - start) / 1000);
     
     // Bounds checking: Prevent negative duration or absurdly high numbers (Cap at 12 hours = 43200s)
     if (isNaN(rawDuration) || rawDuration < 0) rawDuration = 0;
@@ -948,17 +1059,17 @@ app.post('/api/sessions/end/:id', auth, upload.none(), (req, res) => {
             
             db.run('UPDATE users SET xp = ?, level = ?, total_focus_time = ? WHERE id = ?', 
               [newTotalXp, newLevel, totalFocus, req.user.id], () => {
-              res.json({ duration, xpGained, bonusGained: bonus, newLevel, status, total_focus_time: totalFocus });
+              res.json({ duration, xpGained, bonusGained: bonus, newLevel, status, total_focus_time: totalFocus, mode: session.mode, target_duration: session.target_duration, break_duration: session.break_duration });
             });
           } else {
             // Violated, update total_focus_time but no XP
             const totalFocus = (req.user.total_focus_time || 0) + duration;
             db.run('UPDATE users SET total_focus_time = ? WHERE id = ?', [totalFocus, req.user.id], () => {
-              res.json({ duration, xpGained: 0, bonusGained: 0, newLevel: req.user.level, status, total_focus_time: totalFocus });
+              res.json({ duration, xpGained: 0, bonusGained: 0, newLevel: req.user.level, status, total_focus_time: totalFocus, mode: session.mode, target_duration: session.target_duration, break_duration: session.break_duration });
             });
           }
         } else {
-          res.json({ duration, status, xpGained: 0, bonusGained: 0, total_focus_time: req.user.total_focus_time || 0 });
+          res.json({ duration, status, xpGained: 0, bonusGained: 0, total_focus_time: req.user.total_focus_time || 0, mode: session.mode, target_duration: session.target_duration, break_duration: session.break_duration });
         }
     });
   });
@@ -966,8 +1077,50 @@ app.post('/api/sessions/end/:id', auth, upload.none(), (req, res) => {
 
 app.get('/api/sessions/active', auth, (req, res) => {
   db.get('SELECT * FROM sessions WHERE user_id = ? AND status = "active" ORDER BY start_time DESC LIMIT 1', [req.user.id], (err, session) => {
-    res.json(session || null);
+    if (err) return res.status(500).json({ error: 'Sorgu hatası' });
+    if (!session) return res.json(null);
+
+    if (session.mode === 'pomodoro') {
+      if (!session.state_start_time) {
+        return res.json(session);
+      }
+      const stateStart = new Date(session.state_start_time.replace(' ', 'T') + 'Z');
+      const diffSecs = Math.floor((Date.now() - stateStart) / 1000);
+      
+      let isExpired = false;
+      if (session.pomo_state === 'focusing') {
+        if (diffSecs >= (session.target_duration + 1800)) {
+          isExpired = true;
+        }
+      } else if (session.pomo_state === 'overtime') {
+        if (diffSecs >= 1800) {
+          isExpired = true;
+        }
+      }
+      
+      if (isExpired) {
+        db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE id = ?', [session.id], () => {
+          sendDetailedSessionAbandonedNotification(session.user_id, session.pomo_round);
+        });
+        return res.json(null);
+      }
+    }
+    res.json(session);
   });
+});
+
+app.post('/api/sessions/update-state', auth, (req, res) => {
+  const { state, round } = req.body;
+  if (!state) return res.status(400).json({ error: 'Geçersiz parametreler' });
+  
+  db.run(
+    'UPDATE sessions SET pomo_state = ?, pomo_round = ?, state_start_time = datetime("now") WHERE user_id = ? AND status = "active"',
+    [state, round || 0, req.user.id],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Durum güncellenemedi' });
+      res.json({ success: true });
+    }
+  );
 });
 
 app.get('/api/sessions/unrated', auth, (req, res) => {
@@ -978,9 +1131,9 @@ app.get('/api/sessions/unrated', auth, (req, res) => {
 
 app.post('/api/sessions/rate/:id', auth, (req, res) => {
   const { id } = req.params;
-  const { feeling, category, activity } = req.body;
-  db.run('UPDATE sessions SET feeling = ?, category = ?, activity = ? WHERE id = ? AND user_id = ?', 
-    [feeling, category, activity, id, req.user.id], 
+  const { feeling, note } = req.body;
+  db.run('UPDATE sessions SET feeling = ?, note = ? WHERE id = ? AND user_id = ?', 
+    [feeling, note, id, req.user.id], 
     function(err) {
       if (err) return res.status(500).json({ error: 'Değerlendirme kaydedilemedi' });
       res.json({ success: true });
@@ -990,15 +1143,49 @@ app.post('/api/sessions/rate/:id', auth, (req, res) => {
 
 app.get('/api/sessions/similar/:id', auth, (req, res) => {
   const { id } = req.params;
+
   db.get('SELECT * FROM sessions WHERE id = ?', [id], (err, session) => {
-    if (err || !session || !session.category) return res.json([]);
+    if (err || !session || !session.activity) return res.json([]);
+
+    const userBD = req.user.birth_date;
+    let minBD = null, maxBD = null, underAge = false;
+
+    if (userBD) {
+      const msPerYear = 365.25 * 24 * 3600 * 1000;
+      const userAge   = Math.floor((Date.now() - new Date(userBD)) / msPerYear);
+
+      if (userAge < 18) { underAge = true; }
+      else {
+        const today = new Date();
+        let minAge, maxAge;
+        if (userAge <= 25) { minAge = 18; maxAge = 25; }
+        else               { minAge = userAge - 5; maxAge = userAge + 5; }
+        maxBD = new Date(today); maxBD.setFullYear(today.getFullYear() - minAge);
+        minBD = new Date(today); minBD.setFullYear(today.getFullYear() - maxAge - 1);
+      }
+    }
+
+    if (underAge) return res.json([]);
+
+    const ageClause = (minBD && maxBD)
+      ? `AND (u.birth_date IS NULL OR (u.birth_date >= '${minBD.toISOString().slice(0,10)}' AND u.birth_date <= '${maxBD.toISOString().slice(0,10)}'))`
+      : '';
+
     db.all(`
-      SELECT DISTINCT u.username, u.profile_photo, s.activity, s.end_time 
+      SELECT DISTINCT
+        u.id, u.username, u.profile_photo, u.level, u.birth_date,
+        s.activity, s.end_time,
+        (SELECT status FROM friendships
+           WHERE (user_id = ? AND friend_id = u.id)
+              OR (user_id = u.id AND friend_id = ?)
+           LIMIT 1) AS friendship_status
       FROM sessions s
       JOIN users u ON s.user_id = u.id
-      WHERE s.category = ? AND s.user_id != ? AND s.status = 'completed'
-      ORDER BY s.end_time DESC LIMIT 3
-    `, [session.category, req.user.id], (err, rows) => {
+      WHERE s.activity = ? AND s.user_id != ? AND s.status = 'completed'
+        ${ageClause}
+      ORDER BY s.end_time DESC
+      LIMIT 10
+    `, [req.user.id, req.user.id, session.activity, req.user.id], (err2, rows) => {
       res.json(rows || []);
     });
   });
@@ -1013,6 +1200,26 @@ app.get('/api/leaderboard', auth, (req, res) => {
     ORDER BY total_focus_time DESC LIMIT 100
   `, (err, users) => {
     res.json(users || []);
+  });
+});
+
+// Public Stats endpoint for Landing Page (No auth required)
+app.get('/api/public-stats', (req, res) => {
+  db.get('SELECT COUNT(*) as count FROM users', (err, r1) => {
+    db.get('SELECT COUNT(*) as count FROM sessions WHERE status = "completed"', (err, r2) => {
+      db.get('SELECT SUM(total_focus_time) as total FROM users', (err, r3) => {
+        const totalUsers = r1?.count || 0;
+        const totalSessions = r2?.count || 0;
+        const totalFocusMinutes = r3?.total || 0;
+        const totalFocusHours = Math.round(totalFocusMinutes / 60);
+
+        res.json({
+          users: totalUsers,
+          sessions: totalSessions,
+          hours: totalFocusHours
+        });
+      });
+    });
   });
 });
 
@@ -1052,12 +1259,13 @@ app.get('/api/users/search', auth, (req, res) => {
 
 // Profile
 app.get('/api/users/:username', auth, (req, res) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
   db.get(`
     SELECT u.*, 
       (u.last_seen IS NOT NULL AND u.last_seen > datetime('now', '-2 minutes')) as is_online 
     FROM users u 
-    WHERE u.username = ?
-  `, [req.params.username], (err, user) => {
+    WHERE LOWER(u.username) = LOWER(?)
+  `, [targetName], (err, user) => {
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     
     // Find friendship relation first
@@ -1118,17 +1326,20 @@ app.get('/api/users/:username', auth, (req, res) => {
         getPosts((err, posts) => {
           getReposts((err, reposts) => {
             // Count friends (accepted)
-            db.get('SELECT COUNT(*) as friend_count FROM friendships WHERE user_id = ? AND status = "accepted"', [user.id], (err, c1) => {
-              // Count posts
-              db.get('SELECT COUNT(*) as post_count FROM posts WHERE user_id = ?', [user.id], (err, c2) => {
-                // Count reposts
-                db.get('SELECT COUNT(*) as repost_count FROM reposts WHERE user_id = ?', [user.id], (err, c3) => {
-                  // Count mutual friends
-                  db.get(`
-                    SELECT COUNT(*) as mutual_count FROM friendships f1
-                    JOIN friendships f2 ON f1.friend_id = f2.friend_id
-                    WHERE f1.user_id = ? AND f2.user_id = ? AND f1.status = "accepted" AND f2.status = "accepted"
-                  `, [req.user.id, user.id], (err, c4) => {
+            // Count followers (people following this user)
+            db.get('SELECT COUNT(*) as follower_count FROM friendships WHERE friend_id = ? AND status = "accepted"', [user.id], (err, c_followers) => {
+              // Count following (people followed by this user)
+              db.get('SELECT COUNT(*) as following_count FROM friendships WHERE user_id = ? AND status = "accepted"', [user.id], (err, c_following) => {
+                // Count posts
+                db.get('SELECT COUNT(*) as post_count FROM posts WHERE user_id = ?', [user.id], (err, c2) => {
+                  // Count reposts
+                  db.get('SELECT COUNT(*) as repost_count FROM reposts WHERE user_id = ?', [user.id], (err, c3) => {
+                    // Count mutual friends
+                    db.get(`
+                      SELECT COUNT(*) as mutual_count FROM friendships f1
+                      JOIN friendships f2 ON f1.friend_id = f2.friend_id
+                      WHERE f1.user_id = ? AND f2.user_id = ? AND f1.status = "accepted" AND f2.status = "accepted"
+                    `, [req.user.id, user.id], (err, c4) => {
                     
                     // Hide sensitive info if profile is locked
                     const finalBio = isLocked ? 'Bu hesap gizli.' : user.bio;
@@ -1146,7 +1357,9 @@ app.get('/api/users/:username', auth, (req, res) => {
                       sessions: sessions || [],
                       posts: posts || [],
                       reposts: reposts || [],
-                      friend_count: c1?.friend_count || 0,
+                      friend_count: c_following?.following_count || 0,
+                      follower_count: c_followers?.follower_count || 0,
+                      following_count: c_following?.following_count || 0,
                       post_count: c2?.post_count || 0,
                       repost_count: c3?.repost_count || 0,
                       mutual_count: c4?.mutual_count || 0,
@@ -1176,6 +1389,87 @@ app.get('/api/users/:username/friends', auth, (req, res) => {
       ORDER BY u.username ASC
     `, [user.id, user.id, user.id], (err, friends) => {
       res.json(friends || []);
+    });
+  });
+});
+
+// GET user's followers list
+app.get('/api/users/:username/followers', auth, (req, res) => {
+  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, user) => {
+    if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    db.all(`
+      SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.status,
+        (SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = u.id AND status = 'accepted') as is_following
+      FROM users u
+      JOIN friendships f ON f.user_id = u.id
+      WHERE f.friend_id = ? AND f.status = 'accepted' AND u.id != ?
+      ORDER BY u.username ASC
+    `, [req.user.id, user.id, user.id], (err, followers) => {
+      res.json(followers || []);
+    });
+  });
+});
+
+// GET user's following list
+app.get('/api/users/:username/following', auth, (req, res) => {
+  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, user) => {
+    if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    db.all(`
+      SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.status,
+        (SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = u.id AND status = 'accepted') as is_following
+      FROM users u
+      JOIN friendships f ON f.friend_id = u.id
+      WHERE f.user_id = ? AND f.status = 'accepted' AND u.id != ?
+      ORDER BY u.username ASC
+    `, [req.user.id, user.id, user.id], (err, following) => {
+      res.json(following || []);
+    });
+  });
+});
+
+// Follow a user
+app.post('/api/follow/:username', auth, (req, res) => {
+  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, target) => {
+    if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    if (target.id === req.user.id) return res.status(400).json({ error: 'Kendinizi takip edemezsiniz' });
+    
+    db.run(`
+      INSERT OR REPLACE INTO friendships (user_id, friend_id, status)
+      VALUES (?, ?, 'accepted')
+    `, [req.user.id, target.id], (err2) => {
+      if (err2) return res.status(500).json({ error: 'Takip etme işlemi başarısız oldu' });
+      createAndPushNotification(target.id, 'friend_request', req.user.id);
+      res.json({ success: true });
+    });
+  });
+});
+
+// Unfollow a user
+app.post('/api/unfollow/:username', auth, (req, res) => {
+  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, target) => {
+    if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    
+    db.run(`
+      DELETE FROM friendships
+      WHERE user_id = ? AND friend_id = ?
+    `, [req.user.id, target.id], (err2) => {
+      if (err2) return res.status(500).json({ error: 'Takipten çıkma işlemi başarısız oldu' });
+      res.json({ success: true });
+    });
+  });
+});
+
+// Remove a follower
+app.post('/api/remove-follower/:username', auth, (req, res) => {
+  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, target) => {
+    if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    
+    db.run(`
+      DELETE FROM friendships
+      WHERE user_id = ? AND friend_id = ?
+    `, [target.id, req.user.id], (err2) => {
+      if (err2) return res.status(500).json({ error: 'Takipçi çıkarma işlemi başarısız oldu' });
+      res.json({ success: true });
     });
   });
 });
@@ -1228,65 +1522,95 @@ app.post('/api/profile/photo', auth, upload.single('photo'), (req, res) => {
   });
 });
 
-// Feed & Posts - ALGORİTMALI SİSTEM
-app.get('/api/feed/discover', auth, (req, res) => {
-  db.all(`
-    SELECT p.*, u.username, u.profile_photo, u.level,
-      (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-      (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-      (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-      (
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 2 + 
-        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 3 + 
-        COALESCE(u.total_focus_time, 0) / 3600.0
-      ) as score
-    FROM posts p
-    JOIN users u ON p.user_id = u.id
-    WHERE datetime(p.created_at) > datetime('now', '-30 days')
-    ORDER BY score DESC, p.created_at DESC
-    LIMIT 80
-  `, [req.user.id], (err, posts) => {
-    if (err) console.error(err);
-    res.json(posts || []);
+app.delete('/api/profile/photo', auth, (req, res) => {
+  db.run('UPDATE users SET profile_photo = NULL WHERE id = ?', [req.user.id], (err) => {
+    if (err) return res.status(500).json({ error: 'Fotoğraf kaldırılamadı' });
+    res.json({ success: true, photoPath: null });
   });
 });
 
-app.get('/api/feed/following', auth, (req, res) => {
-  // TAKİP: Sadece arkadaşların postları
-  db.all(`
-    SELECT p.*, u.username, u.profile_photo, u.level,
-      (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-      (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-      (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked
-    FROM posts p
-    JOIN users u ON p.user_id = u.id
-    WHERE p.user_id IN (
-      SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted'
-    )
-    ORDER BY p.created_at DESC
-    LIMIT 50
-  `, [req.user.id, req.user.id], (err, posts) => {
-    res.json(posts || []);
-  });
-});
+// Feed & Posts — Gelişmiş Algoritmik Mühendislik (Instagram-Style Ranking Engine)
+app.get('/api/feed/:tab', auth, (req, res) => {
+  const tab = req.params.tab || 'discover';
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const offset = parseInt(req.query.offset) || 0;
+  const currentUserId = req.user.id;
 
-app.get('/api/feed/trending', auth, (req, res) => {
-  // TREND: Son 24 saatin en çok etkileşim alanları
-  db.all(`
-    SELECT p.*, u.username, u.profile_photo, u.level,
-      (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-      (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-      (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-      (
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) + 
-        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 2
-      ) as engagement
-    FROM posts p
-    JOIN users u ON p.user_id = u.id
-    ORDER BY engagement DESC, p.created_at DESC
-    LIMIT 50
-  `, [req.user.id], (err, posts) => {
-    if (err) console.error(err);
+  let query = '';
+  let params = [];
+
+  if (tab === 'following') {
+    // Takip Edilenler: İstemci zamanına göre en yeni gönderiler
+    query = `
+      SELECT p.*, u.username, u.profile_photo, u.level,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.user_id IN (
+        SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted'
+        UNION SELECT ?
+      )
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    params = [currentUserId, currentUserId, currentUserId, currentUserId, limit, offset];
+  } else if (tab === 'trending') {
+    // Trendler: Son 48 saatteki yüksek etkileşim ivmesi
+    query = `
+      SELECT p.*, u.username, u.profile_photo, u.level,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+        (
+          ((SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 2.0 + 
+           (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 4.0 + 
+           (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 5.0) /
+          POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.5)
+        ) as rank_score
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      WHERE datetime(p.created_at) > datetime('now', '-7 days')
+      ORDER BY rank_score DESC, p.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    params = [currentUserId, currentUserId, limit, offset];
+  } else {
+    // Keşfet (Discover): Gelişmiş Algoritmik Sıralama (Time Decay + Engagement Weight + Affinity)
+    query = `
+      SELECT p.*, u.username, u.profile_photo, u.level,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+        (
+          (
+            (SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 1.5 + 
+            (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 3.5 + 
+            (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 4.5 +
+            CASE WHEN p.user_id IN (SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted') THEN 15.0 ELSE 0.0 END
+          ) /
+          POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.3)
+        ) as rank_score
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      ORDER BY rank_score DESC, p.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    params = [currentUserId, currentUserId, currentUserId, limit, offset];
+  }
+
+  db.all(query, params, (err, posts) => {
+    if (err) {
+      console.error('Feed fetch error:', err);
+      return res.status(500).json({ error: 'Akış çekilirken hata oluştu' });
+    }
     res.json(posts || []);
   });
 });
@@ -1763,6 +2087,35 @@ app.put('/api/parties/:id/name', auth, (req, res) => {
   });
 });
 
+function cleanupEmptyParties() {
+  db.all('SELECT id, owner_id FROM parties', [], (err, parties) => {
+    if (err || !parties || parties.length === 0) return;
+
+    parties.forEach(p => {
+      db.all(`
+        SELECT pm.user_id, (u.last_seen > datetime('now', '-45 seconds')) as is_online
+        FROM party_members pm
+        JOIN users u ON pm.user_id = u.id
+        WHERE pm.party_id = ?
+      `, [p.id], (err, members) => {
+        if (err) return;
+        const onlineCount = (members || []).filter(m => Boolean(m.is_online)).length;
+
+        if (onlineCount === 0) {
+          console.log(`[Party Cleanup] Odak odasında (${p.id}) çevrim içi üye kalmadı. Oda siliniyor.`);
+          db.run('DELETE FROM party_members WHERE party_id = ?', [p.id]);
+          db.run('DELETE FROM party_channels WHERE party_id = ?', [p.id]);
+          db.run('DELETE FROM party_messages WHERE party_id = ?', [p.id]);
+          db.run('DELETE FROM party_bans WHERE party_id = ?', [p.id]);
+          db.run('DELETE FROM party_moderation_audit WHERE party_id = ?', [p.id]);
+          db.run('DELETE FROM parties WHERE id = ?', [p.id]);
+        }
+      });
+    });
+  });
+}
+setInterval(cleanupEmptyParties, 30000);
+
 // Create sub-channel
 app.post('/api/parties/:id/channels', auth, (req, res) => {
   const { name, userLimit, allowScreenShare } = req.body;
@@ -1771,18 +2124,38 @@ app.post('/api/parties/:id/channels', auth, (req, res) => {
   checkPartyManagementPermission(req.params.id, req.user.id, (err, allowed) => {
     if (!allowed) return res.status(403).json({ error: 'Kanal oluşturma yetkiniz yok' });
 
-    db.get('SELECT MAX(position) as maxPos FROM party_channels WHERE party_id = ?', [req.params.id], (err, row) => {
-      const pos = (row && row.maxPos !== null) ? row.maxPos + 1 : 0;
-      const limit = parseInt(userLimit) || 0;
-      const screenShare = allowScreenShare ? 1 : 0;
+    // Check max 10 sub-channels limit
+    db.get('SELECT COUNT(*) as channelCount FROM party_channels WHERE party_id = ?', [req.params.id], (err, countRow) => {
+      if (countRow && countRow.channelCount >= 10) {
+        return res.status(400).json({ error: 'Bir odak odasında en fazla 10 alt oda oluşturulabilir.' });
+      }
 
-      db.run(
-        'INSERT INTO party_channels (party_id, name, user_limit, position, is_default, allow_screen_share) VALUES (?, ?, ?, ?, 0, ?)',
-        [req.params.id, name.trim(), limit, pos, screenShare],
-        function() {
-          res.json({ success: true, channelId: this.lastID });
-        }
-      );
+      const screenShare = allowScreenShare ? 1 : 0;
+      const proceedInsert = () => {
+        db.get('SELECT MAX(position) as maxPos FROM party_channels WHERE party_id = ?', [req.params.id], (err, row) => {
+          const pos = (row && row.maxPos !== null) ? row.maxPos + 1 : 0;
+          const limit = parseInt(userLimit) || 0;
+
+          db.run(
+            'INSERT INTO party_channels (party_id, name, user_limit, position, is_default, allow_screen_share) VALUES (?, ?, ?, ?, 0, ?)',
+            [req.params.id, name.trim(), limit, pos, screenShare],
+            function() {
+              res.json({ success: true, channelId: this.lastID });
+            }
+          );
+        });
+      };
+
+      if (screenShare === 1) {
+        db.get('SELECT COUNT(*) as ssCount FROM party_channels WHERE party_id = ? AND allow_screen_share = 1', [req.params.id], (err, ssRow) => {
+          if (ssRow && ssRow.ssCount >= 3) {
+            return res.status(400).json({ error: 'Bir odak odasında en fazla 3 alt kanalda yayın (ekran paylaşımı) izni verilebilir.' });
+          }
+          proceedInsert();
+        });
+      } else {
+        proceedInsert();
+      }
     });
   });
 });
@@ -1797,13 +2170,27 @@ app.put('/api/parties/:id/channels/:channelId', auth, (req, res) => {
 
     const limit = parseInt(userLimit) || 0;
     const screenShare = allowScreenShare ? 1 : 0;
-    db.run(
-      'UPDATE party_channels SET name = ?, user_limit = ?, allow_screen_share = ? WHERE id = ? AND party_id = ?',
-      [name.trim(), limit, screenShare, req.params.channelId, req.params.id],
-      () => {
-        res.json({ success: true });
-      }
-    );
+
+    const proceedUpdate = () => {
+      db.run(
+        'UPDATE party_channels SET name = ?, user_limit = ?, allow_screen_share = ? WHERE id = ? AND party_id = ?',
+        [name.trim(), limit, screenShare, req.params.channelId, req.params.id],
+        () => {
+          res.json({ success: true });
+        }
+      );
+    };
+
+    if (screenShare === 1) {
+      db.get('SELECT COUNT(*) as ssCount FROM party_channels WHERE party_id = ? AND allow_screen_share = 1 AND id != ?', [req.params.id, req.params.channelId], (err, ssRow) => {
+        if (ssRow && ssRow.ssCount >= 3) {
+          return res.status(400).json({ error: 'Bir odak odasında en fazla 3 alt kanalda yayın (ekran paylaşımı) izni verilebilir.' });
+        }
+        proceedUpdate();
+      });
+    } else {
+      proceedUpdate();
+    }
   });
 });
 
@@ -2964,9 +3351,20 @@ app.post('/api/notifications/subscribe', auth, (req, res) => {
     return res.status(400).json({ error: 'Geçersiz abonelik' });
   }
   
-  db.run('INSERT INTO web_push_subscriptions (user_id, subscription) VALUES (?, ?)', [req.user.id, JSON.stringify(subscription)], (err) => {
-    if (err) return res.status(500).json({ error: 'Abonelik kaydedilemedi' });
-    res.status(201).json({ success: true });
+  db.all('SELECT id, subscription FROM web_push_subscriptions WHERE user_id = ?', [req.user.id], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Sorgu hatası' });
+    const exists = rows && rows.some(row => {
+      try {
+        return JSON.parse(row.subscription).endpoint === subscription.endpoint;
+      } catch(e) { return false; }
+    });
+    if (exists) {
+      return res.json({ success: true, message: 'Abonelik zaten mevcut' });
+    }
+    db.run('INSERT INTO web_push_subscriptions (user_id, subscription) VALUES (?, ?)', [req.user.id, JSON.stringify(subscription)], (err2) => {
+      if (err2) return res.status(500).json({ error: 'Abonelik kaydedilemedi' });
+      res.status(201).json({ success: true });
+    });
   });
 });
 
@@ -2980,16 +3378,44 @@ app.get('/api/notifications/is-subscribed', auth, (req, res) => {
 // ABANDONED SESSION CLEANUP & 24-HOUR AUTO-DELETE WORKER
 setInterval(() => {
   // 1. Session cleanup
-  db.run(`
-    UPDATE sessions 
-    SET status = 'abandoned', end_time = datetime('now')
-    WHERE status = 'active' 
-      AND user_id IN (
-        SELECT id FROM users 
-        WHERE last_seen IS NOT NULL 
-          AND (strftime('%s', 'now') - strftime('%s', last_seen)) > 90
-      )
-  `);
+  db.all('SELECT * FROM sessions WHERE status = "active"', (err, activeSessions) => {
+    if (err || !activeSessions) return;
+    activeSessions.forEach(session => {
+      if (session.mode === 'pomodoro') {
+        if (!session.state_start_time) return;
+        const stateStart = new Date(session.state_start_time.replace(' ', 'T') + 'Z');
+        const diffSecs = Math.floor((Date.now() - stateStart) / 1000);
+        
+        let isExpired = false;
+        if (session.pomo_state === 'focusing') {
+          if (diffSecs >= (session.target_duration + 1800)) {
+            isExpired = true;
+          }
+        } else if (session.pomo_state === 'overtime') {
+          if (diffSecs >= 1800) {
+            isExpired = true;
+          }
+        }
+        
+        if (isExpired) {
+          db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE id = ?', [session.id], () => {
+            sendDetailedSessionAbandonedNotification(session.user_id, session.pomo_round);
+          });
+        }
+      } else {
+        // Free mode - check last_seen and abandon if older than 30 minutes
+        db.get('SELECT last_seen FROM users WHERE id = ?', [session.user_id], (err2, user) => {
+          if (user && user.last_seen) {
+            const lastSeen = new Date(user.last_seen.replace(' ', 'T') + 'Z');
+            const diffMin = Math.floor((Date.now() - lastSeen) / 60000);
+            if (diffMin >= 30) {
+              db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE id = ?', [session.id]);
+            }
+          }
+        });
+      }
+    });
+  });
 
   // 2. Delete messages according to disappearing_hours settings (or 24h default)
   // Group messages auto-delete
@@ -3066,6 +3492,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('   Sunucuyu durdurmak icin CTRL+C');
   console.log('========================================');
   console.log('');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[HATA] ${PORT} portu zaten kullanımda (EADDRINUSE)!`);
+    console.error(`Arka planda çalışan diğer Node.js sürecini (PID) kapatıp tekrar deneyin.\n`);
+    process.exit(1);
+  } else {
+    console.error('[SERVER HATA]', err);
+  }
 });
 
 // --- WEBSOCKET SERVER IMPLEMENTATION ---

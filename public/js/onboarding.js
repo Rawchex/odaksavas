@@ -23,7 +23,7 @@
       id: 'rooms',
       targetSelector: '#timerSoloPartyBtn, .timer-room-btn, #soloPartyControlsRow, #partyFocusOverlay',
       title: 'Sesli Odalar',
-      text: 'Burası ana mekan. Arkadaşlarınla aynı masaya kurulup sesli odaklanıyorsun, sohbet de serbest çalışma da.',
+      text: 'Burası ana mekan. Arkadaşlarınla aynı masayaç kurulup sesli odaklanıyorsun, sohbet de serbest çalışma da.',
       page: 'timer'
     },
     {

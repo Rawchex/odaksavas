@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>İletişim | BLUNK — Bize Ulaşın</title>
+  <meta name="description" content="BLUNK ile iletişime geçin. Sorularınız, önerileriniz veya teknik destek talepleriniz için bize yazın: blunkcomtr@gmail.com">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://blunk.com.tr/contact">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
+  <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=1.0.0">
+  <script src="/js/theme.js"></script>
+  <script src="/js/navbar.js"></script>
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="İletişim — BLUNK">
+  <meta property="og:description" content="BLUNK ekibiyle iletişime geçin. Sorularınız için blunkcomtr@gmail.com adresine yazın.">
+  <meta property="og:url" content="https://blunk.com.tr/contact">
+  <meta property="og:type" content="website">
+
+  <!-- Schema.org ContactPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ContactPage",
+    "name": "BLUNK İletişim",
+    "url": "https://blunk.com.tr/contact",
+    "description": "BLUNK platformuyla iletişime geçmek için bu sayfayı kullanın.",
+    "publisher": {
+      "@type": "Organization",
+      "name": "BLUNK",
+      "url": "https://blunk.com.tr",
+      "email": "blunkcomtr@gmail.com"
+    }
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #08090c;
+      color: #c5c6c7;
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    .site-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(8,9,12,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }
+
+    .nav-links { display: flex; gap: 24px; list-style: none; }
+    .nav-links a { color: #888; text-decoration: none; font-size: 13px; font-weight: 600; transition: color 0.2s; }
+    .nav-links a:hover, .nav-links a.active { color: #fff; }
+    .nav-cta {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      color: #fff !important;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 12px !important;
+      font-weight: 800 !important;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 60px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(108,99,255,0.12);
+      border: 1px solid rgba(108,99,255,0.3);
+      color: #a78bfa;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 46px);
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 16px;
+      color: #888;
+      line-height: 1.7;
+    }
+
+    /* Container */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Contact Cards */
+    .contact-section {
+      padding: 20px 0 80px;
+    }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 60px;
+    }
+
+    .contact-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 28px 24px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .contact-card:hover {
+      background: rgba(108,99,255,0.06);
+      border-color: rgba(108,99,255,0.25);
+      transform: translateY(-2px);
+    }
+
+    .contact-card-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(108,99,255,0.2), rgba(168,85,247,0.15));
+      border: 1px solid rgba(108,99,255,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      font-size: 22px;
+    }
+
+    .contact-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .contact-card p {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    .contact-card a {
+      display: inline-block;
+      color: #a78bfa;
+      font-weight: 700;
+      font-size: 13px;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .contact-card a:hover { color: #c4b5fd; text-decoration: underline; }
+
+    /* FAQ */
+    .faq-section {
+      padding: 60px 0;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #a855f7;
+      margin-bottom: 12px;
+    }
+
+    .faq-section h2 {
+      font-size: clamp(22px, 3.5vw, 30px);
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 32px;
+    }
+
+    .faq-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .faq-item {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .faq-q {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 18px 20px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+
+    .faq-q:hover { background: rgba(255,255,255,0.03); }
+
+    .faq-arrow {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(168,85,247,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #a855f7;
+      font-size: 12px;
+      transition: transform 0.3s;
+    }
+
+    .faq-item.open .faq-arrow { transform: rotate(180deg); }
+
+    .faq-a {
+      display: none;
+      padding: 0 20px 18px;
+      font-size: 13px;
+      color: #777;
+      line-height: 1.7;
+    }
+
+    .faq-item.open .faq-a { display: block; }
+
+    /* Response time info */
+    .response-info {
+      margin-top: 40px;
+      padding: 24px;
+      background: rgba(108,99,255,0.06);
+      border: 1px solid rgba(108,99,255,0.2);
+      border-radius: 16px;
+      text-align: center;
+    }
+
+    .response-info h3 { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .response-info p { font-size: 13px; color: #777; line-height: 1.6; margin: 0; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 40px 24px;
+      text-align: center;
+    }
+
+    .footer-brand {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 30%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .footer-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; margin-bottom: 20px; list-style: none; }
+    .footer-nav a { color: #555; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+    .footer-nav a:hover { color: #aaa; }
+    .footer-copy { font-size: 12px; color: #444; }
+
+    @media (max-width: 600px) {
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="blunkNavbar"></div>
+
+  <header class="hero">
+    <div class="hero-badge">İletişim</div>
+    <h1>Bize <span>Ulaşın</span></h1>
+    <p>Soru, öneri, hata bildirimi veya iş birliği talepleriniz için aşağıdaki kanallardan bize ulaşabilirsiniz. En kısa sürede dönüş yapıyoruz.</p>
+  </header>
+
+  <main>
+    <div class="container">
+
+      <section class="contact-section" aria-labelledby="contact-heading">
+        <h2 id="contact-heading" style="display:none">İletişim Kanalları</h2>
+
+        <div class="contact-grid">
+
+          <article class="contact-card">
+            <div class="contact-card-icon">📧</div>
+            <h3>E-posta ile Ulaşın</h3>
+            <p>Genel sorularınız, hesap sorunlarınız ve önerileriniz için doğrudan e-posta gönderebilirsiniz.</p>
+            <a href="mailto:blunkcomtr@gmail.com">blunkcomtr@gmail.com</a>
+          </article>
+
+          <article class="contact-card">
+            <div class="contact-card-icon">🐛</div>
+            <h3>Hata Bildirimi</h3>
+            <p>Platformda bir hata keşfettiyseniz, lütfen hata açıklaması ve kullandığınız cihaz bilgisiyle e-posta gönderin.</p>
+            <a href="mailto:blunkcomtr@gmail.com?subject=Hata Bildirimi">Hata Bildir</a>
+          </article>
+
+          <article class="contact-card">
+            <div class="contact-card-icon">💡</div>
+            <h3>Öneri & Geri Bildirim</h3>
+            <p>Platformu geliştirmemize yardımcı olacak önerilerinizi duymaktan mutluluk duyarız.</p>
+            <a href="mailto:blunkcomtr@gmail.com?subject=Öneri">Öneri Gönder</a>
+          </article>
+
+          <article class="contact-card">
+            <div class="contact-card-icon">🤝</div>
+            <h3>İş Birliği</h3>
+            <p>Reklam, sponsorluk veya iş birliği teklifleri için bizimle iletişime geçebilirsiniz.</p>
+            <a href="mailto:blunkcomtr@gmail.com?subject=İş Birliği Teklifi">İş Birliği Teklifi</a>
+          </article>
+
+        </div>
+
+        <div class="response-info">
+          <h3>⏱️ Yanıt Süresi</h3>
+          <p>Gelen e-postalara genellikle <strong style="color:#a78bfa;">24–48 saat</strong> içinde yanıt veriyoruz. Hafta sonları yanıt süresi uzayabilir. Acil durumlarda konuyu belirtin.</p>
+        </div>
+      </section>
+
+      <!-- SSS -->
+      <section class="faq-section" aria-labelledby="faq-heading">
+        <div class="section-label">Sık Sorulan Sorular</div>
+        <h2 id="faq-heading">Bize Sormadan Önce</h2>
+
+        <div class="faq-list" itemscope itemtype="https://schema.org/FAQPage">
+          <div class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+            <button class="faq-q" onclick="toggleFaq(this)" aria-expanded="false">
+              <span itemprop="name">BLUNK'a nasıl üye olabilirim?</span>
+              <span class="faq-arrow">▼</span>
+            </button>
+            <div class="faq-a" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+              <p itemprop="text">
+                <a href="/" style="color:#a78bfa;">blunk.com.tr</a> adresine giderek "Hesabın yok mu? Hemen Kaydol" linkine tıklayın. E-posta ve şifre ile veya Google hesabınızla saniyeler içinde ücretsiz kayıt olabilirsiniz.
+              </p>
+            </div>
+          </div>
+
+          <div class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+            <button class="faq-q" onclick="toggleFaq(this)" aria-expanded="false">
+              <span itemprop="name">BLUNK ücretsiz mi?</span>
+              <span class="faq-arrow">▼</span>
+            </button>
+            <div class="faq-a" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+              <p itemprop="text">Evet, BLUNK tamamen ücretsizdir. Sesli odalar, Pomodoro zamanlayıcısı, mesajlaşma, XP sistemi ve liderlik tablosu dahil tüm özellikler herhangi bir ücret olmaksızın sonsuza kadar kullanılabilir.</p>
+            </div>
+          </div>
+
+          <div class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+            <button class="faq-q" onclick="toggleFaq(this)" aria-expanded="false">
+              <span itemprop="name">Şifremi unuttum, ne yapmalıyım?</span>
+              <span class="faq-arrow">▼</span>
+            </button>
+            <div class="faq-a" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+              <p itemprop="text">Şifrenizi unuttuysanız lütfen <a href="mailto:blunkcomtr@gmail.com?subject=Şifre Sıfırlama" style="color:#a78bfa;">blunkcomtr@gmail.com</a> adresine kullanıcı adınızı belirterek e-posta gönderin. En kısa sürede yardım edeceğiz.</p>
+            </div>
+          </div>
+
+          <div class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+            <button class="faq-q" onclick="toggleFaq(this)" aria-expanded="false">
+              <span itemprop="name">Hesabımı nasıl silebilirim?</span>
+              <span class="faq-arrow">▼</span>
+            </button>
+            <div class="faq-a" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+              <p itemprop="text">Hesabınızı silmek için <a href="mailto:blunkcomtr@gmail.com?subject=Hesap Silme Talebi" style="color:#a78bfa;">blunkcomtr@gmail.com</a> adresine "Hesap Silme Talebi" konusuyla e-posta gönderin. 48 saat içinde hesabınız ve tüm verileriniz kalıcı olarak silinecektir.</p>
+            </div>
+          </div>
+
+          <div class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+            <button class="faq-q" onclick="toggleFaq(this)" aria-expanded="false">
+              <span itemprop="name">Bir kullanıcıyı nasıl rapor edebilirim?</span>
+              <span class="faq-arrow">▼</span>
+            </button>
+            <div class="faq-a" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+              <p itemprop="text">Kural ihlali gerçekleştiren bir kullanıcıyı rapor etmek için kullanıcı adını ve ihlal açıklamasını <a href="mailto:blunkcomtr@gmail.com?subject=Kullanıcı Raporu" style="color:#a78bfa;">blunkcomtr@gmail.com</a> adresine gönderin. Ekibimiz gerekli işlemi yapacaktır.</p>
+            </div>
+          </div>
+
+          <div class="faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+            <button class="faq-q" onclick="toggleFaq(this)" aria-expanded="false">
+              <span itemprop="name">Sesli oda neden çalışmıyor?</span>
+              <span class="faq-arrow">▼</span>
+            </button>
+            <div class="faq-a" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+              <p itemprop="text">Sesli odalar WebRTC teknolojisini kullanır. Sorun yaşıyorsanız: (1) Tarayıcınızın mikrofon iznini verdiğinden emin olun, (2) Sayfayı yenileyin, (3) Chrome veya Firefox kullanın, (4) Ağ bağlantınızı kontrol edin. Sorun devam ederse lütfen cihaz ve tarayıcı bilginizle bize yazın.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer role="contentinfo">
+    <div class="footer-brand">BLUNK</div>
+    <nav aria-label="Footer navigasyon">
+      <ul class="footer-nav">
+        <li><a href="/">Ana Sayfa</a></li>
+        <li><a href="/about">Hakkımızda</a></li>
+        <li><a href="/contact">İletişim</a></li>
+        <li><a href="/privacy">Gizlilik Politikası</a></li>
+        <li><a href="/terms">Kullanım Şartları</a></li>
+      </ul>
+    </nav>
+    <p class="footer-copy">© 2026 BLUNK — <a href="mailto:blunkcomtr@gmail.com" style="color:#555; text-decoration:none;">blunkcomtr@gmail.com</a></p>
+  </footer>
+
+  <script>
+    function toggleFaq(btn) {
+      const item = btn.closest('.faq-item');
+      const isOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+      if (!isOpen) item.classList.add('open');
+      btn.setAttribute('aria-expanded', !isOpen);
+    }
+  </script>
+
+</body>
+</html>

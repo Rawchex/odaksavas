@@ -4,41 +4,204 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kullanım Şartları | BLUNK</title>
+  <meta name="description" content="BLUNK kullanım şartları ve hizmet sözleşmesi: platformu kullanma koşulları, davranış kuralları, fikri mülkiyet hakları ve hesap politikaları.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://blunk.com.tr/terms">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
   <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
-  <link rel="stylesheet" href="/css/style.css?v=72.0.4">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=1.0.0">
+  <script src="/js/theme.js"></script>
   <style>
-    body { background: #0b0c10; color: #c5c6c7; font-family: 'Inter', sans-serif; padding: 40px 20px; line-height: 1.6; }
-    .container { max-width: 800px; margin: 0 auto; background: rgba(19, 21, 29, 0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 32px; backdrop-filter: blur(10px); }
-    h1 { color: #fff; font-size: 28px; margin-bottom: 20px; font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; }
-    h2 { color: #6c63ff; font-size: 20px; margin-top: 24px; margin-bottom: 12px; }
-    p { margin-bottom: 16px; font-size: 14px; color: #a4a9b3; }
-    ul { margin-bottom: 16px; padding-left: 20px; }
-    li { margin-bottom: 8px; font-size: 14px; color: #a4a9b3; }
-    a { color: #6c63ff; text-decoration: none; font-weight: 600; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #08090c; color: #c5c6c7; font-family: 'Inter', system-ui, sans-serif; line-height: 1.7; }
+    .site-nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,9,12,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      font-size: 20px; font-weight: 900; letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 30%, #a855f7 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 20px; list-style: none; }
+    .nav-links a { color: #888; text-decoration: none; font-size: 13px; font-weight: 600; transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; }
+    .page-wrap { max-width: 800px; margin: 0 auto; padding: 60px 24px 80px; }
+    .page-title { font-size: clamp(26px, 4vw, 38px); font-weight: 900; color: #fff; letter-spacing: -1px; margin-bottom: 8px; }
+    .page-date { font-size: 12px; color: #555; margin-bottom: 40px; }
+    h2 { font-size: 17px; font-weight: 700; color: #a78bfa; margin: 36px 0 12px; border-left: 3px solid rgba(168,85,247,0.5); padding-left: 12px; }
+    h3 { font-size: 14px; font-weight: 700; color: #ddd; margin: 20px 0 8px; }
+    p { font-size: 14px; color: #8a9099; line-height: 1.8; margin-bottom: 14px; }
+    ul { margin: 0 0 14px 20px; }
+    li { font-size: 14px; color: #8a9099; line-height: 1.8; margin-bottom: 6px; }
+    a { color: #a78bfa; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .back-link { display: inline-block; margin-bottom: 20px; background: rgba(255,255,255,0.05); padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+    strong { color: #ccc; font-weight: 600; }
+    .warning-box { background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.25); border-radius: 12px; padding: 16px 20px; margin: 20px 0; }
+    .warning-box p { margin: 0; font-size: 13px; color: #f87171; }
+    footer { border-top: 1px solid rgba(255,255,255,0.07); padding: 32px 24px; text-align: center; font-size: 12px; color: #444; }
+    .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-bottom: 12px; list-style: none; }
+    .footer-links a { color: #555; text-decoration: none; font-size: 12px; }
+    .footer-links a:hover { color: #aaa; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <a href="/" class="back-link">← Ana Sayfaya Dön</a>
-    <h1>Kullanım Şartları ve Hizmet Sözleşmesi</h1>
-    <p>Son Güncelleme: 30 Temmuz 2026</p>
-    
-    <p>BLUNK platformuna erişerek veya kullanarak aşağıdaki hizmet şartlarını kabul etmiş sayılırsınız.</p>
+
+  <nav class="site-nav" role="navigation" aria-label="Ana navigasyon">
+    <a href="/" class="nav-brand">BLUNK</a>
+    <ul class="nav-links">
+      <li><a href="/">Ana Sayfa</a></li>
+      <li><a href="/about">Hakkımızda</a></li>
+      <li><a href="/contact">İletişim</a></li>
+    </ul>
+  </nav>
+
+  <main class="page-wrap">
+    <h1 class="page-title">Kullanım Şartları</h1>
+    <p class="page-date">Son Güncelleme: 31 Temmuz 2026 &nbsp;|&nbsp; Sürüm 2.0</p>
+
+    <p>
+      Bu Kullanım Şartları ("Şartlar"), <a href="https://blunk.com.tr">blunk.com.tr</a> adresindeki BLUNK platformunu ve sunduğumuz tüm hizmetleri ("Hizmet") kullanımınıza ilişkin koşulları düzenlemektedir. Platforma erişerek veya kullanarak bu şartları kabul etmiş sayılırsınız.
+    </p>
+
+    <div class="warning-box">
+      <p>⚠️ Bu şartları dikkatlice okuyun. Kabul etmiyorsanız platformu kullanmayınız.</p>
+    </div>
 
     <h2>1. Hizmet Tanımı</h2>
-    <p>BLUNK, kullanıcıların birlikte odaklanarak çalışabileceği, Pomodoro seansları düzenleyebileceği ve sosyalleşebileceği çevrimiçi bir odaklanma ve verimlilik platformudur.</p>
+    <p>
+      BLUNK, kullanıcıların birlikte odaklanarak çalışabileceği, sesli çalışma odaları açabileceği, Pomodoro seansları düzenleyebileceği, XP kazanabileceği ve diğer kullanıcılarla sosyal etkileşime girebileceği çevrimiçi bir üretkenlik ve sosyal odaklanma platformudur. Hizmet şunları kapsar:
+    </p>
+    <ul>
+      <li>Gerçek zamanlı sesli odalar ve ekran paylaşımı</li>
+      <li>Pomodoro zamanlayıcısı ve odak seans takibi</li>
+      <li>XP ve seviye tabanlı oyunlaştırma sistemi</li>
+      <li>Liderlik tablosu</li>
+      <li>Sosyal feed (gönderi, beğeni, yorum)</li>
+      <li>Doğrudan mesajlaşma ve grup sohbetleri</li>
+      <li>Kullanıcı profilleri</li>
+    </ul>
 
-    <h2>2. Davranış Kuralları</h2>
-    <p>Sesli odalarda ve topluluk alanlarında diğer kullanıcılara karşı saygılı olunmalıdır. Taciz, nefret söylemi, yasadışı içerik paylaşımı ve platform huzurunu bozan davranışlar hesabın askıya alınmasına neden olur.</p>
+    <h2>2. Hesap Oluşturma ve Güvenlik</h2>
 
-    <h2>3. Fikri Mülkiyet ve Kullanım Hakları</h2>
-    <p>Platform üzerindeki tüm arayüz tasarımları, kodlar ve markalama hakları BLUNK'a aittir. İzin almadan kopyalanamaz veya çoğaltılamaz.</p>
+    <h3>2.1 Yaş Şartı</h3>
+    <p>
+      BLUNK'u kullanmak için en az <strong>13 yaşında</strong> olmanız gerekmektedir. 18 yaşından küçükseniz, ebeveyn veya velinin bu şartları kabul etmiş olması gerekir.
+    </p>
 
-    <h2>4. Değişiklikler</h2>
-    <p>BLUNK, bu kullanım şartlarını dilediği zaman güncelleme hakkını saklı tutar.</p>
-  </div>
+    <h3>2.2 Hesap Bilgileri</h3>
+    <ul>
+      <li>Kullanıcı adı başkasına ait olmayan, yanıltıcı olmayan bir isim olmalıdır.</li>
+      <li>Hesap bilgilerinizi (özellikle şifrenizi) gizli tutmak sizin sorumluluğunuzdadır.</li>
+      <li>Hesabınızdan gerçekleştirilen tüm aktiviteler size aittir.</li>
+      <li>Hesabınızı başkasına devredemezsiniz.</li>
+    </ul>
+
+    <h3>2.3 Tek Hesap Politikası</h3>
+    <p>
+      Her kullanıcı yalnızca bir hesap açabilir. Birden fazla hesap açılması, mevcut hesapların askıya alınmasına neden olabilir.
+    </p>
+
+    <h2>3. Davranış Kuralları</h2>
+
+    <p>Platformu kullanırken aşağıdaki kurallara uymayı kabul edersiniz:</p>
+
+    <h3>3.1 Yasak İçerik ve Davranışlar</h3>
+    <ul>
+      <li>Hakaret, tehdit, taciz, zorbalık veya ayrımcılık içeren içerik paylaşmak</li>
+      <li>Irkçılık, cinsiyetçilik, nefret söylemi veya aşırılık yanlısı içerik</li>
+      <li>Müstehcen, pornografik veya 18+ yaş kısıtlamalı içerik</li>
+      <li>Telif hakkına veya fikri mülkiyet haklarına aykırı içerik</li>
+      <li>Kişisel bilgilerin (adres, telefon, kimlik vb.) rıza olmaksızın paylaşılması (doxing)</li>
+      <li>Spam, zincir mesajlar veya platform güvenliğini tehdit eden içerikler</li>
+      <li>Bot, otomatik araç veya scraper kullanarak sistemi yükleme</li>
+      <li>Başka kullanıcıları kandırmaya veya dolandırmaya yönelik davranışlar</li>
+      <li>Yasadışı faaliyetlerin tanıtımı veya teşviki</li>
+    </ul>
+
+    <h3>3.2 Sesli Odalarda Kurallar</h3>
+    <ul>
+      <li>Diğer kullanıcıların onayı olmaksızın ses kayıtları almak yasaktır.</li>
+      <li>Sesli odalarda rahatsız edici, bağırtı içeren veya sürekli gürültülü davranışlar yasaktır.</li>
+      <li>Oda sahibinin kural ve yönlendirmelerine saygı gösterilmelidir.</li>
+    </ul>
+
+    <h2>4. İçerik ve Fikri Mülkiyet</h2>
+
+    <h3>4.1 Kullanıcı İçeriği</h3>
+    <p>
+      Platforma yüklediğiniz veya paylaştığınız içerikler (metinler, görseller, ses) size aittir. Bununla birlikte, bu içerikleri platformda göstermek için BLUNK'a dünya genelinde, telifsiz, münhasır olmayan bir lisans vermiş olursunuz. Bu lisans, hesabınızı sildiğinizde sona erer.
+    </p>
+
+    <h3>4.2 BLUNK Fikri Mülkiyeti</h3>
+    <p>
+      Platformun yazılımı, tasarımı, logosu, ticari markası ve içerikleri BLUNK'a aittir. İzin almaksızın kopyalanamaz, dağıtılamaz, ticari amaçla kullanılamaz veya türev ürünler oluşturulamaz.
+    </p>
+
+    <h2>5. Hesap Askıya Alma ve Sonlandırma</h2>
+
+    <h3>5.1 Kural İhlali</h3>
+    <p>
+      Aşağıdaki durumlarda hesabınız uyarı verilmeksizin askıya alınabilir veya kalıcı olarak kapatılabilir:
+    </p>
+    <ul>
+      <li>Bu şartları ihlal etmek</li>
+      <li>Diğer kullanıcılara zarar vermek</li>
+      <li>Platformun güvenliğini tehdit eden aktiviteler</li>
+      <li>Sahte kimlik veya yanıltıcı bilgi kullanmak</li>
+      <li>Birden fazla hesap açmak</li>
+    </ul>
+
+    <h3>5.2 Hesabınızı Kapatmak</h3>
+    <p>
+      Hesabınızı istediğiniz zaman <a href="mailto:blunkcomtr@gmail.com">blunkcomtr@gmail.com</a> adresine e-posta göndererek kapatabilirsiniz. Hesap kapatma taleplerini 48 saat içinde işleme alırız.
+    </p>
+
+    <h2>6. Sorumluluk Sınırlaması</h2>
+    <p>
+      BLUNK, platform üzerinden kullanıcıların paylaştığı içeriklerden sorumlu değildir. Hizmet "olduğu gibi" sunulmaktadır. Platform kesintisiz veya hatasız çalışacağını garanti etmez. BLUNK, hizmet kesintisinden, veri kaybından veya üçüncü taraf içeriklerinden doğan zararlardan sorumlu tutulamaz.
+    </p>
+
+    <h2>7. Reklam ve Para Kazanma</h2>
+    <p>
+      BLUNK, Google AdSense aracılığıyla reklamlar gösterebilir. Bu reklamlar Google'ın politikalarına tabidir. Reklamlar, platformun ücretsiz sunulmasına katkı sağlar. Reklamları engelleyen tarayıcı eklentileri kullanmak kullanım şartlarına aykırı değildir, ancak platformun sürdürülebilirliğini olumsuz etkileyebilir.
+    </p>
+
+    <h2>8. Hizmet Değişiklikleri</h2>
+    <p>
+      BLUNK, herhangi bir zamanda özellikler ekleyebilir, değiştirebilir veya kaldırabilir. Önemli değişikliklerde kullanıcılar önceden bilgilendirilecektir. Bu şartlar da güncellenebilir; güncelleme tarihini bu sayfanın üstünde bulabilirsiniz.
+    </p>
+
+    <h2>9. Uygulanacak Hukuk</h2>
+    <p>
+      Bu şartlar Türkiye Cumhuriyeti hukukuna tabidir. Anlaşmazlıklar önce taraflar arasında çözülmeye çalışılır; çözülemezse Türkiye mahkemelerinde görülür.
+    </p>
+
+    <h2>10. İletişim</h2>
+    <p>
+      Bu kullanım şartları hakkında sorularınız için:
+    </p>
+    <ul>
+      <li><strong>E-posta:</strong> <a href="mailto:blunkcomtr@gmail.com">blunkcomtr@gmail.com</a></li>
+      <li><strong>İletişim sayfası:</strong> <a href="/contact">blunk.com.tr/contact</a></li>
+    </ul>
+
+  </main>
+
+  <footer role="contentinfo">
+    <ul class="footer-links">
+      <li><a href="/">Ana Sayfa</a></li>
+      <li><a href="/about">Hakkımızda</a></li>
+      <li><a href="/contact">İletişim</a></li>
+      <li><a href="/privacy">Gizlilik Politikası</a></li>
+      <li><a href="/terms">Kullanım Şartları</a></li>
+    </ul>
+    <p>© 2026 BLUNK — blunkcomtr@gmail.com</p>
+  </footer>
+
 </body>
 </html>

@@ -17,33 +17,46 @@ window._blurTimer       = null;
 // ============================================================
 // PAGE VISIBILITY API — instant on iOS when screen locks / app switch & Auth Revalidation
 // ============================================================
+let _violationTimer = null;
+
+function startViolationTimer(reason) {
+  if (!window._activeSession || window._violationFired) return;
+  if (_violationTimer) return;
+  _violationTimer = setTimeout(() => {
+    if ((document.hidden || !document.hasFocus()) && window._activeSession && !window._violationFired) {
+      window._violationFired = true;
+      if (typeof handleViolation === 'function') handleViolation(reason);
+    }
+    _violationTimer = null;
+  }, 2000);
+}
+
+function clearViolationTimer() {
+  if (_violationTimer) {
+    clearTimeout(_violationTimer);
+    _violationTimer = null;
+  }
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    if (window._activeSession && !window._violationFired) {
-      window._violationFired = true;
-      if (typeof handleViolation === 'function') handleViolation('EKRAN KAPANDI');
-    }
+    startViolationTimer('EKRAN KAPANDI');
   } else {
-    // Re-validate user authentication when returning to app to prevent user session bleed/caching
+    if (document.hasFocus()) {
+      clearViolationTimer();
+    }
     checkAuth(true);
   }
 });
 
-// window.blur — catches app switching on some browsers
 window.addEventListener('blur', () => {
-  if (window._activeSession && !window._violationFired) {
-    // Small debounce — some browsers fire blur on focus loss to address bar
-    window._blurTimer = setTimeout(() => {
-      if (!document.hasFocus() && window._activeSession && !window._violationFired) {
-        window._violationFired = true;
-        if (typeof handleViolation === 'function') handleViolation('UYGULAMA BIRAKILDI');
-      }
-    }, 800);
-  }
+  startViolationTimer('UYGULAMA BIRAKILDI');
 });
 
 window.addEventListener('focus', () => {
-  clearTimeout(window._blurTimer);
+  if (!document.hidden) {
+    clearViolationTimer();
+  }
 });
 
 // page reload preserves active session, no beforeunload listener needed
@@ -97,6 +110,7 @@ async function checkAuth(silent = false) {
         return;
       }
       currentUser = user;
+      document.documentElement.classList.add('is-app-user');
       if (!silent) showMainApp();
     } else {
       if (currentUser) {
@@ -112,6 +126,7 @@ async function checkAuth(silent = false) {
 }
 
 function showLogin() {
+  document.documentElement.classList.remove('is-app-user');
   const loginEl = document.getElementById('loginScreen');
   if (loginEl) {
     loginEl.classList.add('active');
@@ -320,15 +335,17 @@ async function login() {
 
 async function register() {
   hideAuthAlert('registerAlertBox');
-  const inp = document.getElementById('regUsernameInput');
-  const emailInp = document.getElementById('regEmailInput');
-  const passInp = document.getElementById('regPasswordInput');
+  const inp        = document.getElementById('regUsernameInput');
+  const emailInp   = document.getElementById('regEmailInput');
+  const passInp    = document.getElementById('regPasswordInput');
   const confirmInp = document.getElementById('regConfirmPasswordInput');
+  const bdInp      = document.getElementById('regBirthDateInput');
 
-  const username = inp ? inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') : '';
-  const email = emailInp ? emailInp.value.trim() : '';
-  const password = passInp ? passInp.value : '';
+  const username        = inp        ? inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') : '';
+  const email           = emailInp   ? emailInp.value.trim() : '';
+  const password        = passInp    ? passInp.value : '';
   const confirmPassword = confirmInp ? confirmInp.value : '';
+  const birth_date      = bdInp      ? bdInp.value : '';  // YYYY-MM-DD
 
   if (!username || username.length < 3) {
     showAuthAlert('Kullanıcı adı en az 3 karakter olmalı ve özel karakter içermemelidir.', 'registerAlertBox');
@@ -344,10 +361,7 @@ async function register() {
   }
 
   const btn = document.getElementById('regSubmitBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'LÜTFEN BEKLEYİN...';
-  }
+  if (btn) { btn.disabled = true; btn.textContent = 'LÜTFEN BEKLEYİN...'; }
 
   try {
     const res = await fetch('/api/register', {
@@ -359,6 +373,14 @@ async function register() {
 
     if (res.ok) {
       currentUser = d;
+      // Save birth_date server-side if provided (server validates, never trust client)
+      if (birth_date) {
+        fetch('/api/me/birth-date', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ birth_date })
+        }).catch(() => {});
+      }
       closeRegisterModal();
       showMainApp();
       showToast('BLUNK dünyasına hoş geldin!');
@@ -368,12 +390,10 @@ async function register() {
   } catch {
     showAuthAlert('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.', 'registerAlertBox');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'KAYIT OL';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = 'KAYIT OL'; }
   }
 }
+
 
 // ─── HIGH-PERFORMANCE INTERACTIVE BLUNK CANVAS PARTICLES & MOUSE EFFECT ───
 (function initBlunkCanvasEngine() {
@@ -454,12 +474,15 @@ async function register() {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const isLight = currentTheme === 'light';
+
       if (this.glow > 0.5) {
-        ctx.shadowColor = 'rgba(88, 101, 242, 0.8)';
+        ctx.shadowColor = isLight ? 'rgba(147, 51, 234, 0.6)' : 'rgba(88, 101, 242, 0.8)';
         ctx.shadowBlur = this.glow;
-        ctx.fillStyle = `rgba(168, 85, 247, ${this.alpha})`;
+        ctx.fillStyle = isLight ? `rgba(147, 51, 234, ${this.alpha * 1.5})` : `rgba(168, 85, 247, ${this.alpha})`;
       } else {
-        ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+        ctx.fillStyle = isLight ? `rgba(108, 99, 255, ${this.alpha * 0.8})` : `rgba(255, 255, 255, ${this.alpha})`;
       }
 
       ctx.fillText(this.text, 0, 0);
@@ -546,13 +569,29 @@ function reportDeviceType() {
 
 function startHeartbeat() {
   reportDeviceType(); // Report device on load
+  let hbInterval = null;
+
   const sendHb = () => {
     if (currentUser) {
       fetch('/api/me/heartbeat', { method: 'PATCH' }).catch(()=>{});
     }
   };
+
+  const setupHbInterval = () => {
+    if (hbInterval) clearInterval(hbInterval);
+    const delay = document.hidden ? 60000 : 15000;
+    hbInterval = setInterval(sendHb, delay);
+  };
+
   sendHb();
-  setInterval(sendHb, 15000);
+  setupHbInterval();
+
+  document.addEventListener('visibilitychange', () => {
+    setupHbInterval();
+    if (!document.hidden) {
+      sendHb();
+    }
+  });
 
   // Send instant offline signal when closing browser or navigating away
   const sendOffline = () => {
@@ -679,7 +718,11 @@ function syncUrlState(pageName, subPath = '', replace = false) {
 
 function showPage(name, pushState = true, subPath = '') {
   // Hide userProfilePage if switching main pages
-  document.getElementById('userProfilePage').style.display = 'none';
+  const userProfileEl = document.getElementById('userProfilePage');
+  if (userProfileEl) {
+    userProfileEl.style.display = 'none';
+    userProfileEl.classList.remove('active');
+  }
 
   // Clean up mobile chat view states if leaving messages/chat
   if (name !== 'messages') {
@@ -724,7 +767,7 @@ function showPage(name, pushState = true, subPath = '') {
     oldPage.style.transform = 'translateY(-10px)';
     
     setTimeout(() => {
-      oldPage.classList.remove('active');
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       oldPage.style.opacity = '';
       oldPage.style.transform = '';
       
@@ -751,7 +794,9 @@ function handleInitialUrlRoute() {
   const parts = path.split('/').filter(Boolean);
   const rawParts = rawPath.split('/').filter(Boolean);
   
-  if (parts.length === 0 || parts[0] === 'sayac') {
+  if (parts.length === 0) {
+    showPage('timer', true);
+  } else if (parts[0] === 'sayac' || parts[0] === 'sayaç' || parts[0] === 'sayaçc') {
     showPage('timer', false);
   } else if (parts[0] === 'mesajlar') {
     showPage('messages', false);
@@ -772,8 +817,16 @@ function handleInitialUrlRoute() {
     showPage('leaderboard', false);
   } else if (parts[0] === 'bildirimler') {
     showPage('notifications', false);
-  } else if (parts[0] === 'profil') {
-    showPage('profile', false);
+  } else if (parts[0] === 'profil' || parts[0] === 'profile') {
+    if (parts[1]) {
+      const targetUser = decodeURIComponent(rawParts[1]);
+      showPage('timer', false);
+      setTimeout(() => {
+        if (typeof openUserPage === 'function') openUserPage(targetUser);
+      }, 350);
+    } else {
+      showPage('profile', false);
+    }
   } else if (parts[0] === 'u' && parts[1]) {
     const targetUser = decodeURIComponent(rawParts[1]);
     showPage('timer', false);
@@ -781,7 +834,7 @@ function handleInitialUrlRoute() {
       if (typeof openUserPage === 'function') openUserPage(targetUser);
     }, 350);
   } else if (parts.length > 0) {
-    const reservedRoutes = ['sayac', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'u', 'api', 'uploads', 'css', 'js', 'audio'];
+    const reservedRoutes = ['sayac', 'sayaç', 'sayaçc', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'profile', 'u', 'api', 'uploads', 'css', 'js', 'audio', 'about', 'contact', 'privacy', 'terms', 'blog'];
     if (!reservedRoutes.includes(parts[0])) {
       const username = decodeURIComponent(rawParts[0]).replace(/^@/, '');
       showPage('timer', false);
@@ -789,10 +842,10 @@ function handleInitialUrlRoute() {
         if (typeof openUserPage === 'function') openUserPage(username);
       }, 350);
     } else {
-      showPage('timer', false);
+      showPage('timer', true);
     }
   } else {
-    showPage('timer', false);
+    showPage('timer', true);
   }
 }
 
@@ -1117,6 +1170,7 @@ function stopNotifPoll() {
   clearInterval(notifPollTimer);
 }
 async function checkNotifCount() {
+  if (document.hidden) return; // Skip notification count check if tab is in background
   try {
     const res = await fetch('/api/notifications/unread');
     const { count } = await res.json();
@@ -1125,6 +1179,12 @@ async function checkNotifCount() {
     else dot.classList.remove('show');
   } catch {}
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && currentUser) {
+    checkNotifCount();
+  }
+});
 
 // ============================================================
 // USER PROFILE PAGE (full-screen)
@@ -1138,10 +1198,10 @@ async function openUserPage(username, tab = 'posts') {
     return;
   }
 
-  // Update URL without page reload (use clean /username format)
+  // Update URL without page reload (use clean /u/username format)
   const url = new URL(window.location);
   url.searchParams.delete('u');
-  url.pathname = `/${username}`;
+  url.pathname = `/u/${username}`;
   window.history.pushState({}, '', url);
 
   _userPageActiveTab = tab;
@@ -1150,24 +1210,28 @@ async function openUserPage(username, tab = 'posts') {
   const title = document.getElementById('userPageTitle');
 
   // Show page overlay
-  page.style.display = 'flex';
-  page.style.flexDirection = 'column';
-  page.style.position = 'fixed';
-  page.style.inset = '0';
-  page.style.zIndex = '10000';
-  page.style.background = '#000';
-  page.style.overflowY = 'auto';
-  title.textContent = username;
+  if (page) {
+    page.classList.add('active');
+    page.style.display = 'flex';
+    page.style.flexDirection = 'column';
+    page.style.position = 'fixed';
+    page.style.inset = '0';
+    page.style.zIndex = '1000000';
+    page.style.background = '#000';
+    page.style.overflowY = 'auto';
+  }
+  const cleanName = (username || '').replace(/^@/, '').trim();
+  title.textContent = cleanName;
   content.innerHTML = '<div class="loading-row">YÜKLENİYOR...</div>';
 
   try {
-    const res = await fetch(`/api/users/${username}`);
+    const res = await fetch(`/api/users/${encodeURIComponent(cleanName)}`);
     if (!res.ok) throw new Error();
     const user = await res.json();
     _userPageData = user;
     renderUserPage(user);
   } catch {
-    content.innerHTML = '<div class="empty-state"><div class="empty-title">Kullan\u0131c\u0131 bulunamad\u0131</div></div>';
+    content.innerHTML = '<div class="empty-state"><div class="empty-title">Kullanıcı bulunamadı</div></div>';
   }
 }
 
@@ -1176,15 +1240,19 @@ function openUserModal(username) { openUserPage(username); }
 
 function closeUserPage() {
   const page = document.getElementById('userProfilePage');
-  if (page) page.style.display = 'none';
+  if (page) {
+    page.style.display = 'none';
+    page.classList.remove('active');
+  }
   const headerActionsEl = document.getElementById('userPageHeaderActions');
   if (headerActionsEl) headerActionsEl.innerHTML = '';
 
-  // Clean profile URL format back to root if needed
-  if (window.location.pathname !== '/' && window.location.pathname !== '') {
+  // Clean profile URL format back to previous active page if needed
+  const targetUrl = typeof getPathForPage === 'function' ? getPathForPage(activePage || 'timer') : '/sayac';
+  if (window.location.pathname !== targetUrl) {
     try {
       const url = new URL(window.location);
-      url.pathname = '/';
+      url.pathname = targetUrl;
       window.history.pushState({}, '', url);
     } catch(e) {}
   }
@@ -1279,19 +1347,47 @@ function renderUserPage(user) {
   let tabHtml = '';
   if (_userPageActiveTab === 'posts') {
     tabHtml = posts.length === 0
-      ? `<div class="profile-empty-tab">GÖNDERI YOK</div>`
+      ? `<div class="profile-empty-tab">GÖÖNDERI YOK</div>`
       : `<div class="profile-post-grid">${posts.map(p => renderPostGridItem(p, false, false)).join('')}</div>`;
   } else if (_userPageActiveTab === 'sessions') {
     tabHtml = sessions.length === 0
       ? `<div class="profile-empty-tab">ODAK OTURUMU YOK</div>`
-      : `<div class="profile-sessions-list">${sessions.slice(0,20).map(s => `
-          <div class="session-row">
-            <div>
-              <div class="session-row-time">${fmtTime(s.duration||0)}</div>
-              <div class="session-row-date">${fmtDate(s.start_time)}</div>
+      : `<div class="profile-sessions-list">${sessions.slice(0,20).map(s => {
+          const detailParts = [];
+          if (s.feeling) detailParts.push(`<span class="session-detail-feeling">${esc(s.feeling)}</span>`);
+          if (s.category) detailParts.push(`<span class="session-detail-category">📁 ${esc(s.category)}</span>`);
+          if (s.activity) detailParts.push(`<span class="session-detail-activity">🎯 ${esc(s.activity)}</span>`);
+          
+          const detailsHtml = detailParts.length > 0 
+            ? `<div class="session-row-details" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:10px; color:var(--text-3); font-weight:600;">
+                 ${detailParts.join('<span style="opacity:0.3">•</span>')}
+               </div>`
+            : '';
+
+          const noteHtml = s.note
+            ? `<div class="session-row-note" style="margin-top: 8px; font-size: 11px; color: var(--text-2); font-style: italic; background: rgba(255,255,255,0.02); border-left: 2px solid rgba(255,255,255,0.15); padding: 4px 8px; border-radius: 0 4px 4px 0; word-break: break-word;">
+                 "${esc(s.note)}"
+               </div>`
+            : '';
+
+          return `
+          <div class="session-row" style="flex-direction:column; align-items:stretch; padding:16px 20px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <div class="session-row-time">${fmtTime(s.duration || 0)}</div>
+                  <span class="session-mode-badge" style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:2px 6px; border-radius:4px; background:${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)'}; color:${s.mode === 'pomodoro' ? '#ef4444' : 'var(--text-3)'}; border:1px solid ${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.1)'};">${s.mode === 'pomodoro' ? 'POMODORO' : 'SERBEST'}</span>
+                </div>
+                <div class="session-row-date">${fmtDate(s.start_time)}</div>
+              </div>
+              <div class="session-badge ${s.status === 'completed' ? 'ok' : 'fail'}">
+                ${s.status === 'completed' ? 'TAMAM' : s.status === 'violated' ? 'İHLAL' : 'TERK'}
+              </div>
             </div>
-            <div class="session-badge ${s.status==='completed'?'ok':'fail'}">${s.status==='completed'?'TAMAM':s.status==='violated'?'İHLAL':'TERK'}</div>
-          </div>`).join('')}</div>`;
+            ${detailsHtml}
+            ${noteHtml}
+          </div>`;
+        }).join('')}</div>`;
   } else if (_userPageActiveTab === 'reposts') {
     tabHtml = reposts.length === 0
       ? `<div class="profile-empty-tab">REPOST YOK</div>`
@@ -1369,12 +1465,17 @@ function renderUserPage(user) {
 // FRIEND LIST MODAL
 // ============================================================
 let _flModalAllUsers = [];
+let _flModalType = 'followers';
+let _flModalUsername = '';
 
 async function openFriendListModal(username, type = 'followers') {
   const modal = document.getElementById('friendListModal');
   const title = document.getElementById('friendListTitle');
   const content = document.getElementById('friendListContent');
   if (!modal || !title || !content) return;
+
+  _flModalType = type;
+  _flModalUsername = username;
 
   let displayTitle = 'TAKİPÇİLER';
   if (type === 'following') displayTitle = 'TAKİP EDİLENLER';
@@ -1397,7 +1498,7 @@ async function openFriendListModal(username, type = 'followers') {
   modal.classList.add('open');
 
   try {
-    const res = await fetch(`/api/users/${username}/friends`);
+    const res = await fetch(`/api/users/${username}/${type}`);
     const friends = await res.json();
     _flModalAllUsers = Array.isArray(friends) ? friends : [];
     renderFriendListItems(_flModalAllUsers);
@@ -1429,18 +1530,84 @@ function renderFriendListItems(users) {
     return;
   }
 
-  container.innerHTML = users.map(f => `
-    <div class="fl-row" onclick="closeFriendListModal();openUserPage('${esc(f.username)}')" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; margin-bottom:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; cursor:pointer; transition:all 0.15s ease;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        ${renderAvatar(f, 'avatar avatar-md')}
-        <div class="fl-info">
-          <div class="fl-name" style="font-weight:800; color:#fff; font-size:13.5px;">${esc(f.display_name || f.username)}</div>
-          <div class="fl-sub" style="font-size:11px; color:var(--text-3); font-weight:600;">@${esc(f.username)} &bull; LVL ${f.level || 1}</div>
+  const isMyProfile = _flModalUsername === currentUser?.username;
+
+  container.innerHTML = users.map(f => {
+    let actionBtnHtml = '';
+    
+    if (isMyProfile) {
+      if (_flModalType === 'following') {
+        actionBtnHtml = `<button class="mono-btn-danger" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`;
+      } else if (_flModalType === 'followers') {
+        const followBtn = f.is_following 
+          ? `<button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`
+          : `<button class="mono-btn-primary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flFollowUser('${esc(f.username)}')">Takip Et</button>`;
+        
+        const removeBtn = `<button class="mono-btn-danger" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flRemoveFollower('${esc(f.username)}')">Çıkar</button>`;
+        
+        actionBtnHtml = `<div style="display:flex; gap:6px;">${followBtn}${removeBtn}</div>`;
+      }
+    } else {
+      actionBtnHtml = `<button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); closeFriendListModal(); openUserPage('${esc(f.username)}')">GÖR</button>`;
+    }
+
+    return `
+      <div class="fl-row" onclick="closeFriendListModal();openUserPage('${esc(f.username)}')" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; margin-bottom:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; cursor:pointer; transition:all 0.15s ease;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          ${renderAvatar(f, 'avatar avatar-md')}
+          <div class="fl-info">
+            <div class="fl-name" style="font-weight:800; color:#fff; font-size:13.5px;">${esc(f.display_name || f.username)}</div>
+            <div class="fl-sub" style="font-size:11px; color:var(--text-3); font-weight:600;">@${esc(f.username)} &bull; LVL ${f.level || 1}</div>
+          </div>
         </div>
+        ${actionBtnHtml}
       </div>
-      <button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation();closeFriendListModal();openUserPage('${esc(f.username)}')">GÖR</button>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+}
+
+async function flFollowUser(username) {
+  try {
+    const res = await fetch(`/api/follow/${encodeURIComponent(username)}`, { method: 'POST' });
+    if (res.ok) {
+      showToast(`@${username} takip edildi`);
+      openFriendListModal(_flModalUsername, _flModalType);
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'İşlem başarısız oldu');
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function flUnfollowUser(username) {
+  if (!(await window.showConfirm(`@${username} kullanıcısını takipten çıkmak istediğinize emin misiniz?`))) return;
+  try {
+    const res = await fetch(`/api/unfollow/${encodeURIComponent(username)}`, { method: 'POST' });
+    if (res.ok) {
+      showToast(`@${username} takipten çıkarıldı`);
+      openFriendListModal(_flModalUsername, _flModalType);
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'İşlem başarısız oldu');
+    }
+  } catch(e) { console.error(e); }
+}
+
+async function flRemoveFollower(username) {
+  if (!(await window.showConfirm(`@${username} kullanıcısını takipçilerinizden çıkarmak istediğinize emin misiniz?`))) return;
+  try {
+    const res = await fetch(`/api/remove-follower/${encodeURIComponent(username)}`, { method: 'POST' });
+    if (res.ok) {
+      showToast(`@${username} takipçilerinizden çıkarıldı`);
+      openFriendListModal(_flModalUsername, _flModalType);
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'İşlem başarısız oldu');
+    }
+  } catch(e) { console.error(e); }
 }
 
 function closeFriendListModal() {
@@ -1505,11 +1672,15 @@ function updateTimerStats() {
 // AVATAR HELPER
 // ============================================================
 function renderAvatar(user, classes = 'avatar avatar-sm') {
+  const username = (user && user.username) ? user.username : '';
+  const init = username ? username[0].toUpperCase() : '?';
+  const rawPhoto = (user && user.profile_photo) ? String(user.profile_photo).trim() : '';
+  const isDefaultPhoto = !rawPhoto || rawPhoto.includes('default-avatar.png');
+
   let avatarHtml = '';
-  if (user && user.profile_photo) {
-    avatarHtml = `<img src="${user.profile_photo}" alt="${esc(user.username||'')}">`;
+  if (!isDefaultPhoto) {
+    avatarHtml = `<img src="${rawPhoto}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';"><span class="avatar-initials" style="display:none;">${init}</span>`;
   } else {
-    const init = (user && user.username) ? user.username[0].toUpperCase() : '?';
     avatarHtml = `<span class="avatar-initials">${init}</span>`;
   }
 
@@ -1711,7 +1882,20 @@ function openStatusSelector() {
     const avatar = document.getElementById('spmAvatar');
     const name   = document.getElementById('spmDisplayName');
     const handle = document.getElementById('spmHandle');
-    if (avatar) avatar.style.backgroundImage = `url('${currentUser.profile_photo || '/uploads/default-avatar.png'}')`;
+    if (avatar) {
+      if (currentUser.profile_photo && !currentUser.profile_photo.includes('default-avatar.png')) {
+        avatar.style.backgroundImage = `url('${currentUser.profile_photo}')`;
+        avatar.textContent = '';
+      } else {
+        avatar.style.backgroundImage = 'none';
+        avatar.textContent = (currentUser.username ? currentUser.username[0].toUpperCase() : '?');
+        avatar.style.display = 'flex';
+        avatar.style.alignItems = 'center';
+        avatar.style.justifyContent = 'center';
+        avatar.style.fontWeight = '800';
+        avatar.style.color = '#fff';
+      }
+    }
     if (name)   name.textContent   = currentUser.display_name || currentUser.username || 'Kullanıcı';
     if (handle) handle.textContent = `@${currentUser.username || ''}`;
   }
@@ -1811,7 +1995,7 @@ window._statusTooltips = {
     "@username mutfakta gizemli atıştırmalıklar arıyor. (uzakta)",
     "@username gözlerini dinlendiriyor (ya da uyuyakaldı). (uzakta)",
     "@username geçici olarak buralardan uzaklaştı. (uzakta)",
-    "@username bilgisayarın başından kahve kokusuna doğru çekildi. (uzakta)",
+    "@username bilgisayaçrın başından kahve kokusuna doğru çekildi. (uzakta)",
     "@username kedisini sevmek için kısa bir ara verdi. (uzakta)",
     "@username ufuklara dalmış, dönmeyi unutmuş gibi. (uzakta)",
     "@username şu an burada değil ama kalbi bizimle. (uzakta)"
@@ -1833,7 +2017,7 @@ window._statusTooltips = {
     "@username hayata karışmış, gerçek dünyayı keşfediyor. (çevrimdışı)",
     "@username piksellerden uzaklaşıp biraz dinlenmeye çekildi. (çevrimdışı)",
     "@username internetsiz bir adaya düşmüş gibi sessiz... (çevrimdışı)",
-    "@username bilgisayarı kapatıp doğayla buluşmaya gitti. (çevrimdışı)",
+    "@username bilgisayaçrı kapatıp doğayla buluşmaya gitti. (çevrimdışı)",
     "@username şu an gizemli bir şekilde ortadan kayboldu. (çevrimdışı)",
     "@username bataryası bitti ya da fişi çekti. (çevrimdışı)",
     "@username internet kablosunu kemiren bir kediyle boğuşuyor olabilir. (çevrimdışı)",
@@ -1845,7 +2029,7 @@ window._statusTooltips = {
     "@username hayata karışmış, gerçek dünyayı keşfediyor. (çevrimdışı)",
     "@username piksellerden uzaklaşıp biraz dinlenmeye çekildi. (çevrimdışı)",
     "@username internetsiz bir adaya düşmüş gibi sessiz... (çevrimdışı)",
-    "@username bilgisayarı kapatıp doğayla buluşmaya gitti. (çevrimdışı)",
+    "@username bilgisayaçrı kapatıp doğayla buluşmaya gitti. (çevrimdışı)",
     "@username şu an gizemli bir şekilde ortadan kayboldu. (çevrimdışı)",
     "@username bataryası bitti ya da fişi çekti. (çevrimdışı)",
     "@username internet kablosunu kemiren bir kediyle boğuşuyor olabilir. (çevrimdışı)",
@@ -2001,6 +2185,8 @@ function updatePresenceUI() {
   }
 
   document.addEventListener('mouseover', (e) => {
+    // Only process mouseover if it's not a recent touch event
+    if (Date.now() - lastTouchTime < 500) return;
     const target = e.target.closest('[data-tooltip], [title]');
     if (target) {
       showTooltip(target);
@@ -2010,6 +2196,7 @@ function updatePresenceUI() {
   });
 
   document.addEventListener('mouseout', (e) => {
+    if (Date.now() - lastTouchTime < 500) return;
     if (activeTarget) {
       const rel = e.relatedTarget;
       if (!rel || (!activeTarget.contains(rel) && activeTarget !== rel)) {
@@ -2018,7 +2205,41 @@ function updatePresenceUI() {
     }
   });
 
-  document.addEventListener('click', () => hideTooltip());
+  let lastTouchTime = 0;
+  let lastTouchedElement = null;
+
+  document.addEventListener('touchstart', () => {
+    lastTouchTime = Date.now();
+  }, { passive: true });
+
+  document.addEventListener('click', (e) => {
+    const isTouch = (Date.now() - lastTouchTime < 500);
+    const target = e.target.closest('[data-tooltip], [title]');
+
+    if (isTouch && target) {
+      // First tap: show tooltip and prevent action
+      if (lastTouchedElement !== target) {
+        e.preventDefault();
+        e.stopPropagation();
+        lastTouchedElement = target;
+        showTooltip(target);
+        return;
+      } else {
+        // Second tap: allow action and hide tooltip
+        lastTouchedElement = null;
+        hideTooltip();
+        return;
+      }
+    }
+
+    // Click outside or non-touch click
+    if (!e.target.closest('#discordTooltip')) {
+      hideTooltip();
+      if (isTouch) {
+        lastTouchedElement = null;
+      }
+    }
+  }, true);
   window.addEventListener('scroll', () => hideTooltip(), { passive: true });
 })();
 
@@ -2058,10 +2279,16 @@ function updatePresenceUI() {
 
 // ─── MULTI-DEVICE VOICE HANDOVER BACKGROUND POLLER ────────────────
 (function initMultiDeviceHandoverPoller() {
-  setInterval(() => {
-    if (!currentUser) return;
+  const checkHandover = () => {
+    if (!currentUser || document.hidden) return;
     if (typeof checkAndRenderHandoverButton === 'function') {
       checkAndRenderHandoverButton(window._currentPartyId);
     }
-  }, 4000);
+  };
+  setInterval(checkHandover, 4000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      checkHandover();
+    }
+  });
 })();

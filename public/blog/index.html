@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog & Rehberler | BLUNK — Verimlilik, Odak ve Pomodoro</title>
+  <meta name="description" content="BLUNK Blog: Pomodoro tekniği, verimli ders çalışma yöntemleri, co-working bilimi, dopamin nörobilimi ve odak stratejileri üzerine Türkçe rehberler.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://blunk.com.tr/blog/">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=1.0.0">
+  <script src="/js/theme.js"></script>
+  <script src="/js/navbar.js"></script>
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="BLUNK Blog — Verimlilik, Odak ve Pomodoro Rehberleri">
+  <meta property="og:description" content="Pomodoro tekniği, co-working etkisi, dopamin döngüleri ve sınav çalışma yöntemleri.">
+  <meta property="og:url" content="https://blunk.com.tr/blog/">
+  <meta property="og:type" content="website">
+
+  <!-- AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2694418537952605" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #08090c;
+      --text: #c5c6c7;
+      --text-muted: #8a9099;
+      --heading: #ffffff;
+      --card-bg: rgba(255,255,255,0.025);
+      --card-border: rgba(255,255,255,0.07);
+      --nav-bg: rgba(8,9,12,0.88);
+      --nav-border: rgba(255,255,255,0.08);
+    }
+
+    html.light-mode {
+      --bg: #f4f3f8;
+      --text: #333645;
+      --text-muted: #62667d;
+      --heading: #12131c;
+      --card-bg: #ffffff;
+      --card-border: rgba(108,99,255,0.12);
+      --nav-bg: rgba(244,243,248,0.92);
+      --nav-border: rgba(108,99,255,0.12);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* Standard Navigation */
+    .site-nav {
+      position: sticky; top: 0; z-index: 1000;
+      background: var(--nav-bg);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--nav-border);
+      padding: 14px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      font-size: 22px; font-weight: 900; letter-spacing: 3px;
+      background: linear-gradient(135deg, #a855f7, #6c63ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 13px; font-weight: 600; transition: color 0.2s; }
+    .nav-links a:hover, .nav-links a.active { color: var(--heading); }
+    
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+
+    .theme-toggle-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--heading);
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; transition: all 0.2s;
+    }
+    .theme-toggle-btn:hover { transform: scale(1.1); }
+
+    .nav-cta {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      color: #fff !important; padding: 9px 20px; border-radius: 20px;
+      font-size: 12px; font-weight: 800; border: none; cursor: pointer;
+      box-shadow: 0 4px 15px rgba(108,99,255,0.3); transition: transform 0.2s;
+    }
+    .nav-cta:hover { transform: scale(1.04); }
+
+    .blog-hero { text-align: center; padding: 72px 24px 52px; border-bottom: 1px solid var(--card-border); background: radial-gradient(ellipse at 50% 0%, rgba(108,99,255,0.1) 0%, transparent 60%); }
+    .blog-hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(108,99,255,0.12); border: 1px solid rgba(108,99,255,0.3); color: #a78bfa; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 6px 14px; border-radius: 20px; margin-bottom: 20px; }
+    .blog-hero h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 900; color: var(--heading); letter-spacing: -1px; margin-bottom: 14px; }
+    .blog-hero h1 span { background: linear-gradient(135deg, #6c63ff, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .blog-hero p { font-size: 15px; color: var(--text-muted); max-width: 560px; margin: 0 auto 24px; }
+
+    .blog-filter-bar { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
+    .blog-filter-btn { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); font-size: 12px; font-weight: 700; padding: 7px 16px; border-radius: 20px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+    .blog-filter-btn:hover, .blog-filter-btn.active { background: rgba(108,99,255,0.15); border-color: rgba(108,99,255,0.4); color: #a78bfa; }
+
+    .blog-main { max-width: 1100px; margin: 0 auto; padding: 52px 24px 80px; display: grid; grid-template-columns: 1fr 300px; gap: 40px; }
+    .blog-articles-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+
+    .article-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px; overflow: hidden; text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: all 0.2s; }
+    .article-card:hover { background: rgba(108,99,255,0.06); border-color: rgba(108,99,255,0.25); transform: translateY(-2px); }
+    .article-card-body { padding: 24px 24px 20px; flex: 1; }
+
+    .article-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .article-tag { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; }
+    .tag-pomodoro { background: rgba(168,85,247,0.12); color: #a855f7; border: 1px solid rgba(168,85,247,0.25); }
+    .tag-verimlilik { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
+    .tag-sinav { background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .tag-psikoloji { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); }
+    .tag-grup { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+
+    .article-card h2 { font-size: 18px; font-weight: 800; color: var(--heading); line-height: 1.3; margin-bottom: 10px; letter-spacing: -0.3px; }
+    .article-card p { font-size: 13.5px; color: var(--text-muted); line-height: 1.7; margin: 0; }
+
+    .article-card-footer { padding: 14px 24px; border-top: 1px solid var(--card-border); display: flex; align-items: center; justify-content: space-between; }
+    .article-meta { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+    .article-read-btn { font-size: 11px; font-weight: 800; color: #a78bfa; letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px; }
+
+    .article-card.featured { border-color: rgba(108,99,255,0.3); }
+    .article-card.featured h2 { font-size: 22px; }
+    .featured-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #f59e0b; margin-bottom: 12px; }
+
+    .blog-sidebar { display: flex; flex-direction: column; gap: 20px; }
+    .sidebar-widget { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 20px; }
+    .sidebar-widget h3 { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #a78bfa; margin-bottom: 14px; }
+
+    .category-list { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
+    .category-list a { font-size: 13px; color: var(--text-muted); text-decoration: none; font-weight: 600; }
+    .category-count { font-size: 11px; font-weight: 700; color: var(--text-muted); background: var(--card-bg); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--card-border); }
+
+    footer { border-top: 1px solid var(--card-border); padding: 36px 24px; text-align: center; }
+    @media (max-width: 768px) { .blog-main { grid-template-columns: 1fr; } .blog-sidebar { order: -1; } .nav-links { display: none; } }
+  </style>
+</head>
+<body>
+
+  <div id="blunkNavbar"></div>
+
+  <header class="blog-hero">
+    <div class="blog-hero-badge">BLUNK Bilim & Rehberlik</div>
+    <h1>Odaklan, <span>Öğren, Üret</span></h1>
+    <p>Nörobilim, grup psikolojisi, Pomodoro ve çalışma verimliliği üzerine detaylı bilimsel rehberler.</p>
+    <div class="blog-filter-bar">
+      <button class="blog-filter-btn active" onclick="filterCategory('all')">Tümü</button>
+      <button class="blog-filter-btn" onclick="filterCategory('pomodoro')">⏱️ Pomodoro</button>
+      <button class="blog-filter-btn" onclick="filterCategory('verimlilik')">⚡ Verimlilik</button>
+      <button class="blog-filter-btn" onclick="filterCategory('psikoloji')">🧠 Psikoloji & Nörobilim</button>
+      <button class="blog-filter-btn" onclick="filterCategory('grup')">👥 Grup Çalışması</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="blog-main">
+      <div>
+        <div class="blog-articles-grid" id="articlesGrid">
+
+          <!-- Card 1: Co-Working -->
+          <a href="/blog/co-working-etkisi.html" class="article-card featured" data-category="psikoloji grup">
+            <div class="article-card-body">
+              <div class="featured-badge">Yeni Bilimsel İnceleme</div>
+              <div class="article-tags">
+                <span class="article-tag tag-psikoloji">Psikoloji</span>
+                <span class="article-tag tag-grup">Grup Çalışması</span>
+              </div>
+              <h2>Co-Working Etkisi ve Sosyal Kolaylaştırma: Birlikte Çalışmanın Nörobilimi</h2>
+              <p>Neden tek başımıza masayaç oturduğumuzda erteleriz de bir kütüphanede veya sesli oda ortamında saatlerce ara vermeden çalışabiliriz? Sosyal psikoloji yanıtlıyor.</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 9 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+          <!-- Card 2: Dopamin -->
+          <a href="/blog/dopamin-ve-odaklanma.html" class="article-card" data-category="psikoloji verimlilik">
+            <div class="article-card-body">
+              <div class="article-tags">
+                <span class="article-tag tag-psikoloji">Nörobilim</span>
+                <span class="article-tag tag-verimlilik">Verimlilik</span>
+              </div>
+              <h2>Dopamin Nörobiyolojisi ve Odaklanma: Beynin Ödül Sistemini Yönetmek</h2>
+              <p>Dopamin bir zevk hormonu değil, beklenti ve motivasyon molekülüdür. Ucuz dopamin tuzaklarından kurtulup derin çalışma moduna nasıl geçilir?</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 10 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+          <!-- Card 3: Deep Work -->
+          <a href="/blog/dijital-dikkat-daginikligi.html" class="article-card" data-category="verimlilik">
+            <div class="article-card-body">
+              <div class="article-tags">
+                <span class="article-tag tag-verimlilik">Deep Work</span>
+              </div>
+              <h2>Dijital Dikkat Dağınıklığı ve Deep Work: Derin Odaklanma Rehberi</h2>
+              <p>Multitasking neden bir illüzyondur? Bildirimlerin beyin üzerindeki dikkat kalıntısı (Attention Residue) etkisi ve Cal Newport felsefesi.</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 9 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+          <!-- Card 4: Köhler -->
+          <a href="/blog/sosyal-kaytarma-ve-kohler-etkisi.html" class="article-card" data-category="grup psikoloji">
+            <div class="article-card-body">
+              <div class="article-tags">
+                <span class="article-tag tag-grup">Grup Psikolojisi</span>
+              </div>
+              <h2>Köhler Etkisi ve Sosyal Kaytarma: Çalışma Gruplarında Maksimum Performans</h2>
+              <p>Grup çalışmalarında bazıları neden kaytarır (Social Loafing) ve bazı gruplar neden performansı uçurur (Köhler Etkisi)?</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 8 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+          <!-- Card 5: Ultradiyen -->
+          <a href="/blog/ultradiyen-ritimler.html" class="article-card" data-category="verimlilik">
+            <div class="article-card-body">
+              <div class="article-tags">
+                <span class="article-tag tag-verimlilik">Biyolojik Ritim</span>
+              </div>
+              <h2>Ultradiyen Ritimler ve 90/20 Kuralı: Biyolojik Saatle Çalışmak</h2>
+              <p>Beyninizin doğal 90 dakikalık enerji dalgaları (Ultradian Rhythms) nedir? Pomodoro ile karşılaştırmalı inceleme.</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 9 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+          <!-- Card 6: Pomodoro -->
+          <a href="/blog/pomodoro-teknigi.html" class="article-card" data-category="pomodoro verimlilik">
+            <div class="article-card-body">
+              <div class="article-tags">
+                <span class="article-tag tag-pomodoro">Pomodoro</span>
+                <span class="article-tag tag-verimlilik">Verimlilik</span>
+              </div>
+              <h2>Pomodoro Tekniği Nedir? Nasıl Kullanılır? Eksiksiz Rehber</h2>
+              <p>25 dakika çalış, 5 dakika mola ver — bilimsel temeli, uygulama yöntemleri ve BLUNK ile nasıl kullanılacağı.</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 8 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+          <!-- Card 7: Verimli Çalışma -->
+          <a href="/blog/verimli-ders-calisma.html" class="article-card" data-category="verimlilik sinav">
+            <div class="article-card-body">
+              <div class="article-tags">
+                <span class="article-tag tag-verimlilik">Verimlilik</span>
+                <span class="article-tag tag-sinav">Sınav Hazırlık</span>
+              </div>
+              <h2>YKS, KPSS ve Üniversite İçin Verimli Ders Çalışma Yöntemleri</h2>
+              <p>Spaced repetition, aktif hatırlama ve interleaving — sınavlarda fark yaratan kanıtlanmış teknikler.</p>
+            </div>
+            <div class="article-card-footer">
+              <span class="article-meta">31 Temmuz 2026 · 10 dk okuma</span>
+              <span class="article-read-btn">Okumaya Başla</span>
+            </div>
+          </a>
+
+        </div>
+      </div>
+
+      <aside class="blog-sidebar">
+        <div class="sidebar-widget">
+          <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-2694418537952605" data-ad-slot="auto" data-ad-format="auto" data-full-width-responsive="true"></ins>
+          <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        </div>
+
+        <div class="sidebar-widget">
+          <h3>Kategoriler</h3>
+          <ul class="category-list">
+            <li style="display:flex; justify-content:space-between; align-items:center;"><a href="#" onclick="filterCategory('pomodoro'); return false;">⏱️ Pomodoro</a> <span class="category-count">2</span></li>
+            <li style="display:flex; justify-content:space-between; align-items:center;"><a href="#" onclick="filterCategory('verimlilik'); return false;">⚡ Verimlilik</a> <span class="category-count">5</span></li>
+            <li style="display:flex; justify-content:space-between; align-items:center;"><a href="#" onclick="filterCategory('psikoloji'); return false;">🧠 Psikoloji & Nörobilim</a> <span class="category-count">3</span></li>
+            <li style="display:flex; justify-content:space-between; align-items:center;"><a href="#" onclick="filterCategory('grup'); return false;">👥 Grup Çalışması</a> <span class="category-count">2</span></li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="nav-brand" style="margin-bottom:14px; display:inline-block;">BLUNK</div>
+    <p style="font-size:11px; color:var(--text-muted);">© 2026 BLUNK — blunkcomtr@gmail.com</p>
+  </footer>
+
+  <script>
+    function filterCategory(cat) {
+      document.querySelectorAll('.blog-filter-btn').forEach(b => b.classList.remove('active'));
+      if(event && event.target) event.target.classList.add('active');
+      document.querySelectorAll('.article-card[data-category]').forEach(card => {
+        if (cat === 'all' || card.dataset.category.includes(cat)) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

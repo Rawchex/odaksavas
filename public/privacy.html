@@ -4,53 +4,255 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gizlilik Politikası | BLUNK</title>
+  <meta name="description" content="BLUNK gizlilik politikası: kişisel verilerin toplanması, kullanımı, Google AdSense çerezleri, KVKK kapsamında kullanıcı hakları ve veri güvenliği.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://blunk.com.tr/privacy">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
   <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
-  <link rel="stylesheet" href="/css/style.css?v=72.0.4">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css?v=1.0.0">
+  <script src="/js/theme.js"></script>
+  <script src="/js/navbar.js"></script>
   <style>
-    body { background: #0b0c10; color: #c5c6c7; font-family: 'Inter', sans-serif; padding: 40px 20px; line-height: 1.6; }
-    .container { max-width: 800px; margin: 0 auto; background: rgba(19, 21, 29, 0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 32px; backdrop-filter: blur(10px); }
-    h1 { color: #fff; font-size: 28px; margin-bottom: 20px; font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; }
-    h2 { color: #6c63ff; font-size: 20px; margin-top: 24px; margin-bottom: 12px; }
-    p { margin-bottom: 16px; font-size: 14px; color: #a4a9b3; }
-    ul { margin-bottom: 16px; padding-left: 20px; }
-    li { margin-bottom: 8px; font-size: 14px; color: #a4a9b3; }
-    a { color: #6c63ff; text-decoration: none; font-weight: 600; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #08090c; color: #c5c6c7; font-family: 'Inter', system-ui, sans-serif; padding: 0; line-height: 1.7; }
+
+    .site-nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,9,12,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      font-size: 20px; font-weight: 900; letter-spacing: 3px;
+      background: linear-gradient(135deg, #fff 30%, #a855f7 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 20px; list-style: none; }
+    .nav-links a { color: #888; text-decoration: none; font-size: 13px; font-weight: 600; transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; }
+
+    .page-wrap { max-width: 800px; margin: 0 auto; padding: 60px 24px 80px; }
+
+    .page-title {
+      font-size: clamp(26px, 4vw, 38px); font-weight: 900; color: #fff;
+      letter-spacing: -1px; margin-bottom: 8px;
+    }
+    .page-date { font-size: 12px; color: #555; margin-bottom: 40px; }
+
+    h2 {
+      font-size: 17px; font-weight: 700; color: #a78bfa;
+      margin: 36px 0 12px; border-left: 3px solid rgba(168,85,247,0.5);
+      padding-left: 12px;
+    }
+    h3 { font-size: 14px; font-weight: 700; color: #ddd; margin: 20px 0 8px; }
+    p { font-size: 14px; color: #8a9099; line-height: 1.8; margin-bottom: 14px; }
+    ul { margin: 0 0 14px 20px; }
+    li { font-size: 14px; color: #8a9099; line-height: 1.8; margin-bottom: 6px; }
+    a { color: #a78bfa; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .back-link { display: inline-block; margin-bottom: 20px; background: rgba(255,255,255,0.05); padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+    strong { color: #ccc; font-weight: 600; }
+
+    .info-box {
+      background: rgba(108,99,255,0.07); border: 1px solid rgba(108,99,255,0.2);
+      border-radius: 12px; padding: 16px 20px; margin: 20px 0;
+    }
+    .info-box p { margin: 0; font-size: 13px; }
+
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    th { background: rgba(255,255,255,0.05); color: #ccc; font-weight: 700; padding: 10px 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    td { padding: 10px 14px; color: #888; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    tr:last-child td { border-bottom: none; }
+
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.07); padding: 32px 24px;
+      text-align: center; font-size: 12px; color: #444;
+    }
+    .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-bottom: 12px; list-style: none; }
+    .footer-links a { color: #555; text-decoration: none; font-size: 12px; }
+    .footer-links a:hover { color: #aaa; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <a href="/" class="back-link">← Ana Sayfaya Dön</a>
-    <h1>Gizlilik Politikası</h1>
-    <p>Son Güncelleme: 30 Temmuz 2026</p>
-    
-    <p>BLUNK ("biz", "bizim"), kullanıcılarımızın kişisel verilerinin ve gizliliğinin korunmasına büyük önem vermektedir. Bu Gizlilik Politikası, platformumuzu kullandığınızda toplanan verilerin nasıl işlendiğini açıklar.</p>
 
-    <h2>1. Toplanan Bilgiler</h2>
-    <p>BLUNK platformunu kullanırken aşağıdaki veriler toplanabilir:</p>
+  <div id="blunkNavbar"></div>
+
+  <main class="page-wrap">
+    <h1 class="page-title">Gizlilik Politikası</h1>
+    <p class="page-date">Son Güncelleme: 31 Temmuz 2026 &nbsp;|&nbsp; Sürüm 2.0</p>
+
+    <p>
+      BLUNK ("biz", "bizim", "platform"), kullanıcılarımızın kişisel verilerinin gizliliğine ve güvenliğine büyük önem vermektedir. Bu Gizlilik Politikası, <a href="https://blunk.com.tr">blunk.com.tr</a> adresini veya BLUNK uygulamasını kullandığınızda hangi verilerin toplandığını, nasıl işlendiğini, kimlerle paylaşıldığını ve haklarınızı açıklar.
+    </p>
+
+    <div class="info-box">
+      <p>
+        📧 Gizlilik politikamız hakkında sorularınız için:
+        <a href="mailto:blunkcomtr@gmail.com">blunkcomtr@gmail.com</a>
+      </p>
+    </div>
+
+    <h2>1. Topladığımız Veriler</h2>
+
+    <h3>1.1 Hesap Bilgileri</h3>
+    <p>Kayıt sırasında ve platformu kullanırken aşağıdaki bilgileri toplayabiliriz:</p>
     <ul>
-      <li><strong>Hesap Bilgileri:</strong> Kullanıcı adı, e-posta adresi, profil fotoğrafı ve şifrelenmiş kimlik doğrulama verileri.</li>
-      <li><strong>Kullanım Verileri:</strong> Çalışma süreleri, Pomodoro seansları, kazanılan XP ve başarı seviyeleri.</li>
-      <li><strong>Teknik Veriler:</strong> IP adresi, tarayıcı türü, cihaz bilgileri ve çerezler (cookies).</li>
+      <li><strong>Kullanıcı adı ve e-posta adresi</strong> — hesap oluşturma ve doğrulama için</li>
+      <li><strong>Profil fotoğrafı</strong> — isteğe bağlı, siz yüklerseniz</li>
+      <li><strong>Biyografi ve çalışma kategorisi</strong> — isteğe bağlı profil bilgileri</li>
+      <li><strong>Şifreli kimlik doğrulama verisi</strong> — bcrypt ile hashlenerek saklanır, asla düz metin olarak tutulmaz</li>
+      <li><strong>Google OAuth token</strong> — Google ile giriş tercih edilirse, kullanıcı ID'si ve e-posta Google tarafından güvenli şekilde iletilir</li>
     </ul>
 
-    <h2>2. Çerezler ve Reklam Teknolojileri (Google AdSense)</h2>
-    <p>BLUNK, kullanıcı deneyimini geliştirmek ve içerik sunumunu finanse etmek amacıyla üçüncü taraf hizmet sağlayıcıları ve reklam ağlarını kullanmaktadır.</p>
-    <p>Google dâhil üçüncü taraf satıcılar, kullanıcıların web sitemize veya diğer web sitelerine yaptığı önceki ziyaretlere dayalı olarak reklam yayınlamak için çerezleri (cookies) kullanır. Google'ın reklam çerezlerini kullanması, kendisinin ve ortaklarının kullanıcılara sitemiz ve/veya İnternet'teki diğer sitelere yaptıkları ziyaretlere dayalı olarak reklamlar sunmasına olanak tanır.</p>
-    <p>Kullanıcılar, <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener">Google Kişiselleştirilmiş Reklam Ayarları</a> sayfasını ziyaret ederek kişiselleştirilmiş reklamcılığı devre dışı bırakabilirler.</p>
-
-    <h2>3. Bilgilerin Kullanımı</h2>
-    <p>Toplanan bilgiler aşağıdaki amaçlarla kullanılır:</p>
+    <h3>1.2 Kullanım Verileri</h3>
     <ul>
-      <li>Platform hizmetlerinin ve sesli çalışma odalarının sunulması,</li>
-      <li>Kullanıcı deneyiminin iyileştirilmesi ve performans takibi,</li>
-      <li>Topluluk güvenliğinin sağlanması ve kural ihlallerinin tespiti.</li>
+      <li>Odaklanma seanslarının başlangıç/bitiş zamanları ve süreleri</li>
+      <li>Tamamlanan Pomodoro seansı sayısı</li>
+      <li>Kazanılan XP miktarı ve seviye bilgisi</li>
+      <li>Katıldığınız odalar ve oda süresi</li>
+      <li>Paylaştığınız gönderiler, yorumlar ve beğeniler</li>
     </ul>
 
-    <h2>4. İletişim</h2>
-    <p>Gizlilik politikamızla ilgili her türlü soru ve talebiniz için destek ekibimizle iletişime geçebilirsiniz.</p>
-  </div>
+    <h3>1.3 Teknik Veriler</h3>
+    <ul>
+      <li>IP adresi (güvenlik, hız sınırı ve coğrafi kısıtlama için)</li>
+      <li>Tarayıcı türü ve sürümü</li>
+      <li>Cihaz türü (masaüstü / mobil)</li>
+      <li>JWT oturum token'ı (çerez olarak saklanır)</li>
+      <li>Sayfa ziyareti zamanları ve hata logları (yalnızca sunucu tarafında)</li>
+    </ul>
+
+    <h2>2. Çerezler ve Reklamcılık Teknolojileri</h2>
+
+    <h3>2.1 Zorunlu Çerezler</h3>
+    <p>
+      Platformun çalışması için gereken oturum çerezi (<code>auth_token</code>) kullanılır. Bu çerez, giriş yaptığınızda ayarlanır ve tarayıcı kapatıldığında veya çıkış yapıldığında silinir. Bu çerezler devre dışı bırakılamaz; zira platformu kullanmak için zorunludur.
+    </p>
+
+    <h3>2.2 Google AdSense Çerezleri</h3>
+    <p>
+      BLUNK, platform giderlerini karşılamak amacıyla Google AdSense reklam sistemi kullanmaktadır. Google, reklam hedefleme amacıyla çerezler kullanabilir. Bu çerezler kullanıcıların daha önce ziyaret ettiği sitelere dayalı olarak kişiselleştirilmiş reklamlar sunmak için kullanılabilir.
+    </p>
+    <p>
+      Google'ın kişiselleştirilmiş reklamlarını <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer">Google Reklam Ayarları</a> sayfasından devre dışı bırakabilirsiniz. Ayrıca <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener noreferrer">AboutAds.info</a> sitesinden üçüncü taraf reklam çerezlerini yönetebilirsiniz.
+    </p>
+
+    <h3>2.3 Kullandığımız Üçüncü Taraf Hizmetler</h3>
+    <table>
+      <thead>
+        <tr><th>Hizmet</th><th>Amaç</th><th>Gizlilik Politikası</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Google AdSense</td>
+          <td>Reklam gösterimi</td>
+          <td><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com</a></td>
+        </tr>
+        <tr>
+          <td>Google Sign-In (OAuth)</td>
+          <td>Google hesabıyla kimlik doğrulama</td>
+          <td><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com</a></td>
+        </tr>
+        <tr>
+          <td>Railway / Cloudflare</td>
+          <td>Hosting altyapısı ve CDN</td>
+          <td>Altyapı sağlayıcısı politikaları geçerli</td>
+        </tr>
+        <tr>
+          <td>WebRTC (tarayıcı yerleşik)</td>
+          <td>Sesli oda iletişimi</td>
+          <td>Peer-to-peer, veriler BLUNK sunucuları üzerinden geçmez</td>
+        </tr>
+        <tr>
+          <td>Web Push (webpush-vapid)</td>
+          <td>Anlık bildirimler</td>
+          <td>Tarayıcı bildirim altyapısı kullanılır</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Verilerin Kullanım Amaçları</h2>
+    <p>Topladığımız veriler yalnızca aşağıdaki amaçlarla kullanılır:</p>
+    <ul>
+      <li>Kullanıcı hesabı oluşturma ve kimlik doğrulama</li>
+      <li>Sesli odalar, Pomodoro ve XP sistemi gibi platform hizmetlerinin sunulması</li>
+      <li>Liderlik tablosu ve istatistik hesaplamalarının yapılması</li>
+      <li>Kullanıcı güvenliğinin korunması ve kötüye kullanımın önlenmesi</li>
+      <li>Hata tespiti ve platform performansının iyileştirilmesi</li>
+      <li>Gizlilik politikası ve kullanım şartları değişikliklerinin bildirilmesi</li>
+    </ul>
+    <p>Verilerinizi hiçbir koşulda üçüncü taraf pazarlama şirketlerine satmıyoruz.</p>
+
+    <h2>4. Veri Saklama Süreleri</h2>
+    <table>
+      <thead>
+        <tr><th>Veri Türü</th><th>Saklama Süresi</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Hesap verileri</td><td>Hesap silinene kadar</td></tr>
+        <tr><td>Odaklanma seansı kayıtları</td><td>Hesap silinene kadar</td></tr>
+        <tr><td>Mesajlaşma içerikleri</td><td>Ayarlanmış süreli mesaj süresi (varsayılan 24 saat)</td></tr>
+        <tr><td>Sunucu hata logları</td><td>30 gün</td></tr>
+        <tr><td>Oturum token'ları</td><td>Çıkış yapana kadar veya 30 gün</td></tr>
+        <tr><td>Silinen hesap verileri</td><td>Silme talebinden 48 saat içinde kalıcı olarak silinir</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. Veri Güvenliği</h2>
+    <p>Verilerinizin güvenliği için aşağıdaki önlemleri uyguluyoruz:</p>
+    <ul>
+      <li>Tüm bağlantılar HTTPS/TLS üzerinden şifrelenir</li>
+      <li>Şifreler bcrypt ile hashlenir, düz metin olarak saklanmaz</li>
+      <li>JWT token'ları HTTP-only cookie olarak saklanır (XSS'e karşı)</li>
+      <li>API endpoint'lerinde hız sınırlaması (rate limiting) uygulanır</li>
+      <li>Dosya yükleme boyutu ve formatı kısıtlaması mevcuttur</li>
+    </ul>
+
+    <h2>6. KVKK Kapsamında Haklarınız</h2>
+    <p>6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) kapsamında aşağıdaki haklara sahipsiniz:</p>
+    <ul>
+      <li><strong>Bilgi edinme hakkı:</strong> Hakkınızda hangi verilerin işlendiğini öğrenebilirsiniz.</li>
+      <li><strong>Erişim hakkı:</strong> Kişisel verilerinizin bir kopyasını talep edebilirsiniz.</li>
+      <li><strong>Düzeltme hakkı:</strong> Yanlış veya eksik verilerin düzeltilmesini isteyebilirsiniz.</li>
+      <li><strong>Silme hakkı ("unutulma hakkı"):</strong> Hesabınızın ve tüm verilerinizin silinmesini talep edebilirsiniz.</li>
+      <li><strong>İtiraz hakkı:</strong> Kişisel verilerinizin işlenmesine itiraz edebilirsiniz.</li>
+    </ul>
+    <p>
+      Bu haklarınızı kullanmak için <a href="mailto:blunkcomtr@gmail.com">blunkcomtr@gmail.com</a> adresine e-posta gönderin. Talepler 48 saat içinde işleme alınır.
+    </p>
+
+    <h2>7. Çocukların Gizliliği</h2>
+    <p>
+      BLUNK, 13 yaşın altındaki çocukları hedef almamaktadır ve bu yaş grubundan bilerek veri toplamamaktadır. 13 yaşından küçük bir çocuğun hesap oluşturduğunu fark edersek, hesabı ve ilgili verileri derhal sileriz. Böyle bir durum fark ederseniz lütfen bize bildirin.
+    </p>
+
+    <h2>8. Bu Politikadaki Değişiklikler</h2>
+    <p>
+      Bu gizlilik politikasını zaman zaman güncelleyebiliriz. Önemli değişiklikler yapıldığında, kullanıcılarımızı platform üzerinden veya e-posta yoluyla bilgilendiririz. Bu sayfanın üstündeki "Son Güncelleme" tarihini düzenli olarak kontrol etmenizi öneririz.
+    </p>
+
+    <h2>9. İletişim</h2>
+    <p>
+      Gizlilik politikamız hakkında sorularınız veya talepleriniz için:
+    </p>
+    <ul>
+      <li><strong>E-posta:</strong> <a href="mailto:blunkcomtr@gmail.com">blunkcomtr@gmail.com</a></li>
+      <li><strong>İletişim sayfası:</strong> <a href="/contact">blunk.com.tr/contact</a></li>
+    </ul>
+
+  </main>
+
+  <footer role="contentinfo">
+    <ul class="footer-links">
+      <li><a href="/">Ana Sayfa</a></li>
+      <li><a href="/about">Hakkımızda</a></li>
+      <li><a href="/contact">İletişim</a></li>
+      <li><a href="/privacy">Gizlilik Politikası</a></li>
+      <li><a href="/terms">Kullanım Şartları</a></li>
+    </ul>
+    <p>© 2026 BLUNK — blunkcomtr@gmail.com</p>
+  </footer>
+
 </body>
 </html>
