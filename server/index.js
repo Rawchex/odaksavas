@@ -1366,6 +1366,7 @@ app.get('/api/users/:username', auth, (req, res) => {
                       friendship,
                       is_locked: !!isLocked
                     });
+                    });
                   });
                 });
               });
