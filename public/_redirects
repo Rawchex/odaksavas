@@ -1,2 +1,18 @@
-# SPA routing - tüm istekleri index.html'e yönlendir
+# API and static paths should not be handled by SPA routing
+/api/* /api/:splat 200
+/blog /blog/ 301
+/blog/* /blog/:splat 200
+/css/* /css/:splat 200
+/js/* /js/:splat 200
+/audio/* /audio/:splat 200
+/uploads/* /uploads/:splat 200
+/about.html /about.html 200
+/contact.html /contact.html 200
+/privacy.html /privacy.html 200
+/terms.html /terms.html 200
+/sitemap.xml /sitemap.xml 200
+/robots.txt /robots.txt 200
+/ads.txt /ads.txt 200
+
+# SPA routing - redirect other non-file requests to index.html
 /* /index.html 200

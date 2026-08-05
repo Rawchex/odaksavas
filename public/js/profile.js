@@ -69,8 +69,8 @@ function renderMyProfile(user) {
       : `<div class="profile-sessions-list">${sessions.slice(0, 30).map(s => {
           const detailParts = [];
           if (s.feeling) detailParts.push(`<span class="session-detail-feeling">${esc(s.feeling)}</span>`);
-          if (s.category) detailParts.push(`<span class="session-detail-category">📁 ${esc(s.category)}</span>`);
-          if (s.activity) detailParts.push(`<span class="session-detail-activity">🎯 ${esc(s.activity)}</span>`);
+          if (s.category) detailParts.push(`<span class="session-detail-category">${esc(s.category)}</span>`);
+          if (s.activity) detailParts.push(`<span class="session-detail-activity">${esc(s.activity)}</span>`);
           
           const detailsHtml = detailParts.length > 0 
             ? `<div class="session-row-details" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:10px; color:var(--text-3); font-weight:600;">

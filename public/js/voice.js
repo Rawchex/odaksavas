@@ -1527,7 +1527,7 @@ async function openUserVoiceModal(username) {
     const serverMuteButton = document.getElementById('uvServerMuteBtn');
     if (serverMuteButton) {
       const serverMuted = !!targetMember?.server_muted;
-      serverMuteButton.textContent = serverMuted ? 'ODA GENELİ SUSTURMAYI KALDIR' : 'ODA GENELİÖNDE SUSTUR';
+      serverMuteButton.textContent = serverMuted ? 'ODA GENELİ SUSTURMAYI KALDIR' : 'ODA GENELİNDE SUSTUR';
       serverMuteButton.dataset.muted = String(serverMuted);
       serverMuteButton.style.display = canManage ? 'block' : 'none';
       serverMuteButton.style.color = serverMuted ? '#a7f3c1' : '#ffb3b5';

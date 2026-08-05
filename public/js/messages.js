@@ -1047,7 +1047,7 @@ function renderCreateGroupFriends() {
     return `
       <div class="share-item ${selectedClass}" onclick="toggleGroupFriendSelection('${esc(f.username)}')">
         <div class="share-avatar-wrapper">
-          ${renderAvatar({ username: f.username, profile_photo: f.profile_photo }, 'share-avatar-img')}
+          ${renderAvatar({ username: f.username, profile_photo: f.profile_photo }, 'avatar')}
           <div class="share-select-badge">${selectChar}</div>
         </div>
         <span class="share-name-label">@${esc(f.username)}</span>
@@ -1118,7 +1118,7 @@ function renderCreateGroupOtherUsers(users) {
     return `
       <div class="share-item ${selectedClass}" onclick="toggleGroupFriendSelection('${esc(u.username)}')">
         <div class="share-avatar-wrapper">
-          ${renderAvatar({ username: u.username, profile_photo: u.profile_photo }, 'share-avatar-img')}
+          ${renderAvatar({ username: u.username, profile_photo: u.profile_photo }, 'avatar')}
           <div class="share-select-badge">${selectChar}</div>
         </div>
         <span class="share-name-label">@${esc(u.username)}</span>
@@ -1438,6 +1438,9 @@ async function sendForwardedMessage(isGroup, targetPartner, targetId) {
 let _activeGroupCreatorId = null;
 
 async function openGroupDetailsModal(groupId, groupName) {
+  groupId = groupId || _activeChatId;
+  groupName = groupName || _activeChatPartner || '';
+
   const modal = document.getElementById('groupDetailsModal');
   const nameInput = document.getElementById('groupDetailsNameInput');
   const addMemberSec = document.getElementById('groupDetailsAddMemberSection');
@@ -1493,23 +1496,27 @@ async function refreshGroupDetails(groupId) {
         let kickBtn = '';
         if (currentUser.id === _activeGroupCreatorId && m.id !== _activeGroupCreatorId) {
           kickBtn = `
-            <button onclick="kickGroupMember(${m.id})" style="background:none; border:1px solid #ff1744; color:#ff1744; font-size:8px; font-weight:800; padding:4px 8px; border-radius:10px; cursor:pointer;">ÇIKAR</button>
+            <button onclick="kickGroupMember(${m.id})" class="discord-action-btn danger" data-tooltip="Gruptan Çıkar" data-tooltip-pos="left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/>
+              </svg>
+            </button>
           `;
         }
 
         return `
           <div class="group-member-row">
             <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-family:monospace;font-size:12px;font-weight:900;color:#555">#${idx + 1}</span>
+              <span style="font-family:monospace;font-size:12px;font-weight:900;color:var(--text-3)">#${idx + 1}</span>
               ${renderAvatar(m, 'avatar avatar-sm')}
               <div style="display:flex;flex-direction:column;gap:2px">
                 <div style="display:flex;align-items:center;gap:6px;">
-                  <span style="font-weight:800;font-size:12px;color:#fff">${esc(m.username)}</span>
+                  <span style="font-weight:800;font-size:12px;color:var(--text-1)">${esc(m.username)}</span>
                   ${onlineDot}
                   ${adminBadge}
                 </div>
-                <div style="font-size:10px;color:#555">
-                  Odak: <span style="font-family:monospace;color:#aaa">${fmtSecondsToHMS(m.total_focus_time || 0)}</span>
+                <div style="font-size:10px;color:var(--text-3)">
+                  Odak: <span style="font-family:monospace;color:var(--text-2);font-weight:700">${fmtSecondsToHMS(m.total_focus_time || 0)}</span>
                 </div>
               </div>
             </div>

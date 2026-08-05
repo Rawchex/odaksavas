@@ -1380,10 +1380,11 @@ app.get('/api/users/:username', auth, (req, res) => {
 
 // GET a specific user's friend list (for profile followers/following view)
 app.get('/api/users/:username/friends', auth, (req, res) => {
-  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, user) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
+  db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [targetName], (err, user) => {
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     db.all(`
-      SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.total_focus_time, u.status
+      SELECT DISTINCT u.id, u.username, u.username AS display_name, u.profile_photo, u.level, u.total_focus_time, u.status
       FROM users u
       JOIN friendships f ON ((f.user_id = ? AND f.friend_id = u.id) OR (f.friend_id = ? AND f.user_id = u.id))
       WHERE f.status = 'accepted' AND u.id != ?
@@ -1396,10 +1397,11 @@ app.get('/api/users/:username/friends', auth, (req, res) => {
 
 // GET user's followers list
 app.get('/api/users/:username/followers', auth, (req, res) => {
-  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, user) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
+  db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [targetName], (err, user) => {
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     db.all(`
-      SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.status,
+      SELECT DISTINCT u.id, u.username, u.username AS display_name, u.profile_photo, u.level, u.status,
         (SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = u.id AND status = 'accepted') as is_following
       FROM users u
       JOIN friendships f ON f.user_id = u.id
@@ -1413,10 +1415,11 @@ app.get('/api/users/:username/followers', auth, (req, res) => {
 
 // GET user's following list
 app.get('/api/users/:username/following', auth, (req, res) => {
-  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, user) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
+  db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [targetName], (err, user) => {
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     db.all(`
-      SELECT DISTINCT u.id, u.username, u.display_name, u.profile_photo, u.level, u.status,
+      SELECT DISTINCT u.id, u.username, u.username AS display_name, u.profile_photo, u.level, u.status,
         (SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = u.id AND status = 'accepted') as is_following
       FROM users u
       JOIN friendships f ON f.friend_id = u.id
@@ -1430,7 +1433,8 @@ app.get('/api/users/:username/following', auth, (req, res) => {
 
 // Follow a user
 app.post('/api/follow/:username', auth, (req, res) => {
-  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, target) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
+  db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [targetName], (err, target) => {
     if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     if (target.id === req.user.id) return res.status(400).json({ error: 'Kendinizi takip edemezsiniz' });
     
@@ -1447,7 +1451,8 @@ app.post('/api/follow/:username', auth, (req, res) => {
 
 // Unfollow a user
 app.post('/api/unfollow/:username', auth, (req, res) => {
-  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, target) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
+  db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [targetName], (err, target) => {
     if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     
     db.run(`
@@ -1462,7 +1467,8 @@ app.post('/api/unfollow/:username', auth, (req, res) => {
 
 // Remove a follower
 app.post('/api/remove-follower/:username', auth, (req, res) => {
-  db.get('SELECT id FROM users WHERE username = ?', [req.params.username], (err, target) => {
+  const targetName = (req.params.username || '').replace(/^@/, '').trim();
+  db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [targetName], (err, target) => {
     if (!target) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     
     db.run(`

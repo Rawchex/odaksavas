@@ -1355,8 +1355,8 @@ function renderUserPage(user) {
       : `<div class="profile-sessions-list">${sessions.slice(0,20).map(s => {
           const detailParts = [];
           if (s.feeling) detailParts.push(`<span class="session-detail-feeling">${esc(s.feeling)}</span>`);
-          if (s.category) detailParts.push(`<span class="session-detail-category">📁 ${esc(s.category)}</span>`);
-          if (s.activity) detailParts.push(`<span class="session-detail-activity">🎯 ${esc(s.activity)}</span>`);
+          if (s.category) detailParts.push(`<span class="session-detail-category">${esc(s.category)}</span>`);
+          if (s.activity) detailParts.push(`<span class="session-detail-activity">${esc(s.activity)}</span>`);
           
           const detailsHtml = detailParts.length > 0 
             ? `<div class="session-row-details" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:10px; color:var(--text-3); font-weight:600;">
@@ -1530,25 +1530,25 @@ function renderFriendListItems(users) {
     return;
   }
 
-  const isMyProfile = _flModalUsername === currentUser?.username;
+  const isMyProfile = _flModalUsername.toLowerCase() === (currentUser?.username || '').toLowerCase();
 
   container.innerHTML = users.map(f => {
     let actionBtnHtml = '';
     
-    if (isMyProfile) {
-      if (_flModalType === 'following') {
-        actionBtnHtml = `<button class="mono-btn-danger" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`;
-      } else if (_flModalType === 'followers') {
-        const followBtn = f.is_following 
-          ? `<button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`
-          : `<button class="mono-btn-primary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flFollowUser('${esc(f.username)}')">Takip Et</button>`;
-        
+    if (f.username.toLowerCase() !== (currentUser?.username || '').toLowerCase()) {
+      const isFollowing = parseInt(f.is_following) > 0;
+      const followBtn = isFollowing
+        ? `<button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`
+        : `<button class="mono-btn-primary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flFollowUser('${esc(f.username)}')">Takip Et</button>`;
+      
+      if (isMyProfile && _flModalType === 'followers') {
         const removeBtn = `<button class="mono-btn-danger" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flRemoveFollower('${esc(f.username)}')">Çıkar</button>`;
-        
         actionBtnHtml = `<div style="display:flex; gap:6px;">${followBtn}${removeBtn}</div>`;
+      } else {
+        actionBtnHtml = followBtn;
       }
     } else {
-      actionBtnHtml = `<button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); closeFriendListModal(); openUserPage('${esc(f.username)}')">GÖR</button>`;
+      actionBtnHtml = `<span style="font-size:10px; color:var(--text-3); font-weight:700; padding:0 12px;">SEN</span>`;
     }
 
     return `
@@ -1819,19 +1819,35 @@ function fmtTimeClock(secs) {
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
+function parseDbDate(str) {
+  if (!str) return new Date();
+  if (typeof str !== 'string') return new Date(str);
+  // SQLite datetime strings like "2026-08-05 10:44:00" — treat as UTC
+  if (!str.includes('T') && !str.includes('Z') && !str.includes('+') && str.includes(' ') && str.length >= 19) {
+    return new Date(str.replace(' ', 'T') + 'Z');
+  }
+  return new Date(str);
+}
+
 function fmtDate(str) {
   if (!str) return '';
-  return new Date(str).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  return parseDbDate(str).toLocaleString('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 function fmtPostTime(str) {
   if (!str) return '';
-  const diff = Math.floor((Date.now() - new Date(str)) / 1000);
+  const diff = Math.floor((Date.now() - parseDbDate(str)) / 1000);
   if (diff < 60)     return 'şimdi';
   if (diff < 3600)   return `${Math.floor(diff/60)}dk`;
   if (diff < 86400)  return `${Math.floor(diff/3600)}s`;
   if (diff < 604800) return `${Math.floor(diff/86400)}g`;
-  return new Date(str).toLocaleDateString('tr-TR', { day:'numeric', month:'short' });
+  return parseDbDate(str).toLocaleDateString('tr-TR', { day:'numeric', month:'short' });
 }
 
 // Keyboard shortcut: Enter to login

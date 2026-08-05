@@ -107,24 +107,9 @@ window.FeedEngine = {
     }
 
     let html = '';
-    const adCardHtml = `
-      <article class="post-card feed-ad-card" style="text-align:center; padding:16px; background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.12); border-radius:12px; margin-bottom:16px;">
-        <div style="font-size:10px; font-weight:700; color:var(--text-3, #777); margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">SPONSORLU / REKLAM</div>
-        <ins class="adsbygoogle"
-             style="display:block"
-             data-ad-format="fluid"
-             data-ad-layout-key="-fb+5w+4e-db+86"
-             data-ad-client="ca-pub-2694418537952605"
-             data-ad-slot="auto"></ins>
-        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-      </article>
-    `;
 
-    this.posts.forEach((post, index) => {
+    this.posts.forEach((post) => {
       html += this.renderPostCard(post);
-      if ((index + 1) % 4 === 0 && index < this.posts.length - 1) {
-        html += adCardHtml;
-      }
     });
 
     list.innerHTML = html;
@@ -544,8 +529,8 @@ function updateLivePreview() {
         <span class="post-time" style="font-size:9px">şimdi</span>
       </div>
     </div>
-    <div class="post-content" style="padding:0 14px 12px; font-size:12px; color:#ddd; word-break:break-word; min-height:10px;">
-      ${esc(text) || '<span style="color:#444; font-style:italic;">Gönderi içeriği boş...</span>'}
+    <div class="post-content" style="padding:0 14px 12px; font-size:12px; color:var(--t-text-secondary); word-break:break-word; min-height:10px;">
+      ${esc(text) || `<span style="color:var(--t-text-muted); font-style:italic;">Gönderi içeriği boş...</span>`}
     </div>
     ${imgHtml}
     <div class="post-actions" style="border:none; padding:10px 14px; font-size:11px; color:#555;">

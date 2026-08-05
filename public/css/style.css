@@ -2092,7 +2092,7 @@ a {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 99999;
+  z-index: 99999999 !important;
   max-width: 90vw;
   text-align: center;
 }
@@ -2998,15 +2998,15 @@ a {
 }
 
 .session-badge.ok {
-  background: rgba(50, 215, 75, 0.12);
-  color: var(--success);
-  border: 1px solid rgba(50, 215, 75, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .session-badge.fail {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border: 1px solid rgba(255, 59, 48, 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ============================================================
@@ -4544,6 +4544,12 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.up-back-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .up-back-btn:active {
@@ -9930,7 +9936,7 @@ a {
   background: rgba(0, 0, 0, 0.88) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  z-index: 99999 !important;
+  z-index: 2000000 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -11232,7 +11238,7 @@ a {
 }
 
 @media (max-width:768px) {
-  .toast { bottom:calc(var(--nav-h, 64px) + env(safe-area-inset-bottom) + 104px) !important; z-index:100100 !important; }
+  .toast { bottom:calc(var(--nav-h, 64px) + env(safe-area-inset-bottom) + 104px) !important; z-index:99999999 !important; }
   .party-focus-header .party-drag-grip { display:none !important; }
   .party-focus-header .party-focus-label { pointer-events:none !important; }
 }
@@ -12425,7 +12431,7 @@ a {
 .pdetail-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 99999;
+  z-index: 2000000;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(10px);
   display: flex;
@@ -13653,3 +13659,664 @@ a {
     color: #10b981 !important;
   }
 }
+
+/* Discord Vibe Group Details Modal */
+#groupDetailsModal .modal-sheet {
+  background: #2f3136 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  max-width: 440px !important;
+  border-radius: 16px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="light"] #groupDetailsModal .modal-sheet {
+  background: #f2f3f5 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+.discord-input {
+  background: #202225 !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: #ffffff !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  outline: none !important;
+  transition: border-color 0.2s ease !important;
+}
+.discord-input:focus {
+  border-color: #5865f2 !important;
+}
+
+[data-theme="light"] .discord-input {
+  background: #e3e5e8 !important;
+  color: #2e3338 !important;
+}
+
+.discord-save-btn {
+  background: #5865f2 !important;
+  border: none !important;
+  color: #ffffff !important;
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s ease !important;
+}
+.discord-save-btn:hover {
+  background: #4752c4 !important;
+}
+
+#groupDetailsMembersList .discord-action-btn {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #b9bbbe !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+#groupDetailsMembersList .discord-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+#groupDetailsMembersList .discord-action-btn.danger {
+  color: #f04747 !important;
+  background: rgba(240, 71, 71, 0.1) !important;
+  border: 1px solid rgba(240, 71, 71, 0.2) !important;
+}
+#groupDetailsMembersList .discord-action-btn.danger:hover {
+  background: #f04747 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="light"] #groupDetailsMembersList .discord-action-btn {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #4f5660 !important;
+}
+[data-theme="light"] #groupDetailsMembersList .discord-action-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: #2e3338 !important;
+}
+
+.discord-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.discord-stat-card {
+  background: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 8px !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+[data-theme="light"] .discord-stat-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+.group-member-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 12px !important;
+  background: rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.03) !important;
+  border-radius: 8px !important;
+  transition: background-color 0.2s ease !important;
+}
+.group-member-row:hover {
+  background: rgba(0, 0, 0, 0.22) !important;
+}
+[data-theme="light"] .group-member-row {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+[data-theme="light"] .group-member-row:hover {
+  background: #f6f6f7 !important;
+}
+
+.admin-badge {
+  background: rgba(88, 101, 242, 0.15) !important;
+  color: #5865f2 !important;
+  border: 1px solid rgba(88, 101, 242, 0.3) !important;
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  text-transform: uppercase !important;
+}
+[data-theme="light"] .admin-badge {
+  background: rgba(88, 101, 242, 0.1) !important;
+  color: #4752c4 !important;
+  border: 1px solid rgba(88, 101, 242, 0.2) !important;
+}
+
+/* ============================================================
+   LOBBY / FOCUS ROOMS DISCORD-LIKE DESKTOP APPLICATION STYLES
+   ============================================================ */
+
+/* Main layout containers */
+.lobby-meta {
+  font-size: 12px;
+  color: var(--t-text-muted);
+  margin-bottom: 16px;
+}
+
+.lobby-meta strong {
+  color: var(--t-text-primary);
+}
+
+.lobby-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--t-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+  margin-top: 14px;
+}
+
+/* Members Grid & Cards */
+.lobby-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.lobby-member-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background-color: var(--t-bg-input);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.lobby-member-card:hover {
+  background-color: var(--t-bg-card-hover);
+  border-color: var(--t-accent-primary);
+}
+
+.lobby-member-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lobby-member-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lobby-self-tag {
+  font-size: 9.5px;
+  color: var(--t-text-muted);
+  font-weight: 400;
+}
+
+.lobby-member-status {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.lobby-member-card.active .lobby-member-status {
+  color: #23a55a;
+}
+
+.lobby-member-card.idle .lobby-member-status {
+  color: var(--t-text-muted);
+}
+
+/* Actions Container */
+.lobby-actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lobby-focus-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13.5px;
+  padding: 10px 16px;
+  width: 100%;
+  font-weight: 800;
+  border-radius: 8px;
+  border: none !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--t-accent-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.2);
+}
+
+.lobby-focus-btn:hover {
+  background: var(--t-accent-primary-hover, #5b52f6) !important;
+  box-shadow: 0 6px 18px rgba(108, 99, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.lobby-focus-btn svg {
+  stroke: #ffffff !important;
+  fill: none !important;
+}
+
+/* Invite Row */
+.lobby-invite-box {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--t-bg-input);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.lobby-invite-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 4px 6px 4px 10px;
+  border-radius: 6px;
+  background: var(--t-bg-card);
+  border: 1px solid transparent;
+  min-width: 0;
+}
+
+.lobby-invite-input-wrap svg {
+  color: var(--t-text-muted);
+  flex-shrink: 0;
+}
+
+.lobby-invite-input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: var(--t-text-primary) !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0;
+}
+
+.lobby-copy-btn {
+  background: var(--t-accent-primary) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  padding: 5px 12px !important;
+  font-size: 11.5px !important;
+  border-radius: 4px !important;
+  border: none !important;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.lobby-copy-btn:hover {
+  opacity: 0.9;
+}
+
+.lobby-icon-btn {
+  background: var(--t-bg-input) !important;
+  color: var(--t-text-secondary) !important;
+  border: 1px solid var(--t-border-subtle) !important;
+  border-radius: 6px !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.lobby-icon-btn:hover {
+  background: var(--t-bg-card-hover) !important;
+  color: var(--t-text-primary) !important;
+  border-color: var(--t-accent-primary) !important;
+}
+
+.lobby-icon-btn.danger {
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.lobby-icon-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.lobby-icon-btn svg {
+  stroke: currentColor !important;
+  fill: none !important;
+}
+
+/* Search and Friends Box */
+.lobby-search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  background-color: var(--t-bg-input) !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px;
+  color: var(--t-text-primary) !important;
+  font-size: 12.5px;
+  box-sizing: border-box;
+  outline: none;
+  margin-bottom: 6px;
+}
+
+.lobby-search-input:focus {
+  border-color: var(--t-accent-primary) !important;
+}
+
+.lobby-friends-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background-color: var(--t-bg-input);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+/* Button Row & Forms (Create Party Form) */
+.lobby-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.lobby-create-form {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  background-color: var(--t-bg-card);
+  border: 1px solid var(--t-border-strong);
+  padding: 16px;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.lobby-create-title {
+  font-weight: 800;
+  color: var(--t-text-primary);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.lobby-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: var(--t-bg-input);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.lobby-card:hover {
+  border-color: var(--t-border-strong);
+}
+
+/* ==========================================
+   DESKTOP TWO-COLUMN PANEL LAYOUT
+   ========================================== */
+.lobby-desktop-layout {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+}
+
+.lobby-left-panel {
+  flex: 1.3;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lobby-right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--t-border-subtle);
+  padding-left: 24px;
+  min-width: 0;
+}
+
+/* Header Row & Title */
+.lobby-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.lobby-title-text {
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--t-text-primary);
+  text-transform: uppercase;
+  word-break: break-word;
+}
+
+.lobby-title-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lobby-title-btn {
+  background: var(--t-bg-input) !important;
+  color: var(--t-text-secondary) !important;
+  border: 1px solid var(--t-border-subtle) !important;
+  border-radius: 6px !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lobby-title-btn:hover {
+  background: var(--t-bg-card-hover) !important;
+  color: var(--t-text-primary) !important;
+  border-color: var(--t-accent-primary) !important;
+}
+
+.lobby-title-btn svg {
+  stroke: currentColor !important;
+  fill: none !important;
+}
+
+/* Welcome Dashboard Styles */
+.lobby-welcome-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.lobby-welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.lobby-welcome-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: var(--t-bg-input);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.lobby-welcome-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--t-accent-primary);
+  background-color: var(--t-bg-card-hover);
+  box-shadow: 0 8px 24px rgba(108, 99, 255, 0.08);
+}
+
+.lobby-welcome-card.create:hover {
+  background: rgba(108, 99, 255, 0.03);
+}
+
+.lobby-welcome-card.join:hover {
+  background: rgba(35, 165, 90, 0.03);
+}
+
+.lobby-welcome-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lobby-welcome-card.create .lobby-welcome-icon {
+  background: rgba(108, 99, 255, 0.1);
+  color: var(--t-accent-primary);
+}
+
+.lobby-welcome-card.join .lobby-welcome-icon {
+  background: rgba(35, 165, 90, 0.1);
+  color: #23a55a;
+}
+
+.lobby-welcome-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.lobby-welcome-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--t-text-primary);
+}
+
+.lobby-welcome-desc {
+  font-size: 11px;
+  color: var(--t-text-muted);
+  line-height: 1.35;
+}
+
+.lobby-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--t-text-secondary);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.lobby-form-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Responsiveness for small viewports */
+@media (max-width: 768px) {
+  .lobby-desktop-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .lobby-right-panel {
+    border-left: none;
+    padding-left: 0;
+    margin-top: 12px;
+    border-top: 1px solid var(--t-border-subtle);
+    padding-top: 16px;
+  }
+}
+
+/* Friend list rows inside active lobby invite & lobi create friends list */
+.lobby-friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--t-bg-input);
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.lobby-friend-row:hover {
+  background-color: var(--t-bg-card-hover);
+  border-color: var(--t-border-strong);
+}
+
+.lobby-friend-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lobby-friend-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

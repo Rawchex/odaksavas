@@ -1749,3 +1749,225 @@ p, span, div, .ps-toggle-desc, .ps-section-desc, .auth-card-sub {
   text-align: center;
 }
 
+[data-theme="light"] .up-back-btn {
+  color: #000000 !important;
+}
+[data-theme="light"] .up-back-btn:hover {
+  color: #333333 !important;
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   LIGHT MODE POST MODAL STYLES
+   ──────────────────────────────────────────────────────────────── */
+[data-theme="light"] .post-modal-header {
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .post-modal-close {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  color: #4f5660 !important;
+}
+
+[data-theme="light"] .post-modal-close:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  color: #12131c !important;
+}
+
+[data-theme="light"] .post-modal-author-name {
+  color: #12131c !important;
+}
+
+[data-theme="light"] .post-modal-author-username {
+  color: #62667d !important;
+}
+
+[data-theme="light"] .post-textarea {
+  background: #f8f7fc !important;
+  border-color: rgba(108, 99, 255, 0.15) !important;
+  color: #12131c !important;
+}
+
+[data-theme="light"] .post-textarea:focus {
+  background: #ffffff !important;
+  border-color: #9333ea !important;
+}
+
+[data-theme="light"] .post-textarea::placeholder {
+  color: rgba(18, 19, 28, 0.45) !important;
+}
+
+[data-theme="light"] .post-char-counter {
+  color: #62667d !important;
+}
+
+[data-theme="light"] #postLivePreviewContainer {
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] #postLivePreviewCard {
+  background: #faf9fd !important;
+  border-color: rgba(108, 99, 255, 0.15) !important;
+}
+
+[data-theme="light"] .post-modal-actions {
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .post-image-label {
+  background: rgba(108, 99, 255, 0.06) !important;
+  border-color: rgba(108, 99, 255, 0.2) !important;
+  color: #4f46e5 !important;
+}
+
+[data-theme="light"] .post-image-label:hover {
+  background: rgba(108, 99, 255, 0.12) !important;
+  border-color: #4f46e5 !important;
+}
+
+[data-theme="light"] .post-submit-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(108, 99, 255, 0.25) !important;
+}
+
+[data-theme="light"] .post-submit-btn:not(:disabled):hover {
+  background: linear-gradient(135deg, #5b52f6 0%, #a246f3 100%) !important;
+  box-shadow: 0 6px 18px rgba(108, 99, 255, 0.4) !important;
+}
+
+[data-theme="light"] .post-submit-btn:disabled {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Overrides for aggressive wildcard class/id selectors on post modal sub-elements */
+[data-theme="light"] .post-modal-author-wrap,
+[data-theme="light"] .post-modal-author-name,
+[data-theme="light"] .post-modal-author-username,
+[data-theme="light"] .post-modal-tools {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+[data-theme="light"] .post-modal-header {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: none !important;
+}
+
+[data-theme="light"] .post-modal-actions {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: none !important;
+}
+
+/* Force show the photo SVG icon inside post-image-label in light mode */
+[data-theme="light"] .post-image-label svg,
+[data-theme="light"] .post-image-label svg * {
+  stroke: #4f46e5 !important;
+  fill: none !important;
+  stroke-width: 2.2 !important;
+}
+
+/* Light Mode Overrides for Followers / Following (Friend List) Modal */
+[data-theme="light"] #friendListModal .modal-sheet {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(108, 99, 255, 0.18) !important;
+  box-shadow: 0 20px 60px rgba(108, 99, 255, 0.12) !important;
+}
+
+[data-theme="light"] #friendListModal .modal-header {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] #friendListModal .modal-close {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: #12131c !important;
+}
+
+[data-theme="light"] #friendListModal .share-search-box input {
+  background-color: #f8f7fc !important;
+  background: #f8f7fc !important;
+  border: 1px solid rgba(108, 99, 255, 0.18) !important;
+  color: #12131c !important;
+}
+
+[data-theme="light"] #friendListModal .share-search-box input::placeholder {
+  color: rgba(18, 19, 28, 0.45) !important;
+}
+
+[data-theme="light"] #friendListModal .share-search-icon {
+  color: #62667d !important;
+}
+
+[data-theme="light"] #friendListModal .fl-row {
+  background: #f8f7fc !important;
+  border: 1px solid rgba(108, 99, 255, 0.12) !important;
+}
+
+[data-theme="light"] #friendListModal .fl-row:hover {
+  background: #e8e6f2 !important;
+}
+
+[data-theme="light"] #friendListModal .fl-name {
+  color: #12131c !important;
+}
+
+[data-theme="light"] #friendListModal .fl-sub {
+  color: #62667d !important;
+}
+
+[data-theme="light"] #friendListModal .profile-empty-tab,
+[data-theme="light"] #friendListModal .loading-row {
+  color: #62667d !important;
+}
+
+/* Overrides for aggressive wildcard class/id selectors on party modal container in light mode */
+[data-theme="light"] #partyModal {
+  background-color: rgba(0, 0, 0, 0.45) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+[data-theme="light"] #partyModalSheet {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(108, 99, 255, 0.18) !important;
+  box-shadow: 0 20px 60px rgba(108, 99, 255, 0.12) !important;
+  border-radius: 16px !important;
+}
+
+[data-theme="light"] #partyModalContent {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+

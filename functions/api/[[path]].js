@@ -1026,6 +1026,127 @@ app.get('/messages/group/:id/members', authMiddleware, async (c) => {
   return c.json(results || []);
 });
 
+app.get('/messages/group/:id/stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+
+  const member = await c.env.DB.prepare('SELECT * FROM chat_group_members WHERE group_id = ? AND user_id = ?')
+    .bind(groupId, user.id)
+    .first();
+  if (!member) return c.json({ error: 'Yetkisiz' }, 403);
+
+  const group = await c.env.DB.prepare('SELECT g.*, u.username as creator_name FROM chat_groups g JOIN users u ON g.created_by = u.id WHERE g.id = ?')
+    .bind(groupId)
+    .first();
+
+  const { results: members } = await c.env.DB.prepare(`
+    SELECT u.id, u.username, u.profile_photo, u.level,
+           COALESCE((SELECT SUM(duration) FROM sessions WHERE user_id = u.id AND status = 'completed'), 0) as total_focus_time
+    FROM chat_group_members cgm
+    JOIN users u ON cgm.user_id = u.id
+    WHERE cgm.group_id = ?
+    ORDER BY total_focus_time DESC
+  `).bind(groupId).all();
+
+  const totalFocusTime = (members || []).reduce((acc, m) => acc + (m.total_focus_time || 0), 0);
+
+  return c.json({
+    group,
+    members: members || [],
+    totalFocusTime
+  });
+});
+
+app.put('/messages/groups/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+  const { name, disappearing_hours } = await c.req.json();
+
+  const group = await c.env.DB.prepare('SELECT * FROM chat_groups WHERE id = ?').bind(groupId).first();
+  if (!group) return c.json({ error: 'Grup bulunamadı' }, 404);
+  if (group.created_by !== user.id) return c.json({ error: 'Grubun adını yalnızca yönetici değiştirebilir.' }, 403);
+
+  const hours = parseInt(disappearing_hours) || 24;
+  await c.env.DB.prepare('UPDATE chat_groups SET name = ?, disappearing_hours = ? WHERE id = ?')
+    .bind(name.trim(), hours, groupId)
+    .run();
+
+  return c.json({ success: true });
+});
+
+app.delete('/messages/groups/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+
+  const group = await c.env.DB.prepare('SELECT * FROM chat_groups WHERE id = ?').bind(groupId).first();
+  if (!group) return c.json({ error: 'Grup bulunamadı' }, 404);
+  if (group.created_by !== user.id) return c.json({ error: 'Grubu yalnızca oluşturan kişi silebilir.' }, 403);
+
+  await c.env.DB.prepare('DELETE FROM chat_groups WHERE id = ?').bind(groupId).run();
+  await c.env.DB.prepare('DELETE FROM chat_group_members WHERE group_id = ?').bind(groupId).run();
+  await c.env.DB.prepare('DELETE FROM messages WHERE group_id = ?').bind(groupId).run();
+
+  return c.json({ success: true });
+});
+
+app.post('/messages/groups/:id/members', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+  const { username } = await c.req.json();
+
+  const member = await c.env.DB.prepare('SELECT * FROM chat_group_members WHERE group_id = ? AND user_id = ?')
+    .bind(groupId, user.id)
+    .first();
+  if (!member) return c.json({ error: 'Yetkisiz' }, 403);
+
+  const targetUser = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
+  if (!targetUser) return c.json({ error: 'Kullanıcı bulunamadı' }, 404);
+
+  await c.env.DB.prepare('INSERT OR IGNORE INTO chat_group_members (group_id, user_id) VALUES (?, ?)')
+    .bind(groupId, targetUser.id)
+    .run();
+
+  await c.env.DB.prepare('INSERT INTO messages (from_user_id, to_user_id, content, group_id) VALUES (0, 0, ?, ?)')
+    .bind(`@${username} gruba katıldı.`, groupId)
+    .run();
+
+  return c.json({ success: true });
+});
+
+app.delete('/messages/groups/:id/members/:userId', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+  const targetUserId = c.req.param('userId');
+
+  const group = await c.env.DB.prepare('SELECT * FROM chat_groups WHERE id = ?').bind(groupId).first();
+  if (!group) return c.json({ error: 'Grup bulunamadı' }, 404);
+
+  const targetUserObj = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(targetUserId).first();
+  if (!targetUserObj) return c.json({ error: 'Kullanıcı bulunamadı' }, 404);
+  const targetUsername = targetUserObj.username;
+
+  const isSelf = parseInt(targetUserId) === user.id;
+  const isAdmin = group.created_by === user.id;
+
+  if (!isSelf && !isAdmin) {
+    return c.json({ error: 'Yetkisiz' }, 403);
+  }
+
+  await c.env.DB.prepare('DELETE FROM chat_group_members WHERE group_id = ? AND user_id = ?')
+    .bind(groupId, targetUserId)
+    .run();
+
+  const sysMsg = isSelf 
+    ? `@${targetUsername} gruptan ayrıldı.` 
+    : `@${targetUsername} gruptan çıkarıldı.`;
+
+  await c.env.DB.prepare('INSERT INTO messages (from_user_id, to_user_id, content, group_id) VALUES (0, 0, ?, ?)')
+    .bind(sysMsg, groupId)
+    .run();
+
+  return c.json({ success: true });
+});
+
 app.post('/messages/group/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
