@@ -720,7 +720,8 @@ p, span, div, .ps-toggle-desc, .ps-section-desc, .auth-card-sub {
 
 [data-theme="light"] .timer-status-text,
 [data-theme="light"] .timer-real-clock,
-[data-theme="light"] #timerBonusIndicator {
+[data-theme="light"] #timerBonusIndicator,
+[data-theme="light"] .timer-xp-txt {
   color: #52566b !important;
 }
 
@@ -1499,159 +1500,325 @@ p, span, div, .ps-toggle-desc, .ps-section-desc, .auth-card-sub {
   color: var(--t-accent-primary) !important;
 }
 
-/* ── Focus Setup Modal (Odaklanma Ayarları) Discord Light Mode Overrides ── */
+/* ── Focus Setup Modal (Odaklanma Ayarları) Monochrome Light Mode Overrides ── */
+[data-theme="light"] .fsm-modal-overlay {
+  background: rgba(0, 0, 0, 0.45) !important;
+}
+
 [data-theme="light"] #focusSetupModal .fsm-card {
-  background-color: #ffffff !important;
-  border: 1px solid #e3e5e8 !important;
-  color: #313338 !important;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08) !important;
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  color: #111214 !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 24px 60px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 #ffffff !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-header {
+  border-bottom: 1px solid #f0f1f3 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-back-btn {
+  background: #f4f5f7 !important;
+  border: 1px solid #e1e4e8 !important;
+  color: #111214 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-back-btn:hover {
+  background: #e9eaed !important;
+  border-color: #d1d5db !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-icon-wrap {
+  background: #f4f5f7 !important;
+  border: 1px solid #e1e4e8 !important;
+  color: #111214 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm-title {
-  color: #060607 !important;
+  color: #0c0d10 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm-subtitle {
-  color: #4e5058 !important;
+  color: #656972 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-close {
+  background: #f4f5f7 !important;
+  border: 1px solid #e1e4e8 !important;
+  color: #656972 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-close:hover {
+  background: #e9eaed !important;
+  color: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-body::-webkit-scrollbar-thumb,
+[data-theme="light"] #focusSetupModal .fsm2-act-grid::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.14) !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-body::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] #focusSetupModal .fsm2-act-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.26) !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-step-heading {
+  color: #656972 !important;
 }
 
 [data-theme="light"] #focusSetupModal #fsm2SearchInput {
-  background-color: #e3e5e8 !important;
-  color: #313338 !important;
+  background: #f4f5f7 !important;
+  border: 1px solid #e1e4e8 !important;
+  color: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal #fsm2SearchInput:focus {
+  border-color: #0c0d10 !important;
+  background: #ffffff !important;
 }
 
 [data-theme="light"] #focusSetupModal #fsm2SearchInput::placeholder {
-  color: #5c5e66 !important;
+  color: #8a8f98 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-search-icon {
+  color: #8a8f98 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-search-clear {
+  background: #e1e4e8 !important;
+  color: #4b5563 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-search-clear:hover {
+  background: #d1d5db !important;
+  color: #111214 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-cat-pill {
-  background-color: #f2f3f5 !important;
-  border: 1px solid #e3e5e8 !important;
-  color: #313338 !important;
+  background: #f4f5f7 !important;
+  border: 1px solid #e1e4e8 !important;
+  color: #4b5563 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-cat-pill:hover {
-  background-color: #e3e5e8 !important;
-  color: #060607 !important;
+  background: #e9eaed !important;
+  color: #111214 !important;
+  border-color: #d1d5db !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-cat-pill.active {
-  background-color: rgba(88, 101, 242, 0.15) !important;
-  border-color: #5865f2 !important;
-  color: #5865f2 !important;
+  background: #0c0d10 !important;
+  border-color: #0c0d10 !important;
+  color: #ffffff !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-act-item {
-  background-color: #f2f3f5 !important;
-  border: 1px solid #e3e5e8 !important;
-  color: #313338 !important;
+  background: #f8f9fa !important;
+  border: 1px solid #e5e7eb !important;
+  color: #1f2937 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-act-item:hover {
-  background-color: #e3e5e8 !important;
-  color: #060607 !important;
+  background: #f0f2f5 !important;
+  border-color: #d1d5db !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-act-item.selected {
-  border-color: #5865f2 !important;
-  background-color: rgba(88, 101, 242, 0.15) !important;
-  color: #5865f2 !important;
+  border-color: #0c0d10 !important;
+  background: #f3f4f6 !important;
+  box-shadow: inset 0 0 0 1px #0c0d10, 0 4px 12px rgba(0, 0, 0, 0.06) !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-start-btn {
-  background-color: rgba(88, 101, 242, 0.15) !important;
-  color: #5865f2 !important;
-  border: 1px solid rgba(88, 101, 242, 0.3) !important;
+[data-theme="light"] #focusSetupModal .fsm2-act-title {
+  color: #0c0d10 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-start-btn:hover:not(:disabled) {
-  background-color: rgba(88, 101, 242, 0.25) !important;
+[data-theme="light"] #focusSetupModal .fsm2-act-tag {
+  color: #6b7280 !important;
+  background: #e5e7eb !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-start-btn:disabled {
-  background-color: #f2f3f5 !important;
-  color: #72767d !important;
-  border-color: #e3e5e8 !important;
+[data-theme="light"] #focusSetupModal .fsm2-act-item.selected .fsm2-act-tag {
+  color: #ffffff !important;
+  background: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-ai-banner {
+  background: #f9fafb !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-ai-banner.has-selection {
+  background: #f3f4f6 !important;
+  border-color: #d1d5db !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-ai-icon {
+  background: #e5e7eb !important;
+  color: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-ai-content {
+  color: #4b5563 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-ai-cat-pill {
+  background: #0c0d10 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-ai-blunk {
+  color: #0c0d10 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-card {
-  background-color: #f2f3f5 !important;
-  border: 1px solid #e3e5e8 !important;
-  color: #313338 !important;
+  background: #f8f9fa !important;
+  border: 1px solid #e5e7eb !important;
+  color: #1f2937 !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-card:hover {
-  border-color: #c7ccd1 !important;
+  background: #eef0f3 !important;
+  border-color: #d1d5db !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm2-card.selected {
-  border-color: #5865f2 !important;
-  background-color: rgba(88, 101, 242, 0.1) !important;
-  color: #5865f2 !important;
+  border: 1.5px solid #0c0d10 !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 1px #0c0d10, 0 6px 18px rgba(0, 0, 0, 0.08) !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm2-card.selected * {
-  color: #5865f2 !important;
+[data-theme="light"] #focusSetupModal .fsm2-card-icon {
+  background: #e5e7eb !important;
+  color: #0c0d10 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm2-card * {
-  color: #313338 !important;
+[data-theme="light"] #focusSetupModal .fsm2-card:hover .fsm2-card-icon {
+  background: #dbe0e6 !important;
 }
 
-[data-theme="light"] #focusSetupModal #fsm2SelectedBadge {
-  background-color: rgba(88, 101, 242, 0.1) !important;
-  border-color: rgba(88, 101, 242, 0.3) !important;
-  color: #313338 !important;
+[data-theme="light"] #focusSetupModal .fsm2-card.selected .fsm2-card-icon {
+  background: #0c0d10 !important;
+  color: #ffffff !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm2-dots .fsm2-dot {
-  background-color: #e3e5e8 !important;
+[data-theme="light"] #focusSetupModal .fsm2-card-info,
+[data-theme="light"] #focusSetupModal .fsm2-card-title,
+[data-theme="light"] #focusSetupModal .fsm2-card-desc {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm2-dots .fsm2-dot.active {
-  background-color: #5865f2 !important;
+[data-theme="light"] #focusSetupModal .fsm2-card-title {
+  color: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-card-desc {
+  color: #6b7280 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-card:hover .fsm2-card-desc {
+  color: #374151 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-card.selected .fsm2-card-desc {
+  color: #111827 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-radio {
+  border-color: #9ca3af !important;
+  background: transparent !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-card.selected .fsm2-radio {
+  border-color: #0c0d10 !important;
+  background: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-card.selected .fsm2-radio-dot {
+  background: #ffffff !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm-preset {
-  background-color: #f2f3f5 !important;
-  border: 1px solid #e3e5e8 !important;
-  color: #313338 !important;
+  background: #f8f9fa !important;
+  border: 1px solid #e5e7eb !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm-preset:hover {
-  background-color: #e3e5e8 !important;
+  background: #f0f2f5 !important;
+  border-color: #d1d5db !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm-preset.active {
-  border-color: #5865f2 !important;
-  background-color: rgba(88, 101, 242, 0.1) !important;
-  color: #5865f2 !important;
+  border-color: #0c0d10 !important;
+  background: #f3f4f6 !important;
+  box-shadow: inset 0 0 0 1px #0c0d10 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-preset.active * {
-  color: #5865f2 !important;
+[data-theme="light"] #focusSetupModal .fsm-preset-name {
+  color: #0c0d10 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-preset * {
-  color: #313338 !important;
+[data-theme="light"] #focusSetupModal .fsm-preset-times {
+  color: #6b7280 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-custom-field label {
-  color: #313338 !important;
+[data-theme="light"] #focusSetupModal .fsm-preset.active .fsm-preset-times {
+  color: #0c0d10 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-num-input input {
-  background-color: #e3e5e8 !important;
-  color: #313338 !important;
+[data-theme="light"] #focusSetupModal .fsm-custom-label {
+  color: #6b7280 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-num-input {
+  background: #f8f9fa !important;
+  border: 1px solid #e5e7eb !important;
 }
 
 [data-theme="light"] #focusSetupModal .fsm-num-input button {
-  background-color: #f2f3f5 !important;
-  color: #313338 !important;
+  color: #0c0d10 !important;
 }
 
-[data-theme="light"] #focusSetupModal .fsm-preset-tag {
-  color: #4e5058 !important;
+[data-theme="light"] #focusSetupModal .fsm-num-input button:hover {
+  background: #e5e7eb !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-num-input input {
+  color: #0c0d10 !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-footer {
+  border-top: 1px solid #f0f1f3 !important;
+  background: #ffffff !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-start-btn {
+  background: #0c0d10 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-start-btn:hover:not(:disabled) {
+  background: #23262d !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22) !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm-start-btn:disabled {
+  background: #e5e7eb !important;
+  color: #9ca3af !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-dots .fsm2-dot {
+  background: #d1d5db !important;
+}
+
+[data-theme="light"] #focusSetupModal .fsm2-dots .fsm2-dot.active {
+  background: #0c0d10 !important;
 }
 
 /* Mobile Navigation Drawer & Drawer Components */
@@ -1969,5 +2136,38 @@ p, span, div, .ps-toggle-desc, .ps-section-desc, .auth-card-sub {
   box-shadow: none !important;
   border-radius: 0 !important;
 }
+
+/* ── Medal Detail Modal: Always Dark, Always Cinematic ─────────────────── */
+/* This modal has data-theme="dark" forced in JS, but we also nullify any   */
+/* global light-mode overrides that could bleed through via [class*=modal]  */
+#medal-detail-modal-overlay,
+#medal-detail-modal-overlay * {
+  --t-bg-modal: #111218;
+  --t-text-primary: #ffffff;
+  --t-border-subtle: rgba(255,255,255,0.08);
+}
+
+/* Block all light-mode theme bleeds into the medal modal */
+[data-theme="light"] #medal-detail-modal-overlay,
+[data-theme="light"] #medal-detail-modal-overlay .cs2-inspect-layout,
+[data-theme="light"] #medal-detail-modal-overlay .cs2-stats-panel,
+[data-theme="light"] #medal-detail-modal-overlay [class*="modal"],
+[data-theme="light"] #medal-detail-modal-overlay [id*="modal"] {
+  background-color: unset !important;
+  background: unset !important;
+  border: unset !important;
+  box-shadow: unset !important;
+  color: #ffffff !important;
+}
+
+/* Ensure all text inside stays white, not overridden to dark */
+[data-theme="light"] #medal-detail-modal-overlay h3,
+[data-theme="light"] #medal-detail-modal-overlay h4,
+[data-theme="light"] #medal-detail-modal-overlay span,
+[data-theme="light"] #medal-detail-modal-overlay p,
+[data-theme="light"] #medal-detail-modal-overlay div {
+  color: inherit !important;
+}
+
 
 

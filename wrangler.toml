@@ -3,7 +3,8 @@ compatibility_date = "2024-03-01"
 pages_build_output_dir = "./public"
 
 [vars]
-JWT_SECRET = "odaksavasi_super_secret_jwt_key_2026"
+# JWT_SECRET is set via: wrangler secret put JWT_SECRET
+# Never hardcode secrets here.
 
 [[d1_databases]]
 binding = "DB"

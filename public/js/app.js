@@ -542,6 +542,12 @@ function showMainApp() {
   startHeartbeat();
   updateTotalUnreadMessageCount();
 
+  // Update navbar profile image
+  const navProfileImg = document.getElementById('navProfileImg');
+  if (navProfileImg) {
+    navProfileImg.src = currentUser.profile_photo || '/default-avatar.png';
+  }
+
   // Check if there was an active session (browser re-open)
   if (typeof checkActiveSession === 'function') checkActiveSession();
   if (typeof checkActiveParty === 'function') checkActiveParty();
@@ -827,7 +833,20 @@ function handleInitialUrlRoute() {
     } else {
       showPage('profile', false);
     }
-  } else if (parts[0] === 'u' && parts[1]) {
+    } else if (parts[0] === 'post' || parts[0] === 'p') {
+      if (parts[1]) {
+        const postId = parts[1];
+        showPage('feed', false);
+        window._isPostPopstate = true;
+        setTimeout(() => {
+          if (typeof openGlobalPostModal === 'function') {
+            openGlobalPostModal(postId);
+          }
+        }, 350);
+      } else {
+        showPage('feed', false);
+      }
+    } else if (parts[0] === 'u' && parts[1]) {
     const targetUser = decodeURIComponent(rawParts[1]);
     showPage('timer', false);
     setTimeout(() => {
@@ -850,6 +869,17 @@ function handleInitialUrlRoute() {
 }
 
 window.addEventListener('popstate', (e) => {
+  if (e.state && e.state.modal === 'post') {
+    window._isPostPopstate = true;
+    if (typeof openGlobalPostModal === 'function') openGlobalPostModal(e.state.postId);
+    return;
+  }
+  
+  if (window._currentOpenPostId && typeof closeGlobalPostModal === 'function') {
+    window._isPostPopstate = true;
+    closeGlobalPostModal();
+  }
+
   if (e.state && e.state.pageName) {
     showPage(e.state.pageName, false, e.state.subPath || '');
     if (e.state.pageName === 'messages' && e.state.subPath) {
@@ -872,9 +902,13 @@ window.addEventListener('popstate', (e) => {
 window._lbUsersCache = [];
 
 async function loadLeaderboard() {
-  const lbRes = await fetch('/api/leaderboard');
+  if (window.BLUNK_LEAGUES && typeof window.BLUNK_LEAGUES.init === 'function') {
+    window.BLUNK_LEAGUES.init();
+  }
+  const lbRes = await fetch('/api/leaderboard/leagues?timeframe=all_time&league_type=overall');
   if (!lbRes.ok) return;
-  const users = await lbRes.json();
+  const data = await lbRes.json();
+  const users = data.leaderboard || [];
   window._lbUsersCache = users || [];
 
   const myIdx = users.findIndex(u => u.username === currentUser?.username);
@@ -882,7 +916,7 @@ async function loadLeaderboard() {
 
   // Personal Rank Status Card (Matching site card style)
   const hero = document.getElementById('myRankHero');
-  if (myRank > 0) {
+  if (hero && myRank > 0) {
     const me = users[myIdx];
     hero.innerHTML = `
       <div style="margin: 16px 16px 12px; padding: 16px; background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius); display: flex; align-items: center; justify-content: space-between;">
@@ -904,11 +938,12 @@ async function loadLeaderboard() {
         </div>
       </div>
     `;
-  } else {
+  } else if (hero) {
     hero.innerHTML = '';
   }
 
   const list = document.getElementById('leaderboardList');
+  if (!list) return;
   if (!users.length) {
     list.innerHTML = '<div class="empty-state" style="padding:40px; text-align:center; color:var(--text-2);"><div class="empty-title">Henüz sıralamada kimse yok</div></div>';
     return;
@@ -1269,6 +1304,41 @@ function closeUserPage() {
   }
 }
 
+function generateSparklineBtnHtml(userId, username, sessions) {
+  const days = [0, 0, 0, 0, 0, 0, 0];
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+  
+  if (sessions && Array.isArray(sessions)) {
+    sessions.forEach(s => {
+      if (s.status !== 'completed') return;
+      const st = new Date(s.start_time);
+      const diffTime = Math.abs(now - st);
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays >= 0 && diffDays < 7) {
+        days[6 - diffDays] += Math.round(s.duration / 60);
+      }
+    });
+  }
+
+  const maxMins = Math.max(1, ...days);
+  const bars = days.map(mins => {
+    const h = mins > 0 ? Math.max(4, Math.round((mins / maxMins) * 16)) : 4;
+    const color = mins > 0 ? '#a855f7' : 'rgba(168, 85, 247, 0.2)';
+    return `<div style="width:3px; height:${h}px; background:${color}; border-radius:2px; transition:height 0.3s ease;"></div>`;
+  }).join('');
+
+  return `
+    <button class="activity-sparkline-btn" 
+            onclick="if(typeof openUserActivityModal === 'function') openUserActivityModal(${userId}, '${esc(username)}')"
+            data-tooltip="7 Günlük Odak Grafiğim" 
+            data-tooltip-pos="bottom"
+            style="margin-left:4px;">
+      ${bars}
+    </button>
+  `;
+}
+
 function renderUserPage(user) {
   const content = document.getElementById('userPageContent');
   const isMe = user.username === currentUser.username;
@@ -1422,12 +1492,12 @@ function renderUserPage(user) {
       <div class="profile-insta-meta">
         ${user.is_private ? '<div style="margin-bottom:8px"><span class="profile-private-dot">🔒 Gizli Hesap</span></div>' : ''}
         ${user.bio ? `<div class="profile-insta-bio">${esc(user.bio)}</div>` : ''}
-        ${(user.height || user.weight) ? `
-          <div class="profile-insta-details">
-            ${user.height ? `<span>📏 ${user.height}cm</span>` : ''}
-            ${user.weight ? `<span>⚖️ ${user.weight}kg</span>` : ''}
-            <span>⏱️ ${fmtTime(user.total_focus_time||0)}</span>
-          </div>` : ''}
+        <div class="profile-insta-details" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+          ${user.height ? `<span>📏 ${user.height}cm</span>` : ''}
+          ${user.weight ? `<span>⚖️ ${user.weight}kg</span>` : ''}
+          <span>⏱️ ${fmtTime(user.total_focus_time||0)}</span>
+          ${generateSparklineBtnHtml(user.id, user.username, user.sessions)}
+        </div>
         ${user.cv ? `<div class="up-cv">${esc(user.cv)}</div>` : ''}
         <div class="profile-xp-row" style="display:flex; align-items:center; gap:10px; margin-top:12px;">
           <span class="lvl-badge">LVL ${user.level}</span>
@@ -1736,7 +1806,10 @@ function showToast(msg, duration = 2400) {
     t.id = 'toast';
     t.className = 'toast';
     document.body.appendChild(t);
+  } else if (t.parentElement !== document.body || document.body.lastElementChild !== t) {
+    document.body.appendChild(t);
   }
+
   // Clean all emojis automatically
   const cleanMsg = (msg || '').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1FA00}-\u{1FAFF}]/gu, '').trim();
   t.textContent = cleanMsg;
@@ -1893,6 +1966,12 @@ function openStatusSelector() {
   const menu    = document.getElementById('statusPopoverMenu');
   if (!overlay || !menu) return;
 
+  // Toggle: if already open, close it
+  if (menu.classList.contains('open')) {
+    closeStatusSelector();
+    return;
+  }
+
   // Populate header
   if (currentUser) {
     const avatar = document.getElementById('spmAvatar');
@@ -1956,9 +2035,18 @@ function openStatusSelector() {
     requestAnimationFrame(() => menu.classList.add('open'));
   });
 
-  // Close on Escape
-  window._spmEscHandler = (e) => { if (e.key === 'Escape') closeStatusSelector(); };
+  // Close on Escape & Keyboard navigation
+  window._spmEscHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeStatusSelector();
+    }
+  };
   window.addEventListener('keydown', window._spmEscHandler);
+
+  // Close on resize/scroll to prevent detached popover
+  window._spmResizeHandler = () => closeStatusSelector();
+  window.addEventListener('resize', window._spmResizeHandler, { passive: true });
+  window.addEventListener('scroll', window._spmResizeHandler, { passive: true, capture: true });
 }
 
 function closeStatusSelector() {
@@ -1975,6 +2063,11 @@ function closeStatusSelector() {
   if (window._spmEscHandler) {
     window.removeEventListener('keydown', window._spmEscHandler);
     window._spmEscHandler = null;
+  }
+  if (window._spmResizeHandler) {
+    window.removeEventListener('resize', window._spmResizeHandler);
+    window.removeEventListener('scroll', window._spmResizeHandler, true);
+    window._spmResizeHandler = null;
   }
 }
 

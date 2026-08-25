@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <!-- GOLD MEDAL (RANK 1) -->
+  <symbol id="medal-gold" viewBox="0 0 64 64">
+    <!-- Ribbon -->
+    <path d="M20 4L32 24L12 24L20 4Z" fill="#DC2626" opacity="0.9"/>
+    <path d="M44 4L52 24L32 24L44 4Z" fill="#B91C1C"/>
+    <!-- Outer Ring -->
+    <circle cx="32" cy="38" r="21" fill="#CA8A04"/>
+    <!-- Main Disc Gradient -->
+    <circle cx="32" cy="38" r="19" fill="url(#goldGrad)"/>
+    <circle cx="32" cy="38" r="15" stroke="#FEF08A" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <!-- Center Star Symbol -->
+    <polygon points="32,27 34.5,33 41,33.5 36,37.5 37.5,44 32,40 26.5,44 28,37.5 23,33.5 29.5,33" fill="#854D0E"/>
+    <!-- Inner Rank 1 Text -->
+    <text x="32" y="41.5" font-size="14" font-weight="900" text-anchor="middle" fill="#FEF08A">1</text>
+    <defs>
+      <linearGradient id="goldGrad" x1="16" y1="18" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#FEF08A"/>
+        <stop offset="40%" stop-color="#EAB308"/>
+        <stop offset="100%" stop-color="#CA8A04"/>
+      </linearGradient>
+    </defs>
+  </symbol>
+
+  <!-- SILVER MEDAL (RANK 2) -->
+  <symbol id="medal-silver" viewBox="0 0 64 64">
+    <!-- Ribbon -->
+    <path d="M20 4L32 24L12 24L20 4Z" fill="#2563EB" opacity="0.9"/>
+    <path d="M44 4L52 24L32 24L44 4Z" fill="#1D4ED8"/>
+    <!-- Outer Ring -->
+    <circle cx="32" cy="38" r="21" fill="#475569"/>
+    <!-- Main Disc Gradient -->
+    <circle cx="32" cy="38" r="19" fill="url(#silverGrad)"/>
+    <circle cx="32" cy="38" r="15" stroke="#F8FAFC" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <!-- Center Star Symbol -->
+    <polygon points="32,27 34.5,33 41,33.5 36,37.5 37.5,44 32,40 26.5,44 28,37.5 23,33.5 29.5,33" fill="#334155"/>
+    <!-- Inner Rank 2 Text -->
+    <text x="32" y="41.5" font-size="14" font-weight="900" text-anchor="middle" fill="#F8FAFC">2</text>
+    <defs>
+      <linearGradient id="silverGrad" x1="16" y1="18" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#F8FAFC"/>
+        <stop offset="40%" stop-color="#94A3B8"/>
+        <stop offset="100%" stop-color="#64748B"/>
+      </linearGradient>
+    </defs>
+  </symbol>
+
+  <!-- BRONZE MEDAL (RANK 3) -->
+  <symbol id="medal-bronze" viewBox="0 0 64 64">
+    <!-- Ribbon -->
+    <path d="M20 4L32 24L12 24L20 4Z" fill="#059669" opacity="0.9"/>
+    <path d="M44 4L52 24L32 24L44 4Z" fill="#047857"/>
+    <!-- Outer Ring -->
+    <circle cx="32" cy="38" r="21" fill="#92400E"/>
+    <!-- Main Disc Gradient -->
+    <circle cx="32" cy="38" r="19" fill="url(#bronzeGrad)"/>
+    <circle cx="32" cy="38" r="15" stroke="#FFEDD5" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <!-- Center Star Symbol -->
+    <polygon points="32,27 34.5,33 41,33.5 36,37.5 37.5,44 32,40 26.5,44 28,37.5 23,33.5 29.5,33" fill="#78350F"/>
+    <!-- Inner Rank 3 Text -->
+    <text x="32" y="41.5" font-size="14" font-weight="900" text-anchor="middle" fill="#FFEDD5">3</text>
+    <defs>
+      <linearGradient id="bronzeGrad" x1="16" y1="18" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#FFEDD5"/>
+        <stop offset="40%" stop-color="#D97706"/>
+        <stop offset="100%" stop-color="#B45309"/>
+      </linearGradient>
+    </defs>
+  </symbol>
+</svg>

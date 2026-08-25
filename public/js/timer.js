@@ -73,12 +73,13 @@ function fmtClock(secs) {
 
 function el(id) { return document.getElementById(id); }
 
-function showSessionOverlay(msg, submsg, durationMs = 3000) {
+function showSessionOverlay(msg, submsg, durationMs = 2000) {
   return new Promise(resolve => {
     const overlay = el('sessionLoadingOverlay');
     const msgEl   = el('sessionLoadingMsg');
     const subEl   = el('sessionLoadingSub');
     if (!overlay) { resolve(); return; }
+    if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
     if (msgEl) msgEl.textContent = msg || 'İşlem Yapılıyor...';
     if (subEl) subEl.textContent = submsg || '';
     overlay.style.display = 'flex';
@@ -100,10 +101,11 @@ function showSessionLoading(msg, submsg) {
   const subEl   = el('sessionLoadingSub');
   if (_loadingTimer) { clearTimeout(_loadingTimer); _loadingTimer = null; }
   if (!overlay) return;
-  if (msgEl) msgEl.textContent = msg || 'yükleniyor...';
+  if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
+  if (msgEl) msgEl.textContent = msg || 'Yükleniyor...';
   if (subEl) subEl.textContent = submsg || '';
   overlay.style.display = 'flex';
-  overlay.classList.add('visible');
+  requestAnimationFrame(() => overlay.classList.add('visible'));
   _loadingShownAt = Date.now();
 }
 
@@ -112,13 +114,20 @@ function hideSessionLoading() {
     const overlay = el('sessionLoadingOverlay');
     if (!overlay) { resolve(); return; }
     if (_loadingTimer) clearTimeout(_loadingTimer);
+    
+    // Ensure smooth minimum duration of 1000ms
+    const elapsed = _loadingShownAt ? (Date.now() - _loadingShownAt) : 1000;
+    const remaining = Math.max(0, 1000 - elapsed);
+
     _loadingTimer = setTimeout(() => {
       overlay.classList.remove('visible');
-      setTimeout(() => { overlay.style.display = 'none'; }, 300);
-      _loadingShownAt = null;
-      _loadingTimer   = null;
-      resolve();
-    }, 400);
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        _loadingShownAt = null;
+        _loadingTimer   = null;
+        resolve();
+      }, 300);
+    }, remaining);
   });
 }
 
@@ -171,18 +180,23 @@ function updateXPBarUI(xp) {
   if (txtEl)  txtEl.textContent  = `${p.xpInLevel}/${p.xpNeededForNext} XP`;
 }
 
-function animateXPBar(oldXP, newXP) {
-  const start = Date.now();
-  const dur   = 5000;
-  triggerCurvedParticles(dur);
-  function tick() {
-    const t  = Math.min(1, (Date.now() - start) / dur);
-    const et = 1 - Math.pow(1 - t, 3);
-    updateXPBarUI(Math.floor(oldXP + (newXP - oldXP) * et));
-    if (t < 1) requestAnimationFrame(tick);
-    else updateXPBarUI(newXP);
-  }
-  requestAnimationFrame(tick);
+function animateXPBar(oldXP, newXP, dur = 2600) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    triggerCurvedParticles(dur);
+    function tick() {
+      const t  = Math.min(1, (Date.now() - start) / dur);
+      const et = 1 - Math.pow(1 - t, 3);
+      updateXPBarUI(Math.floor(oldXP + (newXP - oldXP) * et));
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        updateXPBarUI(newXP);
+        resolve();
+      }
+    }
+    requestAnimationFrame(tick);
+  });
 }
 
 function triggerCurvedParticles(totalMs) {
@@ -307,31 +321,43 @@ function playChannelSound(type) {
 
 
 // ─────────────────────────────────────────────────────────────
-// § 5. FOCUS SETUP MODAL  — 3-step: activity → mode → pomo
+// § 5. FOCUS SETUP MODAL — 3-step: activity → mode → pomo
 // ─────────────────────────────────────────────────────────────
-let _fsmSelectedActivity = '';
-let _fsmSelectedCategory = '';
+let _fsmSelectedTagName = '';
+let _fsmSelectedCategoryId = null;
+let _fsmSelectedCatName = '';
 let _fsmSelectedMode     = 'free';
-let _fsmCurrentCat       = null;  // null = All
+let _fsmCurrentCat       = null;  // Current active category filter
 
-// Free-mode smart break reminder (50-60 min suggestion)
-let _fsmBreakReminderTimer = null;
-const FREE_BREAK_SUGGEST_SECS = 55 * 60; // 55 minutes
+let _officialCategories = [];
+let _trendingTags = [];
 
-function _startBreakReminderIfFree() {
-  if (_timerMode !== 'free') return;
-  _clearBreakReminder();
-  _fsmBreakReminderTimer = setTimeout(() => {
-    if (!window._activeSession || _timerMode !== 'free') return;
-    if (typeof showToast === 'function')
-      showToast('55 dakikalık çalışma seansını tamamladınız. Zihninizi dinlendirmek için kısa bir mola vermenizi öneririz.', 6000);
-    // Re-schedule for another 55 minutes
-    _startBreakReminderIfFree();
-  }, FREE_BREAK_SUGGEST_SECS * 1000);
-}
+const _fsmAiPrompts = [
+  "Bugün ne üzerinde çalışmak istiyorsun? Bir ders veya aktivite seç.",
+  "Zihnini odaklamak istediğin konuyu belirle ve tempoyu yakala.",
+  "Yukarıdaki kategorilerden bir alan seç veya doğrudan arama yap.",
+  "Hangi alanda seviye atlamak istiyorsun? Konunu belirle, başlayalım.",
+  "Hedefine bir adım daha yaklaşmak için aktiviteni seç.",
+  "Derin odaklanma seansın için uygun bir aktivite seçimi yap.",
+  "Çalışma alanını seçerek odaklanma liginde puanlarını katla.",
+  "Verimli ve kesintisiz bir seans için konunu belirle.",
+  "Günün en verimli çalışma seansını başlatmak için bir konu seç.",
+  "Odaklanacağın aktiviteyi belirle, süreci başlat."
+];
 
-function _clearBreakReminder() {
-  if (_fsmBreakReminderTimer) { clearTimeout(_fsmBreakReminderTimer); _fsmBreakReminderTimer = null; }
+function _fsmUpdateAiBanner() {
+  const banner = el('fsmAiBanner');
+  const textEl = el('fsmAiText');
+  if (!banner || !textEl) return;
+
+  if (_fsmSelectedTagName) {
+    banner.classList.add('has-selection');
+    textEl.innerHTML = `Seçtiğin aktivite <span class="fsm-ai-cat-pill">${esc(_fsmSelectedCatName)}</span> kategorisinde. <span class="fsm-ai-blunk">blunk!</span>`;
+  } else {
+    banner.classList.remove('has-selection');
+    const prompt = _fsmAiPrompts[Math.floor(Math.random() * _fsmAiPrompts.length)];
+    textEl.textContent = prompt;
+  }
 }
 
 function openFocusSetupModal() {
@@ -341,46 +367,54 @@ function openFocusSetupModal() {
   if (modal.parentElement !== document.body) document.body.appendChild(modal);
 
   // Reset state
-  _fsmSelectedActivity = '';
-  _fsmSelectedCategory = '';
-  _fsmSelectedMode     = 'free';
-  _fsmCurrentCat       = null;
+  _fsmSelectedTagName = '';
+  _fsmSelectedCategoryId = null;
+  _fsmSelectedCatName = '';
+  _fsmSelectedMode     = _timerMode || 'free';
 
-  // Build cat pills
+  const actDb = window._activitiesDb || {};
+  const catNames = Object.keys(actDb);
+  _fsmCurrentCat = catNames[0] || 'Lise & YKS';
+
+  // Build cat pills from _activitiesDb
   const pills = el('fsm2CatPills');
   if (pills) {
-    const cats = ['Tümü', ...Object.keys(_activitiesDb)];
-    pills.innerHTML = cats.map(c =>
-      `<button class="fsm2-cat-pill${c === 'Tümü' ? ' active' : ''}" onclick="fsmSelectCat('${esc(c)}')">${esc(c)}</button>`
+    pills.innerHTML = catNames.map(cName =>
+      `<button class="fsm2-cat-pill${cName === _fsmCurrentCat ? ' active' : ''}" onclick="fsmSelectCat('${esc(cName)}')">
+         ${esc(cName)}
+       </button>`
     ).join('');
   }
 
-  // Clear selection badge
-  const badge = el('fsm2SelectedBadge'); if (badge) badge.style.display = 'none';
-  const step1btn = el('fsm2Step1Btn'); if (step1btn) step1btn.disabled = true;
-
   // Reset mode cards
-  el('fsm2CardFree')?.classList.remove('selected');
-  el('fsm2CardPomo')?.classList.remove('selected');
-  el('fsm2Step2Btn') && (el('fsm2Step2Btn').disabled = true);
+  el('fsm2CardFree')?.classList.toggle('selected', _fsmSelectedMode === 'free');
+  el('fsm2CardPomo')?.classList.toggle('selected', _fsmSelectedMode === 'pomodoro');
 
   // Clear search
-  const si = el('fsm2SearchInput'); if (si) si.value = '';
+  const si = el('fsm2SearchInput');
+  if (si) si.value = '';
+  const clearBtn = el('fsm2SearchClear');
+  if (clearBtn) clearBtn.style.display = 'none';
 
-  // Render initial activities
+  // Render initial activities for current active category
   _fsmRenderActivities('');
+  _fsmUpdateAiBanner();
 
   // Show step 1, update dots
   _fsmShowStep(1);
   modal.style.display = 'flex';
-  modal.classList.add('open');
+  requestAnimationFrame(() => modal.classList.add('open'));
 }
 
 function closeFocusSetupModal() {
   const modal = el('focusSetupModal');
   if (modal) {
     modal.classList.remove('open');
-    modal.style.display = 'none';
+    setTimeout(() => {
+      if (!modal.classList.contains('open')) {
+        modal.style.display = 'none';
+      }
+    }, 220);
   }
 }
 
@@ -394,103 +428,185 @@ function _fsmShowStep(n) {
     const dot = el(`fsm2Dot${i}`);
     if (dot) {
       dot.classList.toggle('active', i === n);
-      dot.style.background = (i === n) ? 'var(--t-accent-primary, #6c63ff)' : 'rgba(255,255,255,0.2)';
     }
   });
+
+  // Header Titles
+  const titleEl = el('fsmHeaderTitle');
+  const subEl   = el('fsmHeaderSubtitle');
+  if (n === 1) {
+    if (titleEl) titleEl.textContent = 'Odaklanma Ayarları';
+    if (subEl)   subEl.textContent   = 'Çalışma alanını ve konunu seç';
+  } else if (n === 2) {
+    if (titleEl) titleEl.textContent = 'Çalışma Modu';
+    if (subEl)   subEl.textContent   = 'Seans türünü belirle';
+  } else if (n === 3) {
+    if (titleEl) titleEl.textContent = 'Pomodoro Aralıkları';
+    if (subEl)   subEl.textContent   = 'Odak ve mola sürelerini ayarla';
+  }
+
+  // Back button
   const back = el('fsm2BackBtn');
   if (back) {
     back.style.display = n > 1 ? 'inline-flex' : 'none';
-    back.style.visibility = n > 1 ? 'visible' : 'hidden';
+  }
+
+  // Footer Button state & text
+  const actionBtn = el('fsmActionBtn');
+  if (actionBtn) {
+    if (n === 1) {
+      actionBtn.textContent = 'DEVAM ET →';
+      actionBtn.disabled = !_fsmSelectedTagName;
+    } else if (n === 2) {
+      actionBtn.textContent = _fsmSelectedMode === 'free' ? 'ODAKLANMAYI BAŞLAT' : 'DEVAM ET →';
+      actionBtn.disabled = !_fsmSelectedMode;
+    } else if (n === 3) {
+      actionBtn.textContent = 'BLUNK!';
+      actionBtn.disabled = false;
+    }
   }
 }
 
 function fsmGoBack() {
   const active = document.querySelector('#focusSetupModal .fsm2-step.active');
   if (!active) return;
-  const cur = parseInt(active.id.replace('fsmStep',''));
+  const cur = parseInt(active.id.replace('fsmStep',''), 10);
   if (cur > 1) _fsmShowStep(cur - 1);
 }
 
-function fsmSelectCat(cat) {
-  _fsmCurrentCat = cat === 'Tümü' ? null : cat;
+function fsmHandlePrimaryAction() {
+  const active = document.querySelector('#focusSetupModal .fsm2-step.active');
+  if (!active) return;
+  const cur = parseInt(active.id.replace('fsmStep',''), 10);
+
+  if (cur === 1) {
+    if (!_fsmSelectedTagName) {
+      if (typeof showToast === 'function') showToast('Lütfen bir aktivite seçin.');
+      return;
+    }
+    _fsmShowStep(2);
+  } else if (cur === 2) {
+    if (_fsmSelectedMode === 'pomodoro') {
+      _fsmShowStep(3);
+    } else {
+      confirmStartFocusFromModal();
+    }
+  } else if (cur === 3) {
+    confirmStartFocusFromModal();
+  }
+}
+
+function fsmSelectCat(catName) {
+  _fsmCurrentCat = catName;
   document.querySelectorAll('.fsm2-cat-pill').forEach(p => {
-    p.classList.toggle('active', p.textContent === cat);
+    p.classList.toggle('active', p.textContent.trim() === catName.trim());
   });
-  _fsmRenderActivities(el('fsm2SearchInput')?.value || '');
+  const si = el('fsm2SearchInput');
+  _fsmRenderActivities(si ? si.value : '');
 }
 
 function _fsmRenderActivities(query) {
   const grid = el('fsm2ActGrid');
   if (!grid) return;
 
-  const q = query.toLowerCase().trim();
-  let items = [];
+  const q = (query || '').toLowerCase().trim();
+  const actDb = window._activitiesDb || {};
 
-  if (_fsmCurrentCat) {
-    items = (_activitiesDb[_fsmCurrentCat] || []).map(a => ({ cat: _fsmCurrentCat, act: a }));
+  let items = [];
+  if (q) {
+    // Search across ALL categories when query is entered
+    Object.keys(actDb).forEach(cat => {
+      actDb[cat].forEach(act => {
+        if (act.toLowerCase().includes(q)) {
+          items.push({ name: act, category: cat });
+        }
+      });
+    });
   } else {
-    Object.entries(_activitiesDb).forEach(([cat, acts]) =>
-      acts.forEach(a => items.push({ cat, act: a }))
-    );
+    // Show only selected category items
+    const list = actDb[_fsmCurrentCat] || [];
+    items = list.map(act => ({ name: act, category: _fsmCurrentCat }));
   }
 
-  if (q) items = items.filter(i => i.act.toLowerCase().includes(q));
-  items = items.slice(0, 60);
-
-  if (!items.length && q) {
-    grid.innerHTML = `<div class="fsm2-act-item" onclick="fsmPickActivity('${esc(query)}','Diğer')" style="color:rgba(255,255,255,0.5);font-style:italic;">
-      + "${esc(query)}" ekle
-    </div>`;
+  if (!items.length) {
+    grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: #8a8f98; padding: 24px 12px; font-size: 13px;">Eşleşen aktivite bulunamadı.</div>`;
     return;
   }
 
   grid.innerHTML = items.map(i =>
-    `<div class="fsm2-act-item${i.act === _fsmSelectedActivity ? ' selected' : ''}" onclick="fsmPickActivity('${esc(i.act)}','${esc(i.cat)}')">${esc(i.act)}</div>`
+    `<div class="fsm2-act-item${i.name === _fsmSelectedTagName ? ' selected' : ''}" onclick="fsmPickActivity('${esc(i.name)}', '${esc(i.category)}')">
+      <div class="fsm2-act-title">${esc(i.name)}</div>
+      <div class="fsm2-act-tag" title="${esc(i.category)}">${esc(i.category)}</div>
+    </div>`
   ).join('');
 }
 
 function fsmSearchActivities(val) {
+  const clearBtn = el('fsm2SearchClear');
+  if (clearBtn) clearBtn.style.display = val ? 'flex' : 'none';
   _fsmRenderActivities(val);
 }
 
-function fsmPickActivity(act, cat) {
-  _fsmSelectedActivity = act;
-  _fsmSelectedCategory = cat;
+function fsmClearSearch() {
+  const si = el('fsm2SearchInput');
+  if (si) {
+    si.value = '';
+    si.focus();
+  }
+  const clearBtn = el('fsm2SearchClear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  _fsmRenderActivities('');
+}
+
+function fsmHandleSearchEnter() {
+  const firstItem = document.querySelector('.fsm2-act-item');
+  if (firstItem) {
+    firstItem.click();
+    fsmHandlePrimaryAction();
+  }
+}
+
+function fsmPickActivity(tagName, catName) {
+  if (!tagName) return;
+  _fsmSelectedTagName = tagName;
+  _fsmSelectedCatName = catName || _fsmCurrentCat || 'Genel';
+
+  // Find matching category ID from server categories
+  const matchCat = (_officialCategories || []).find(c => c.name === _fsmSelectedCatName);
+  _fsmSelectedCategoryId = matchCat ? matchCat.id : 1;
 
   // Update grid highlight
   document.querySelectorAll('.fsm2-act-item').forEach(e => {
-    e.classList.toggle('selected', e.textContent.trim() === act);
+    const isSelected = e.querySelector('.fsm2-act-title')?.textContent.trim() === tagName.trim();
+    e.classList.toggle('selected', isSelected);
   });
 
-  // Show badge
-  const badge = el('fsm2SelectedBadge'), txt = el('fsm2SelectedText');
-  if (badge) badge.style.display = 'flex';
-  if (txt)   txt.textContent     = act;
+  // Update AI Banner
+  _fsmUpdateAiBanner();
 
-  // Enable continue
-  const btn = el('fsm2Step1Btn'); if (btn) btn.disabled = false;
+  // Enable action button
+  const actionBtn = el('fsmActionBtn');
+  if (actionBtn) actionBtn.disabled = false;
 }
 
 function fsmToStep2() {
-  if (!_fsmSelectedActivity) return;
-  _fsmShowStep(2);
+  fsmHandlePrimaryAction();
 }
 
 function fsmSelectMode(mode) {
   _fsmSelectedMode = mode;
   el('fsm2CardFree')?.classList.toggle('selected', mode === 'free');
   el('fsm2CardPomo')?.classList.toggle('selected', mode === 'pomodoro');
-  const btn = el('fsm2Step2Btn'); if (btn) btn.disabled = false;
+
+  const actionBtn = el('fsmActionBtn');
+  if (actionBtn) {
+    actionBtn.disabled = false;
+    actionBtn.textContent = mode === 'free' ? 'ODAKLANMAYI BAŞLAT' : 'DEVAM ET →';
+  }
 }
 
 function fsmStep2Next() {
-  if (!_fsmSelectedMode) return;
-  if (_fsmSelectedMode === 'pomodoro') {
-    _fsmShowStep(3);
-  } else {
-    // Free mode: start immediately
-    confirmStartFocusFromModal();
-  }
+  fsmHandlePrimaryAction();
 }
 
 function fsm2ApplyPreset(work, brk, btn) {
@@ -504,9 +620,9 @@ function fsm2ApplyPreset(work, brk, btn) {
 function fsm2AdjustInput(id, delta) {
   const input = el(id);
   if (!input) return;
-  const min = parseInt(input.min) || 1;
-  const max = parseInt(input.max) || 180;
-  input.value = Math.min(max, Math.max(min, (parseInt(input.value) || 0) + delta));
+  const min = parseInt(input.min, 10) || 1;
+  const max = parseInt(input.max, 10) || 180;
+  input.value = Math.min(max, Math.max(min, (parseInt(input.value, 10) || 0) + delta));
   document.querySelectorAll('.fsm-preset, .fsm2-preset').forEach(e => e.classList.remove('active'));
 }
 
@@ -569,7 +685,7 @@ function confirmStartFocusFromModal() {
     localStorage.setItem('blunk_pomo_break', breakMins);
   }
   closeFocusSetupModal();
-  startFocusSession(_fsmSelectedActivity, _fsmSelectedCategory);
+  startFocusSession(_fsmSelectedTagName, _fsmSelectedCategoryId);
 }
 
 function onMainTimerButtonClick() {
@@ -644,7 +760,7 @@ async function handleNudgeTimeout() {
 
   const timeoutModal = el('nudgeTimeoutModal');
   const timeoutMsg   = el('nudgeTimeoutMsg');
-  if (timeoutMsg) timeoutMsg.textContent = `${savedHours} saatlik harika çalışman kaydedildi! Dürtme mesajımıza yanıt alınamadığı için oturumun ${savedHours * 60}. dakikada güvenle tamamlandı. ☕`;
+  if (timeoutMsg) timeoutMsg.textContent = `${savedHours} saatlik harika çalışman kaydedildi! Dürtme mesajımıza yanıt alınamadığı için oturumun ${savedHours * 60}. dakikada güvenle tamamlandı.`;
   if (timeoutModal) timeoutModal.style.display = 'flex';
 }
 
@@ -1032,7 +1148,7 @@ async function checkActiveSession() {
   } catch (err) { console.error('[Timer] checkActiveSession error:', err); }
 }
 
-async function startFocusSession(activity, category) {
+async function startFocusSession(tagName, categoryId) {
   if (window._activeSession) return;
 
   // Reset flags
@@ -1043,8 +1159,11 @@ async function startFocusSession(activity, category) {
   _lastNudgeHour           = 0;
 
   // Store for session-level use
-  _fsmSelectedActivity = activity || '';
-  _fsmSelectedCategory = category || '';
+  _fsmSelectedTagName = tagName || _fsmSelectedTagName || '';
+  _fsmSelectedCategoryId = categoryId || _fsmSelectedCategoryId || null;
+
+  // Show loading screen immediately
+  showSessionLoading('Odaklanma Başlıyor...', 'Zihnin odak moduna geçiyor. Blunk ile verimli çalışmalar dileriz.');
 
   try {
     const res = await fetch('/api/sessions/start', {
@@ -1055,12 +1174,13 @@ async function startFocusSession(activity, category) {
         mode:           _timerMode,
         targetDuration: _timerMode === 'pomodoro' ? _pomodoroTargetSecs : 0,
         breakDuration:  _timerMode === 'pomodoro' ? _pomodoroBreakSecs  : 0,
-        activity:       _fsmSelectedActivity || null,
-        category:       _fsmSelectedCategory || null
+        tagName:        _fsmSelectedTagName || null,
+        categoryId:     _fsmSelectedCategoryId || null
       })
     });
 
     if (!res.ok) {
+      await hideSessionLoading();
       if (res.status === 401) {
         if (typeof showToast === 'function') showToast('Odaklanmaya başlamak için lütfen giriş yapın.');
         if (typeof openRegisterModal === 'function') openRegisterModal();
@@ -1079,21 +1199,21 @@ async function startFocusSession(activity, category) {
       id:        data.sessionId,
       partyId:   _currentPartyId || null,
       startTime: _sessionStartTime.toISOString(),
-      activity:  _fsmSelectedActivity,
-      category:  _fsmSelectedCategory
+      activity:  _fsmSelectedTagName,
+      category:  _fsmSelectedCatName
     }));
 
-    // Show 3-second start overlay screen
-    await showSessionOverlay('Odaklanma Başlıyor', 'Zihniniz odak moduna geçiyor. Blunk ile verimli çalışmalar dileriz.', 3000);
-
+    // Start timer worker & tick immediately
     _startTimerWorker();
     updateTimerUI('running');
+    renderTimerDisplay(0);
+    _onTick(0);
     _updatePomoRoundBadge();
     requestWakeLock();
     if (_currentPartyId) startPartyPoll(_currentPartyId);
 
-    // Start break reminder for free mode
-    if (_timerMode === 'free') _startBreakReminderIfFree();
+    // Smoothly hide loading overlay
+    await hideSessionLoading();
 
     // Entry feedback toast
     const msgs = [
@@ -1107,43 +1227,67 @@ async function startFocusSession(activity, category) {
 
   } catch (err) {
     console.error('[Timer] startFocusSession error:', err);
+    await hideSessionLoading();
     if (typeof showToast === 'function') showToast('Oturum başlatılamadı');
   }
 }
 
 async function stopFocusSession() {
-  if (!window._activeSession) return;
+  let session = window._activeSession;
+  if (!session) {
+    try {
+      session = JSON.parse(localStorage.getItem('os_active_session') || 'null');
+      if (session) window._activeSession = session;
+    } catch (e) {}
+  }
+  if (!session) {
+    updateTimerUI('idle');
+    resetTimerDisplay();
+    return;
+  }
   if (!(await window.showConfirm('Odaklanma seansını sonlandırmak istediğinizden emin misiniz?'))) return;
   await endSession(false);
 }
 
 async function endSession(isViolation = false) {
-  const session = window._activeSession;
-  if (!session) { updateTimerUI('idle'); return; }
+  if (window._isEndingSession) return;
+  window._isEndingSession = true;
 
-  const sessionIdToRate = session.id;
-  if (!session.id) {
+  let session = window._activeSession;
+  if (!session) {
+    try {
+      session = JSON.parse(localStorage.getItem('os_active_session') || 'null');
+      if (session) window._activeSession = session;
+    } catch (e) {}
+  }
+
+  if (!session || !session.id) {
     window._activeSession = null;
     window._violationFired = false;
+    _stopTimerMachinery();
     resetTimerDisplay();
     updateTimerUI('idle');
+    localStorage.removeItem('os_active_session');
+    window._isEndingSession = false;
     return;
   }
+
+  const sessionIdToRate = session.id;
 
   releaseWakeLock();
   _stopTimerMachinery();
   resetTimerDisplay();
-  _clearBreakReminder();
+  if (_nudgeTimer) { clearInterval(_nudgeTimer); _nudgeTimer = null; }
   localStorage.removeItem('os_active_session');
   _pomoRound = 0;
   localStorage.removeItem('blunk_pomodoro_round');
 
   if (!isViolation) {
-    await showSessionOverlay('Oturum Sonlandırılıyor', 'Verileriniz kaydediliyor ve ilerlemeniz hesaplanıyor. Lütfen bekleyiniz.', 3000);
+    showSessionLoading('Oturum Sonlandırılıyor...', 'Verileriniz kaydediliyor ve ilerlemeniz hesaplanıyor.');
   }
 
   try {
-    const res = await fetch(`/api/sessions/end/${session.id}`, {
+    const res = await fetch(`/api/sessions/end/${sessionIdToRate}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ violation: isViolation })
@@ -1152,10 +1296,12 @@ async function endSession(isViolation = false) {
     window._activeSession  = null;
     window._violationFired = false;
 
+    if (!isViolation) {
+      await hideSessionLoading();
+    }
+
     if (res.ok) {
       const data = await res.json();
-
-      if (!isViolation) await hideSessionLoading();
 
       if (data.total_focus_time !== undefined && currentUser) {
         currentUser.total_focus_time = data.total_focus_time;
@@ -1173,37 +1319,35 @@ async function endSession(isViolation = false) {
           if (crack)  crack.classList.remove('show');
         }, 3000);
       } else {
+        updateTimerUI('idle');
+        updateTimerStats();
+
         if (data.xpGained !== undefined && currentUser) {
-          const oldXP   = currentUser.xp || 0;
+          const oldXP    = currentUser.xp || 0;
           const oldLevel = currentUser.level || 1;
           currentUser.xp    += data.xpGained;
           currentUser.level  = data.newLevel;
 
           if (data.xpGained > 0) {
-            animateXPBar(oldXP, currentUser.xp);
-            setTimeout(() => {
-              openSummaryModal(data, sessionIdToRate);
-            }, 5200);
+            const bonusText = data.bonusGained > 0 ? ` (+${data.bonusGained} Milestone Bonusu!)` : '';
+            if (typeof showToast === 'function') {
+              showToast(`+${data.xpGained} XP kazandınız.${bonusText}`, 3000);
+            }
+            // Wait for XP bar animation & particles to complete before opening the summary modal
+            await animateXPBar(oldXP, currentUser.xp, 2600);
+            await new Promise(r => setTimeout(r, 400));
           } else {
-            updateTimerStats();
-            setTimeout(() => {
-              openSummaryModal(data, sessionIdToRate);
-            }, 500);
+            updateXPBarUI(currentUser.xp);
           }
 
           if (data.newLevel > oldLevel) {
-            setTimeout(() => {
-              if (typeof showToast === 'function') showToast(`Tebrikler, yeni bir seviyeye ulaştınız! Güncel Seviyeniz: ${data.newLevel}`, 5000);
-            }, 1200);
-          }
-
-          if (data.xpGained > 0 && typeof showToast === 'function') {
-            const bonusText = data.bonusGained > 0 ? ` (+${data.bonusGained} Milestone Bonusu!)` : '';
-            showToast(`+${data.xpGained} XP kazandınız.${bonusText}`, 3000);
+            if (typeof showToast === 'function') {
+              showToast(`Tebrikler, yeni bir seviyeye ulaştınız! Güncel Seviyeniz: ${data.newLevel}`, 5000);
+            }
           }
         }
-        updateTimerUI('completed', data);
-        // openSummaryModal call removed from here (it's delayed above)
+
+        openSummaryModal(data, sessionIdToRate);
       }
     } else {
       if (!isViolation) await hideSessionLoading();
@@ -1216,6 +1360,8 @@ async function endSession(isViolation = false) {
     if (!isViolation) await hideSessionLoading();
     updateTimerUI('idle');
   }
+
+  window._isEndingSession = false;
 
   // Restore start button text in case it was left in a loading state
   const _sb = el('timerStartBtn');
@@ -1271,28 +1417,38 @@ function _onTick(elapsed) {
 
 function _startTimerWorker() {
   // Clean up any existing workers/intervals
-  if (_timerWorker) { _timerWorker.postMessage({ action: 'stop' }); _timerWorker.terminate(); _timerWorker = null; }
+  if (_timerWorker) {
+    try { _timerWorker.postMessage({ action: 'stop' }); _timerWorker.terminate(); } catch (e) {}
+    _timerWorker = null;
+  }
   if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
 
-  if (typeof Worker !== 'undefined') {
+  // Initial immediate tick so the display never stays on 00:00 or idle state
+  if (_sessionStartTime) {
+    const elapsed = Math.floor((Date.now() - _sessionStartTime.getTime()) / 1000);
+    _onTick(Math.max(0, elapsed));
+  }
+
+  // Reliable interval baseline running continuously
+  _timerInterval = setInterval(() => {
+    if (!window._activeSession || !_sessionStartTime) return;
+    const elapsed = Math.floor((Date.now() - _sessionStartTime.getTime()) / 1000);
+    _onTick(Math.max(0, elapsed));
+  }, 1000);
+
+  // Background Web Worker for inactive tab precision
+  if (typeof Worker !== 'undefined' && _sessionStartTime) {
     try {
       const inlineWorkerCode = `
-        let _interval = null, _startTime = null, _mode = 'free', _durationSecs = 0;
+        let _interval = null, _startTime = null;
         self.onmessage = function(e) {
-          const { action, startTime, mode, durationSecs } = e.data || {};
+          const { action, startTime } = e.data || {};
           if (action === 'start') {
             if (_interval) clearInterval(_interval);
             _startTime = startTime || Date.now();
-            _mode = mode || 'free';
-            _durationSecs = durationSecs || 0;
             _interval = setInterval(() => {
               const elapsed = Math.floor((Date.now() - _startTime) / 1000);
-              self.postMessage({
-                type: 'tick',
-                elapsed,
-                remaining: _mode === 'pomodoro' ? Math.max(0, _durationSecs - elapsed) : null,
-                isOver: _mode === 'pomodoro' ? elapsed >= _durationSecs : false
-              });
+              self.postMessage({ type: 'tick', elapsed });
             }, 1000);
           } else if (action === 'stop') {
             if (_interval) { clearInterval(_interval); _interval = null; }
@@ -1303,36 +1459,19 @@ function _startTimerWorker() {
       const blob = new Blob([inlineWorkerCode], { type: 'application/javascript' });
       const blobUrl = URL.createObjectURL(blob);
       _timerWorker = new Worker(blobUrl);
-      _timerWorker.onmessage = (e) => { if (e.data.type === 'tick') _onTick(e.data.elapsed); };
+      _timerWorker.onmessage = (e) => {
+        if (e.data && e.data.type === 'tick' && typeof e.data.elapsed === 'number') {
+          _onTick(e.data.elapsed);
+        }
+      };
       _timerWorker.postMessage({
-        action:       'start',
-        startTime:    _sessionStartTime.getTime(),
-        mode:         _timerMode,
-        durationSecs: _timerMode === 'pomodoro' ? _pomodoroTargetSecs : 0
+        action:    'start',
+        startTime: _sessionStartTime.getTime()
       });
-      return;
-    } catch (e) {
-      try {
-        _timerWorker = new Worker('/js/timer-worker.js');
-        _timerWorker.onmessage = (e) => { if (e.data.type === 'tick') _onTick(e.data.elapsed); };
-        _timerWorker.postMessage({
-          action:       'start',
-          startTime:    _sessionStartTime.getTime(),
-          mode:         _timerMode,
-          durationSecs: _timerMode === 'pomodoro' ? _pomodoroTargetSecs : 0
-        });
-        return;
-      } catch (err) {
-        console.warn('[Timer] Worker failed, using interval fallback:', err);
-      }
+    } catch (err) {
+      console.warn('[Timer] WebWorker fallback to setInterval:', err);
     }
   }
-
-  // Fallback: setInterval
-  _timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - _sessionStartTime) / 1000);
-    _onTick(elapsed);
-  }, 1000);
 }
 
 // Legacy alias used in session restore
@@ -1350,7 +1489,7 @@ function renderTimerDisplay(secs) {
     const duelMe = el('duelTimerMe');
     if (duelMe) duelMe.textContent = timeStr;
     updateDuelLeads?.();
-    titleText = `[⚔️ ${timeStr}] BLUNK`;
+    titleText = `[⚔ ${timeStr}] BLUNK`;
   } else {
     const disp = el('timerDisplaySolo');
     if (!disp) return;
@@ -1359,11 +1498,11 @@ function renderTimerDisplay(secs) {
       const remaining  = Math.max(0, _pomodoroTargetSecs - secs);
       const timeStr    = fmtClock(remaining);
       disp.textContent = timeStr;
-      titleText        = `[🍅 Tur ${_pomoRound + 1} - ${timeStr}] BLUNK`;
+      titleText        = `[Pomodoro Tur ${_pomoRound + 1} - ${timeStr}] BLUNK`;
     } else {
       const timeStr    = fmtClock(secs);
       disp.textContent = timeStr;
-      titleText        = `[⏱️ ${timeStr}] BLUNK`;
+      titleText        = `[${timeStr}] BLUNK`;
     }
 
     disp.classList.add('ticking');
@@ -1401,11 +1540,11 @@ function resetTimerDisplay() {
 function checkMilestones(secs) {
   const mins = Math.floor(secs / 60);
   const toasts = [
-    [5,   '🔥 5 dakika — iyi gidiyorsun!'],
-    [10,  '⚡ 10 dakika — ritme girdin'],
-    [25,  '💪 25 dakika — yarı yoldasın'],
-    [60,  '🏆 1 SAAT! Efsane odak'],
-    [120, '👑 2 SAAT! Rakipler titredi']
+    [5,   '5 dakika — ritme girdin!'],
+    [10,  '10 dakika — odaklanman harika'],
+    [25,  '25 dakika — seansın yarılandı'],
+    [60,  '1 SAAT — Efsane derin odak!'],
+    [120, '2 SAAT — Muazzam performans!']
   ];
   toasts.forEach(([m, msg]) => {
     if (mins === m && !_milestones[m]) {
@@ -1669,7 +1808,7 @@ function startPartyPoll(partyId) {
   clearInterval(_partyMsgInterval);
 
   const bg = document.hidden;
-  const pollDelay = bg ? 30000 : 1000;
+  const pollDelay = bg ? 30000 : 3000; // 3 seconds instead of 1 second to eliminate DOM thrashing
   const msgDelay  = bg ? 30000 : 3000;
 
   fetchPartyAndRender(partyId);
@@ -1953,7 +2092,7 @@ function renderPartyDuel(partyData) {
     : [{ id: defaultChanId, name: 'Genel Odak Odası', user_limit: 0, position: 0, is_default: 1 }];
 
   if (membersEl) {
-    membersEl.innerHTML = channels.map(chan => {
+    const newHtml = channels.map(chan => {
       const chanMembers    = members.filter(m => parseInt(m.channel_id) === parseInt(chan.id) || (!m.channel_id && chan.is_default));
       const isCurrentChan  = window._currentChannelId && parseInt(window._currentChannelId) === parseInt(chan.id);
       const isFull         = chan.user_limit > 0 && chanMembers.length >= chan.user_limit;
@@ -2008,6 +2147,15 @@ function renderPartyDuel(partyData) {
         </div>
       </div>`;
     }).join('');
+
+    // Generate a lightweight signature of structural data (excluding live timer values which are handled dynamically)
+    const renderSig = channels.map(c => `${c.id}:${c.name}:${c.user_limit}:${members.filter(m => parseInt(m.channel_id) === c.id).map(m => m.username + m.role + (m.active_session_id?'1':'0')).join(',')}`).join('|');
+    
+    // Only update innerHTML if structural content has changed to prevent DOM thrashing & hover flickering
+    if (membersEl.dataset.renderSignature !== renderSig) {
+      membersEl.innerHTML = newHtml;
+      membersEl.dataset.renderSignature = renderSig;
+    }
   }
 
   const soloPartyRow = el('soloPartyControlsRow');
@@ -2739,52 +2887,70 @@ window.copyPartyInviteLink = async function() {
 function _isMobileView() { return window.innerWidth <= 768; }
 
 function _placeOverlayFixed(overlay) {
+  if (!overlay) return;
   overlay.style.position  = 'fixed';
   overlay.style.transform = 'none';
+  const isMobile = _isMobileView();
+  const W = window.innerWidth, H = window.innerHeight;
+  const MARGIN = isMobile ? 16 : 12;
+  const ow = overlay.offsetWidth || 44;
+  const oh = overlay.offsetHeight || 330;
+
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('os_overlay_snap') || 'null'); } catch { /* ignore */ }
 
-  if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
-    const W = window.innerWidth, H = window.innerHeight;
-    const ow = overlay.offsetWidth || 44, oh = overlay.offsetHeight || 240;
-    overlay.style.left   = `${Math.max(0, Math.min(W - ow, saved.left))}px`;
-    overlay.style.top    = `${Math.max(56, Math.min(H - oh - 8, saved.top))}px`;
-    overlay.style.right  = 'auto';
-    overlay.style.bottom = 'auto';
-  } else if (_isMobileView()) {
-    const navBottom = 76 + (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0') || 0);
-    overlay.style.right  = '16px';
-    overlay.style.bottom = `${navBottom + 16}px`;
-    overlay.style.left   = 'auto';
-    overlay.style.top    = 'auto';
-  } else {
-    overlay.style.left   = '12px';
-    overlay.style.top    = `${Math.max(56, Math.round((window.innerHeight - 240) / 2))}px`;
-    overlay.style.right  = 'auto';
-    overlay.style.bottom = 'auto';
+  let left = MARGIN;
+  let top = isMobile 
+    ? Math.max(56, H - oh - 76) 
+    : Math.max(56, Math.round((H - oh) / 2));
+
+  if (saved) {
+    if (saved.side === 'right') {
+      left = W - ow - MARGIN;
+    } else if (saved.side === 'left') {
+      left = MARGIN;
+    }
+    if (typeof saved.top === 'number' && !isNaN(saved.top)) {
+      top = Math.max(56, Math.min(H - oh - (isMobile ? 80 : 16), saved.top));
+    }
+  } else if (isMobile) {
+    left = W - ow - MARGIN;
   }
+
+  overlay.style.left   = `${Math.max(0, Math.min(W - ow, left))}px`;
+  overlay.style.top    = `${top}px`;
+  overlay.style.right  = 'auto';
+  overlay.style.bottom = 'auto';
   overlay.classList.add('has-drag-pos');
+  updatePartyOverlayCollapseBtn();
 }
 
 function _snapToEdge(overlay) {
+  if (!overlay) return;
   const isMobile = _isMobileView();
   const W      = window.innerWidth, H = window.innerHeight;
-  const MARGIN = isMobile ? 0 : 12;
+  const MARGIN = isMobile ? 16 : 12;
   const rect   = overlay.getBoundingClientRect();
-  const cx     = rect.left + rect.width / 2;
-  const snapRight = cx > W / 2;
-  const left   = snapRight ? (W - rect.width - MARGIN) : MARGIN;
-  const top    = Math.max(56, Math.min(H - rect.height - 76, rect.top));
+  const ow     = rect.width || 44;
+  const oh     = rect.height || 330;
 
-  overlay.style.transition = 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1), top 0.3s cubic-bezier(0.25, 1, 0.5, 1), right 0.3s, bottom 0.3s';
+  const cx     = rect.left + ow / 2;
+  const snapRight = cx > W / 2;
+  const side   = snapRight ? 'right' : 'left';
+  const left   = snapRight ? (W - ow - MARGIN) : MARGIN;
+  const top    = Math.max(56, Math.min(H - oh - (isMobile ? 80 : 16), rect.top));
+
+  overlay.style.transition = 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1), top 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
   overlay.style.left   = `${left}px`;
   overlay.style.top    = `${top}px`;
   overlay.style.right  = 'auto';
   overlay.style.bottom = 'auto';
   overlay.classList.add('has-drag-pos');
-  try { localStorage.setItem('os_overlay_snap', JSON.stringify({ left, top })); } catch { /* ignore */ }
+  try { 
+    localStorage.setItem('os_overlay_snap', JSON.stringify({ side, top })); 
+  } catch { /* ignore */ }
   updatePartyOverlayCollapseBtn();
-  setTimeout(() => { overlay.style.transition = ''; }, 320);
+  setTimeout(() => { overlay.style.transition = ''; }, 260);
 }
 
 function togglePartyFocusOverlay() {
@@ -2833,7 +2999,8 @@ function initDraggablePartyOverlay() {
   let startX = 0, startY = 0, initLeft = 0, initTop = 0;
 
   const dragStart = (clientX, clientY, target, pointerId) => {
-    if (!overlay.classList.contains('collapsed') || target.closest('button')) return;
+    if (!overlay.classList.contains('collapsed')) return;
+    if (target.closest('button') || target.closest('a') || target.closest('input')) return;
     dragging = true; moved = false;
     try { overlay.setPointerCapture(pointerId); } catch { /* ignore */ }
     overlay.classList.add('is-dragging', 'has-drag-pos');
@@ -2852,7 +3019,7 @@ function initDraggablePartyOverlay() {
     const dx = clientX - startX, dy = clientY - startY;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
     const W = window.innerWidth, H = window.innerHeight;
-    const ow = overlay.offsetWidth, oh = overlay.offsetHeight;
+    const ow = overlay.offsetWidth || 44, oh = overlay.offsetHeight || 330;
     overlay.style.left = `${Math.max(0, Math.min(W - ow, initLeft + dx))}px`;
     overlay.style.top  = `${Math.max(56, Math.min(H - oh - 8, initTop + dy))}px`;
   };
@@ -2872,6 +3039,15 @@ function initDraggablePartyOverlay() {
   overlay.addEventListener('pointermove', (e) => { if (dragging) { e.preventDefault(); dragMove(e.clientX, e.clientY); } }, { passive: false });
   overlay.addEventListener('pointerup',     (e) => dragEnd(e.pointerId));
   overlay.addEventListener('pointercancel', (e) => dragEnd(e.pointerId));
+
+  // Keep overlay clamped and properly snapped on window resize / orientationchange
+  const handleViewportChange = () => {
+    if (!overlay.classList.contains('collapsed') || dragging) return;
+    _snapToEdge(overlay);
+  };
+
+  window.addEventListener('resize', handleViewportChange, { passive: true });
+  window.addEventListener('orientationchange', handleViewportChange, { passive: true });
 }
 
 
@@ -2896,6 +3072,12 @@ function _startRealTimeClock() {
 // § 25. BOOT — DOMContentLoaded
 // ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Load official categories from DB
+  fetch('/api/categories')
+    .then(r => r.json())
+    .then(data => { window._officialCategories = data; _officialCategories = data; })
+    .catch(err => console.error("[Focus] Kategoriler yüklenemedi:", err));
+
   // Restore UI mode
   selectSetupMode(_timerMode || 'free');
   restorePomodoroBreakState();
@@ -2949,6 +3131,7 @@ Object.assign(window, {
   openFocusSetupModal, closeFocusSetupModal,
   fsmSelectCat, fsmSearchActivities, fsmPickActivity, fsmToStep2,
   fsmSelectMode, fsmStep2Next, fsm2ApplyPreset, fsm2AdjustInput, fsmGoBack,
+  fsmClearSearch, fsmHandleSearchEnter, fsmHandlePrimaryAction,
   selectSetupMode, setMainTimerMode, syncMainTimerModeUI,
   confirmStartFocusFromModal, onMainTimerButtonClick,
   applyPomoPreset, adjustPomoInput, clearPresetSelection,
@@ -2967,7 +3150,7 @@ Object.assign(window, {
 
   // Summary
   goToStep, openSummaryModal, closeFocusSummaryModal,
-  selectFeeling, selectCategory, onActivitySearch, selectActivity,
+  selectFeeling, selectCategory, fsmSearchActivities, fsmPickActivity,
   submitRating, openUnratedSessionRating,
 
   // Party

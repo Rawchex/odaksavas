@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   is_private INTEGER DEFAULT 0,
   status VARCHAR DEFAULT 'online',
   device_type TEXT DEFAULT 'desktop',
+  blunk_coins INTEGER DEFAULT 0,
+  has_premium_pass INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -214,6 +216,57 @@ CREATE TABLE IF NOT EXISTS reposts (
   UNIQUE(user_id, post_id)
 );
 
+CREATE TABLE IF NOT EXISTS post_votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  post_id INTEGER,
+  vote_type INTEGER, -- 1 for upvote, -1 for downvote
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (post_id) REFERENCES posts(id),
+  UNIQUE(user_id, post_id)
+);
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  post_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (post_id) REFERENCES posts(id),
+  UNIQUE(user_id, post_id)
+);
+
+CREATE TABLE IF NOT EXISTS post_polls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER UNIQUE NOT NULL,
+  question TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS poll_options (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id INTEGER NOT NULL,
+  option_text TEXT NOT NULL,
+  option_index INTEGER NOT NULL,
+  FOREIGN KEY (poll_id) REFERENCES post_polls(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id INTEGER NOT NULL,
+  option_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(poll_id, user_id),
+  FOREIGN KEY (poll_id) REFERENCES post_polls(id) ON DELETE CASCADE,
+  FOREIGN KEY (option_id) REFERENCES poll_options(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+
+
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   from_user_id INTEGER NOT NULL,
@@ -299,3 +352,60 @@ CREATE TRIGGER IF NOT EXISTS ignore_dnd_notifications
   BEGIN
     SELECT RAISE(IGNORE);
   END;
+
+-- ════════════════════════════════════════════════════════════════
+-- LEAGUES & SEASONS & PERMANENT MEDALS SCHEMA
+-- ════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS seasons (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  season_number INTEGER UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  start_date DATETIME NOT NULL,
+  end_date DATETIME NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_medals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  league_type TEXT NOT NULL,        -- 'overall', 'category', 'activity'
+  league_name TEXT NOT NULL,        -- 'Genel', 'KPSS Lisans', 'Minecraft oynamak' vb.
+  rank INTEGER NOT NULL,            -- 1: Altın, 2: Gümüş, 3: Bronz
+  season_number INTEGER NOT NULL,   -- Örn: 1
+  week_number INTEGER NOT NULL,     -- Örn: 32
+  week_identifier TEXT NOT NULL,   -- Örn: '2026-W32'
+  total_minutes INTEGER NOT NULL,   -- O haftaki toplam kazandığı dakika
+  is_showcased INTEGER DEFAULT 0,  -- 1: Profil vitrininde gösteriliyor, 0: Gizli
+  showcase_order INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, week_identifier, league_type, league_name)
+);
+
+CREATE TABLE IF NOT EXISTS user_follows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  follower_id INTEGER NOT NULL,
+  following_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(follower_id, following_id),
+  FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_follows_follower ON user_follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_user_follows_following ON user_follows(following_id);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  order_id TEXT NOT NULL UNIQUE,
+  package_id TEXT,
+  price REAL,
+  coins INTEGER,
+  status TEXT DEFAULT 'pending',
+  shopier_order_no TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);

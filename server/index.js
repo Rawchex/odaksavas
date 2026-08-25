@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const express = require('express');
 // sqlite3 is now abstracted inside db.js
 const cookieParser = require('cookie-parser');
@@ -9,7 +10,14 @@ const jwt = require('jsonwebtoken');
 const webpush = require('web-push');
 const rateLimit = require('express-rate-limit');
 const SALT_ROUNDS = 10;
-const JWT_SECRET = process.env.JWT_SECRET || 'odaksavasi_super_secret_jwt_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET environment variable is not set. Server cannot start safely.');
+  process.exit(1);
+}
+
+// PM2 cluster: only worker 0 (or standalone node) runs scheduled jobs
+const IS_PRIMARY_WORKER = !process.env.pm_id || process.env.pm_id === '0';
 
 // Persistent Data Directory (Useful for Railway Volumes)
 const DATA_DIR = process.env.DATA_DIR || __dirname;
@@ -48,37 +56,31 @@ global.partyVoiceStates = {};
 global.partySignals = {};
 
 
-// Multer security configuration
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'public', 'uploads');
-// Ensure uploads directory exists
-if (!fs.existsSync(UPLOADS_DIR)){
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-
-const upload = multer({ 
-  dest: UPLOADS_DIR,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
-  fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Sadece .png, .jpg, .jpeg, .webp formatlarına izin verilir.'));
-    }
-  }
-});
+// Upload configuration (Local fallback or R2/S3)
+const { upload, getFileUrl } = require('./storage');
 
 // Generic Rate Limiter (Only for /api endpoints, never static assets)
+// Redis store ensures cluster-wide rate limiting (not per-worker)
+const { getRedis, isRedisEnabled } = require('./redis');
+
+let rateLimitStore;
+if (isRedisEnabled) {
+  const RedisStore = require('rate-limit-redis');
+  rateLimitStore = new RedisStore({ sendCommand: (...args) => getRedis().call(...args) });
+}
+
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20000, // Limit each IP to 20000 API requests per 15 mins (avoids 429 during active voice polling)
+  windowMs: 15 * 60 * 1000,
+  max: 20000,
+  store: rateLimitStore, // undefined → in-memory (single-process safe)
   message: { error: 'Çok fazla istek gönderdiniz, lütfen daha sonra tekrar deneyin.' }
 });
 
 // Auth specific Rate Limiter
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // Limit each IP to 30 login/register requests per window
+  max: 30,
+  store: rateLimitStore,
   message: { error: 'Çok fazla giriş denemesi, lütfen 15 dakika bekleyin.' }
 });
 
@@ -113,8 +115,27 @@ app.use((req, res, next) => {
 
 // Serve static files
 app.use(express.static(path.join(__dirname, '..', 'public')));
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'public', 'uploads');
 app.use('/uploads', express.static(UPLOADS_DIR)); // Explicitly serve uploads from persistent dir
 app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// Health Check endpoint for Railway / Uptime Monitor (must be BEFORE /:username wildcard)
+app.get('/health', (req, res) => {
+  const startTime = Date.now();
+  db.get('SELECT 1 as ok', [], (err, row) => {
+    const dbOk = !err && row && row.ok === 1;
+    const status = dbOk ? 200 : 503;
+    res.status(status).json({
+      status: dbOk ? 'ok' : 'degraded',
+      db: dbOk ? 'ok' : 'error',
+      uptime: Math.floor(process.uptime()),
+      latencyMs: Date.now() - startTime,
+      worker: process.env.pm_id || '0',
+      memory: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+      timestamp: new Date().toISOString()
+    });
+  });
+});
 
 // Profile page with Open Graph meta tags for social sharing
 app.get(['/:username', '/u/:username', '/profile/:username', '/profil/:username'], (req, res) => {
@@ -134,8 +155,8 @@ app.get(['/:username', '/u/:username', '/profile/:username', '/profil/:username'
 
   db.get('SELECT username, bio, profile_photo, level, xp, total_focus_time FROM users WHERE LOWER(username) = LOWER(?)', [username], (err, user) => {
     if (err || !user) {
-      // Kullanıcı bulunamazsa normal index.html'i döndür
-      return res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+      // Kullanıcı bulunamazsa 404 döndür (Google soft-404 sorunu için)
+      return res.status(404).sendFile(path.join(__dirname, '..', 'public', 'index.html'));
     }
 
     // Open Graph meta etiketlerini oluştur
@@ -183,13 +204,10 @@ app.get(['/:username', '/u/:username', '/profile/:username', '/profil/:username'
   });
 });
 
-// Health Check endpoint for Railway / Uptime Monitor
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
-});
 
 // Public Stats endpoint — no auth required, used for landing page
-app.get('/api/public-stats', (req, res) => {
+const cacheMiddleware = require('./middleware/cache');
+app.get('/api/public-stats', cacheMiddleware(60), (req, res) => {
   db.get('SELECT COUNT(*) as userCount FROM users', [], (err, u) => {
     db.get('SELECT COUNT(*) as sessionCount, COALESCE(SUM(duration),0) as totalMinutes FROM sessions WHERE status = ?', ['completed'], (err2, s) => {
       db.get('SELECT COUNT(*) as postCount FROM posts', [], (err3, p) => {
@@ -220,331 +238,7 @@ app.get('/uploads/default-avatar.png', (req, res) => {
 
 
 // Database setup - apply full schema from schema.sql
-const schemaPath = path.join(__dirname, '..', 'schema.sql');
-if (fs.existsSync(schemaPath)) {
-  const schema = fs.readFileSync(schemaPath, 'utf8');
-  db.exec(schema, err => {
-    if (err) console.error('Schema apply error:', err.message);
-    else console.log('Schema applied successfully');
-  });
-}
-
-// Migration checks for existing databases
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS party_channels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    user_limit INTEGER DEFAULT 0,
-    position INTEGER DEFAULT 0,
-    is_default INTEGER DEFAULT 0,
-    allow_screen_share INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (party_id) REFERENCES parties(id)
-  )`);
-
-  db.run(`ALTER TABLE party_members ADD COLUMN channel_id INTEGER DEFAULT NULL`, () => {});
-  db.run(`ALTER TABLE party_members ADD COLUMN role VARCHAR DEFAULT 'member'`, () => {});
-  db.run(`ALTER TABLE party_channels ADD COLUMN allow_screen_share INTEGER DEFAULT 0`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN google_id TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN email TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN birth_date TEXT`, () => {});
-});
-
-// Database setup
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    bio TEXT,
-    height INTEGER,
-    weight INTEGER,
-    cv TEXT,
-    profile_photo TEXT,
-    total_focus_time INTEGER DEFAULT 0,
-    level INTEGER DEFAULT 1,
-    xp INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    start_time DATETIME,
-    end_time DATETIME,
-    duration INTEGER,
-    status TEXT,
-    party_id INTEGER,
-    mode TEXT DEFAULT 'free',
-    target_duration INTEGER DEFAULT 0,
-    break_duration INTEGER DEFAULT 0,
-    feeling TEXT,
-    category TEXT,
-    activity TEXT,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (party_id) REFERENCES parties(id)
-  )`);
-  db.run('ALTER TABLE sessions ADD COLUMN mode TEXT', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN target_duration INTEGER', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN break_duration INTEGER', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN note TEXT', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN pomo_state TEXT DEFAULT "focusing"', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN pomo_round INTEGER DEFAULT 0', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN state_start_time DATETIME', () => {});
-
-  db.run(`CREATE TABLE IF NOT EXISTS parties (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id INTEGER,
-    name TEXT,
-    is_private INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (owner_id) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS party_invites (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER,
-    from_user_id INTEGER,
-    to_user_id INTEGER,
-    status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (party_id) REFERENCES parties(id),
-    FOREIGN KEY (from_user_id) REFERENCES users(id),
-    FOREIGN KEY (to_user_id) REFERENCES users(id),
-    UNIQUE(party_id, to_user_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS party_members (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER,
-    user_id INTEGER,
-    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (party_id) REFERENCES parties(id),
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE(party_id, user_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS friendships (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    friend_id INTEGER,
-    status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (friend_id) REFERENCES users(id),
-    UNIQUE(user_id, friend_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    content TEXT,
-    image TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS likes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    post_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (post_id) REFERENCES posts(id),
-    UNIQUE(user_id, post_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    post_id INTEGER,
-    content TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (post_id) REFERENCES posts(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS comment_likes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    comment_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (comment_id) REFERENCES comments(id),
-    UNIQUE(user_id, comment_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    type TEXT,
-    from_user_id INTEGER,
-    post_id INTEGER,
-    comment_id INTEGER,
-    party_id INTEGER,
-    read INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (from_user_id) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS reposts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    post_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (post_id) REFERENCES posts(id),
-    UNIQUE(user_id, post_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_user_id INTEGER NOT NULL,
-    to_user_id INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    read INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (from_user_id) REFERENCES users(id),
-    FOREIGN KEY (to_user_id) REFERENCES users(id)
-  )`);
-
-  // Add new columns to existing tables safely
-  db.run('ALTER TABLE users ADD COLUMN password_hash TEXT', () => {});
-  db.run('ALTER TABLE users ADD COLUMN last_seen DATETIME', () => {});
-  db.run('ALTER TABLE users ADD COLUMN is_private INTEGER DEFAULT 0', () => {});
-  db.run('ALTER TABLE messages ADD COLUMN parent_id INTEGER', () => {});
-  db.run('ALTER TABLE messages ADD COLUMN group_id INTEGER', () => {}); // for group chats
-  db.run('ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT "online"', () => {});
-  db.run('ALTER TABLE messages ADD COLUMN is_share INTEGER DEFAULT 0', () => {});
-  db.run('ALTER TABLE parties ADD COLUMN invite_code TEXT', () => {
-    // Fill empty invite codes for existing parties
-    db.all('SELECT id FROM parties WHERE invite_code IS NULL OR invite_code = ""', (err, rows) => {
-      if (rows && rows.length > 0) {
-        rows.forEach(r => {
-          const code = Array.from({length: 8}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 56)]).join('');
-          db.run('UPDATE parties SET invite_code = ? WHERE id = ?', [code, r.id]);
-        });
-      }
-    });
-  });
-  db.run('ALTER TABLE sessions ADD COLUMN party_id INTEGER', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN feeling TEXT', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN category TEXT', () => {});
-  db.run('ALTER TABLE sessions ADD COLUMN activity TEXT', () => {});
-  db.run('ALTER TABLE comments ADD COLUMN parent_id INTEGER', () => {});
-  db.run('ALTER TABLE posts ADD COLUMN repost_of_post_id INTEGER', () => {});
-  db.run('ALTER TABLE posts ADD COLUMN views INTEGER DEFAULT 0', () => {});
-  db.run('ALTER TABLE users ADD COLUMN device_type TEXT DEFAULT \'desktop\'', () => {});
-  db.run('ALTER TABLE chat_groups ADD COLUMN disappearing_hours INTEGER DEFAULT 24', () => {});
-  db.run('ALTER TABLE chat_groups ADD COLUMN avatar TEXT', () => {});
-
-  // Performance: DB indexes for message queries
-  db.run('CREATE INDEX IF NOT EXISTS idx_messages_dm ON messages(from_user_id, to_user_id, group_id)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_messages_read ON messages(from_user_id, to_user_id, read)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id, created_at)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_message_reactions_msg ON message_reactions(message_id)');
-  
-  db.run(`CREATE TABLE IF NOT EXISTS chat_groups (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    avatar TEXT,
-    disappearing_hours INTEGER DEFAULT 24,
-    created_by INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS chat_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user1_id INTEGER NOT NULL,
-    user2_id INTEGER NOT NULL,
-    disappearing_hours INTEGER DEFAULT 24,
-    UNIQUE(user1_id, user2_id),
-    FOREIGN KEY (user1_id) REFERENCES users(id),
-    FOREIGN KEY (user2_id) REFERENCES users(id)
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS chat_group_members (
-    group_id INTEGER,
-    user_id INTEGER,
-    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (group_id, user_id),
-    FOREIGN KEY (group_id) REFERENCES chat_groups(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS party_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER,
-    user_id INTEGER,
-    content TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (party_id) REFERENCES parties(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS message_reactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER,
-    user_id INTEGER,
-    reaction TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(message_id, user_id),
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS web_push_subscriptions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    subscription TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-
-  db.run(`CREATE TRIGGER IF NOT EXISTS ignore_dnd_notifications
-    BEFORE INSERT ON notifications
-    FOR EACH ROW
-    WHEN (SELECT status FROM users WHERE id = NEW.user_id) = 'dnd'
-    BEGIN
-      SELECT RAISE(IGNORE);
-    END;
-  `);
-
-  db.run(`CREATE TABLE IF NOT EXISTS party_bans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
-    banned_by INTEGER NOT NULL,
-    reason TEXT,
-    created_at DATETIME DEFAULT (datetime('now')),
-    UNIQUE(party_id, user_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS party_voice_moderation (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
-    muted_by INTEGER NOT NULL,
-    reason TEXT,
-    expires_at DATETIME,
-    created_at DATETIME DEFAULT (datetime('now')),
-    UNIQUE(party_id, user_id)
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS party_moderation_audit (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    party_id INTEGER NOT NULL,
-    actor_id INTEGER NOT NULL,
-    target_user_id INTEGER,
-    action TEXT NOT NULL,
-    reason TEXT,
-    metadata TEXT,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )`);
-});
+// Database migration is now handled by scripts/migrate.js
 
 // Periodic database cleanup for messages and party chats
 function cleanupOldMessages() {
@@ -558,8 +252,10 @@ function cleanupOldMessages() {
     if (err) console.error('Error cleaning up party messages:', err.message);
   });
 }
-cleanupOldMessages();
-setInterval(cleanupOldMessages, 60 * 1000); // Check every minute
+if (IS_PRIMARY_WORKER) {
+  cleanupOldMessages();
+  setInterval(cleanupOldMessages, 60 * 1000); // Check every minute
+}
 
 
 // Auth middleware — JWT tabanlı
@@ -619,7 +315,181 @@ const checkSpamLimit = (req, res, next) => {
   next();
 };
 
-// --- PUSH NOTIFICATION HELPER ---
+// ════════════════════════════════════════════════════════════════
+// ROUTES: Modular route files
+// ════════════════════════════════════════════════════════════════
+const seasonManager = require('./leagues/seasonManager');
+const leaderboardService = require('./leagues/leaderboardService');
+const medalEngine = require('./leagues/medalEngine');
+const seasonPassAPI = require('./routes/seasonPassAPI');
+const inventoryAPI = require('./routes/inventoryAPI');
+const paymentAPI = require('./routes/paymentAPI')(db);
+
+app.use('/api/season-pass-system', seasonPassAPI);
+app.use('/api/inventory', inventoryAPI);
+app.use('/api/payment', paymentAPI);
+
+// Trigger initial weekly evaluation on server start (only primary worker)
+if (IS_PRIMARY_WORKER) {
+  medalEngine.evaluateWeeklyLeagues();
+  setInterval(() => {
+    medalEngine.evaluateWeeklyLeagues();
+  }, 60 * 60 * 1000);
+}
+
+// --- Leagues & Leaderboard routes ---
+const leaguesRouter = require('./routes/leagues')(db, auth, seasonManager, leaderboardService, medalEngine);
+app.use('/api', leaguesRouter);
+
+// GET /api/leagues/status
+app.get('/api/leagues/status', (req, res) => {
+  const status = seasonManager.getCurrentSeasonAndWeek();
+  leaderboardService.getActiveLeagueOptions((err, options) => {
+    res.json({
+      ...status,
+      options: options || { categories: [], activities: [] }
+    });
+  });
+});
+
+// GET /api/leaderboard/rival-message
+app.get('/api/leaderboard/rival-message', (req, res) => {
+  const currentRank = parseInt(req.query.currentRank, 10);
+  const previousRank = parseInt(req.query.previousRank, 10);
+  const username = req.query.username || 'oyuncu';
+
+  let messages = [];
+
+  if (currentRank === 4) {
+    if (previousRank === 1) {
+      messages = [
+        `Şampiyonluktan düşmek en acısıdır @${username}. Tahtını geri almak için hemen odaklan!`,
+        `Zirvenin havası başkadır, dördüncülük sana yakışmıyor @${username}. Hemen toparlan.`,
+        `Bir zamanlar birinciydin, şimdi podyumda bile değilsin. Bunu kendine yakıştırıyor musun @${username}?`,
+        `Tahtı başkasına kaptırdın... Acilen eski formuna dönüp o birinciliği geri almalısın @${username}!`
+      ];
+    } else if (previousRank === 2 || previousRank === 3) {
+      messages = [
+        `Podyumdan kayıp düştün @${username}. O madalyayı başkasına mı kaptıracaksın?`,
+        `İlk üçten düşmek can sıkar. Rakiplerin gaza basmış, sen de basmalısın @${username}.`,
+        `Madalya bölgesindeydin ne güzel. Şimdi dışarıdan izliyorsun... Hemen bir seans başlat!`,
+        `Podyumdan itildin ama henüz bitmedi. Yeniden çıkmak için bir fırsattır, hadi @${username}!`
+      ];
+    } else {
+      messages = [
+        `ilk üçte kalmak istikrar ister @${username}... öyle bir kere çıkayım sonra yan gelip yatayım da madalyamı alayım diyerek olmaazz!!`,
+        `inan bana bu hissi yaşamalısın. podyum oradan çok yakın görünüyor, hadi biraz daha blunk!`,
+        `dördüncülük en kötü sıradır @${username}. podyumu görüyorsun ama çıkamıyorsun. bence bu kadarla yetinmemelisin.`,
+        `ufak bir odak seansıyla podyumdasın. buralarda takılmak sana göre değil, asıl yerin o ilk 3!`,
+        `madalya bölgesine girmek üzeresin @${username}. biraz daha dişini sıkarsan o podyum senin.`,
+        `tam podyumun sınırındasın. arkana bakma, sadece bir adım daha at ve o madalyayı al.`,
+        `biliyorum yoruldun ama podyumdakiler de yoruldu @${username}. şimdi pes etmeyen kazanacak!`,
+        `o bronz madalya seni bekliyor. bırakmak yok, hadi son bir gayret!`,
+        `podyumu kaçırmak istemiyorsan hemen şimdi bir odak başlat @${username}. rakiplerin uyumuyor!`,
+        `dördüncülük kimseye yetmez. podyuma çıkana kadar durmak yok!`,
+        `sadece biraz daha... podyuma bu kadar yaklaşmışken geri dönmek sana yakışmaz @${username}.`,
+        `madalyaya sadece bir adım kaldı. derin bir nefes al ve hemen masaya dön!`
+      ];
+    }
+  } else {
+    messages = [ `Üstünüzdeki rakibi geçmek için odaklanın!` ];
+  }
+
+  const msg = messages[Math.floor(Math.random() * messages.length)];
+  return res.json({ message: msg });
+});
+
+// GET /api/leaderboard/leagues
+app.get('/api/leaderboard/leagues', (req, res) => {
+  const timeframe = req.query.timeframe || 'weekly';
+  const league_type = req.query.league_type || 'overall';
+  const league_name = req.query.league_name || 'Genel';
+  const limit = parseInt(req.query.limit, 10) || 50;
+
+  leaderboardService.getLeaderboard({ timeframe, league_type, league_name, limit }, (err, result) => {
+    if (err) {
+      console.error('[LEADERBOARD_API_ERROR]', err);
+      return res.status(500).json({ error: 'Sıralama yüklenemedi: ' + err.message });
+    }
+
+    if (Array.isArray(result)) {
+      return res.json({ leaderboard: result, meta: { is_active_league: true, qualifying_users_count: result.length, required_users: 6 } });
+    }
+
+    const leaderboard = (result && result.leaderboard) || [];
+    const meta = (result && result.meta) || { is_active_league: true, qualifying_users_count: 0, required_users: 6 };
+    res.json({ leaderboard, meta });
+  });
+});
+
+// GET /api/users/:id/weekly-activity-breakdown
+app.get('/api/users/:id/weekly-activity-breakdown', (req, res) => {
+  const userId = req.params.id;
+  const currentUserId = req.query.currentUserId || (req.session && req.session.userId ? req.session.userId : null);
+  leaderboardService.getUserWeeklyActivityBreakdown(userId, currentUserId, (err, data) => {
+    if (err) return res.status(500).json({ error: 'Aktivite detayları yüklenemedi.' });
+    res.json(data);
+  });
+});
+
+// POST /api/users/:id/follow (Auth Required)
+app.post('/api/users/:id/follow', auth, (req, res) => {
+  const followerId = req.user.id;
+  const followingId = req.params.id;
+
+  if (parseInt(followerId) === parseInt(followingId)) {
+    return res.status(400).json({ error: 'Kendi kendinizi takip edemezsiniz.' });
+  }
+
+  leaderboardService.toggleUserFollow(followerId, followingId, (err, result) => {
+    if (err) return res.status(400).json({ error: err.message || 'İşlem başarısız.' });
+    res.json(result);
+  });
+});
+
+// GET /api/users/:id/all-time-calendar
+app.get('/api/users/:id/all-time-calendar', (req, res) => {
+  const userId = req.params.id;
+  const year = req.query.year;
+  const month = req.query.month;
+
+  leaderboardService.getUserAllTimeCalendar(userId, year, month, (err, data) => {
+    if (err) return res.status(500).json({ error: 'Takvim verileri yüklenemedi.' });
+    res.json(data);
+  });
+});
+
+// GET /api/users/:id/medals
+app.get('/api/users/:id/medals', (req, res) => {
+  const userId = req.params.id;
+  medalEngine.getUserMedals(userId, (err, medals) => {
+    if (err) return res.status(500).json({ error: 'Madalyalar yüklenemedi.' });
+    res.json({ medals });
+  });
+});
+
+// GET /api/users/:id/public-medals
+app.get('/api/users/:id/public-medals', (req, res) => {
+  const userId = req.params.id;
+  medalEngine.getPublicShowcasedMedals(userId, (err, medals) => {
+    if (err) return res.status(500).json({ error: 'Sergilenen madalyalar yüklenemedi.' });
+    res.json({ medals });
+  });
+});
+
+// POST /api/users/me/medals/:id/toggle-showcase
+app.post('/api/users/me/medals/:id/toggle-showcase', auth, (req, res) => {
+  const userId = req.user.id;
+  const medalId = req.params.id;
+
+  medalEngine.toggleMedalShowcase(userId, medalId, (err, result) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json(result);
+  });
+});
+
+
+// --- PUSH NOTIFICATION HELPER (kept here: shared by auth routes & sessions) ---
 const sendPushNotification = (userId, payload) => {
   db.all('SELECT subscription FROM web_push_subscriptions WHERE user_id = ?', [userId], (err, rows) => {
     if (err || !rows || rows.length === 0) return;
@@ -708,6 +578,17 @@ const notifyFriends = (fromUserId, type, options = {}) => {
     });
   });
 };
+// ─── MODULAR ROUTES (mounted after helpers are defined) ─────────
+const friendsRouter = require('./routes/friends')(db, auth, createAndPushNotification);
+app.use('/api', friendsRouter);
+
+const notificationsRouter = require('./routes/notifications')(db, auth, webpush, vapidKeys);
+app.use('/api/notifications', notificationsRouter);
+
+const focusRouter = require('./routes/focus')(db, auth, upload, sendDetailedSessionAbandonedNotification);
+app.use('/api/sessions', focusRouter);
+app.use('/api', focusRouter); // /api/leaderboard also lives here
+
 // ─── AUTH ────────────────────────────────────────────────────
 
 // Giriş: şifreli kullanıcı → bcrypt doğrula, şifresiz eski kullanıcı → geçişe izin ver
@@ -867,7 +748,7 @@ app.get('/api/search/users', auth, (req, res) => {
   db.all(
     `SELECT id, username, profile_photo, level, xp, status 
      FROM users 
-     WHERE username LIKE ? AND id != ? 
+     WHERE username LIKE ? AND id != ? AND (status IS NULL OR status != 'banned')
      LIMIT 10`,
     [searchPattern, req.user.id],
     (err, rows) => {
@@ -999,24 +880,79 @@ app.delete('/api/me', auth, (req, res) => {
 });
 
 
+// Categories & Tags API
+app.get('/api/categories', (req, res) => {
+  db.all('SELECT * FROM categories ORDER BY id ASC', (err, categories) => {
+    if (err) return res.status(500).json({ error: 'Kategoriler yüklenemedi.' });
+    res.json(categories);
+  });
+});
+
+app.get('/api/tags/trending', (req, res) => {
+  // En çok kullanılan etiketleri (son 7 günde) getir
+  const query = `
+    SELECT t.id, t.name, t.slug, COUNT(s.id) as usage_count 
+    FROM tags t 
+    JOIN sessions s ON t.id = s.tag_id 
+    WHERE s.start_time >= date('now', '-7 days')
+    GROUP BY t.id 
+    ORDER BY usage_count DESC 
+    LIMIT 20
+  `;
+  db.all(query, (err, tags) => {
+    if (err) return res.status(500).json({ error: 'Etiketler yüklenemedi.' });
+    res.json(tags || []);
+  });
+});
+
 // Sessions
 app.post('/api/sessions/start', auth, (req, res) => {
   const partyId = req.body.partyId || null;
   const mode = req.body.mode || 'free';
   const targetDuration = parseInt(req.body.targetDuration || '0', 10) || 0;
   const breakDuration = parseInt(req.body.breakDuration || '0', 10) || 0;
-  // Activity fields can now be set at session START (not just end)
-  const feeling  = req.body.feeling  || null;
-  const category = req.body.category || null;
-  const activity = req.body.activity || null;
+  const feeling  = req.body.feeling  ? req.body.feeling.trim() : null;
+  const categoryId = req.body.categoryId ? parseInt(req.body.categoryId, 10) : null;
+  let tagName = req.body.tagName ? req.body.tagName.trim() : null;
+  
+  // Tag resolving logic
+  let tagId = null;
+  let tagSlug = null;
+  
+  const startSession = (finalTagId) => {
+    db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE user_id = ? AND status = "active"', [req.user.id], () => {
+      db.run(
+        'INSERT INTO sessions (user_id, start_time, status, party_id, mode, target_duration, break_duration, feeling, category_id, tag_id, pomo_state, pomo_round, state_start_time) VALUES (?, datetime("now"), "active", ?, ?, ?, ?, ?, ?, ?, "focusing", 0, datetime("now"))',
+        [req.user.id, partyId, mode, targetDuration, breakDuration, feeling, categoryId, finalTagId],
+        function() { res.json({ sessionId: this.lastID }); }
+      );
+    });
+  };
 
-  db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE user_id = ? AND status = "active"', [req.user.id], () => {
-    db.run(
-      'INSERT INTO sessions (user_id, start_time, status, party_id, mode, target_duration, break_duration, feeling, category, activity, pomo_state, pomo_round, state_start_time) VALUES (?, datetime("now"), "active", ?, ?, ?, ?, ?, ?, ?, "focusing", 0, datetime("now"))',
-      [req.user.id, partyId, mode, targetDuration, breakDuration, feeling, category, activity],
-      function() { res.json({ sessionId: this.lastID }); }
-    );
-  });
+  if (tagName) {
+    // Basic slugify logic
+    tagSlug = tagName.toLowerCase().replace(/[^a-z0-9ğüşöçi]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (!tagSlug) tagSlug = 'diger';
+    
+    db.get('SELECT id FROM tags WHERE slug = ?', [tagSlug], (err, tag) => {
+      if (tag) {
+        startSession(tag.id);
+      } else {
+        db.run('INSERT INTO tags (name, slug) VALUES (?, ?)', [tagName, tagSlug], function(err) {
+          if (err) {
+            // Eğer aynı anda iki kişi eklemeye çalıştıysa UNIQUE hatası alabiliriz.
+            db.get('SELECT id FROM tags WHERE slug = ?', [tagSlug], (err2, tag2) => {
+               startSession(tag2 ? tag2.id : null);
+            });
+          } else {
+            startSession(this.lastID);
+          }
+        });
+      }
+    });
+  } else {
+    startSession(null);
+  }
 });
 
 app.post('/api/sessions/end/:id', auth, upload.none(), (req, res) => {
@@ -1297,7 +1233,15 @@ app.get('/api/users/:username', auth, (req, res) => {
 
       const getSessions = (cb) => {
         if (isLocked) return cb(null, []);
-        db.all('SELECT * FROM sessions WHERE user_id = ? ORDER BY start_time DESC LIMIT 20', [user.id], cb);
+        db.all(`
+          SELECT s.*, 
+                 COALESCE(c.name, s.category) as category, 
+                 COALESCE(t.name, s.activity) as activity
+          FROM sessions s
+          LEFT JOIN categories c ON s.category_id = c.id
+          LEFT JOIN tags t ON s.tag_id = t.id
+          WHERE s.user_id = ? ORDER BY s.start_time DESC LIMIT 20
+        `, [user.id], cb);
       };
 
       const getPosts = (cb) => {
@@ -1532,7 +1476,7 @@ app.get('/api/user/active-voice-session', auth, (req, res) => {
 
 app.post('/api/profile/photo', auth, upload.single('photo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Dosya yok' });
-  const photoPath = '/uploads/' + req.file.filename;
+  const photoPath = getFileUrl(req.file);
   db.run('UPDATE users SET profile_photo = ? WHERE id = ?', [photoPath, req.user.id], () => {
     res.json({ photoPath });
   });
@@ -1545,84 +1489,125 @@ app.delete('/api/profile/photo', auth, (req, res) => {
   });
 });
 
-// Feed & Posts — Gelişmiş Algoritmik Mühendislik (Instagram-Style Ranking Engine)
+// Feed & Posts — Gelişmiş Algoritmik Mühendislik (Instagram + YouTube Shorts + Reddit Hybrid Engine)
 app.get('/api/feed/:tab', auth, (req, res) => {
   const tab = req.params.tab || 'discover';
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const limit = Math.min(parseInt(req.query.limit) || 20, 60);
   const offset = parseInt(req.query.offset) || 0;
+  const searchQuery = (req.query.search || req.query.q || '').trim();
+  const topicFilter = (req.query.topic || '').trim().toLowerCase();
   const currentUserId = req.user.id;
 
+  let baseWhere = '1=1';
+  let queryParams = [currentUserId, currentUserId, currentUserId, currentUserId];
+
+  if (searchQuery) {
+    baseWhere += ' AND (p.content LIKE ? OR u.username LIKE ?)';
+    const qParam = `%${searchQuery}%`;
+    queryParams.push(qParam, qParam);
+  }
+
+  if (topicFilter && topicFilter !== 'all' && topicFilter !== 'tümü') {
+    baseWhere += ' AND (LOWER(p.content) LIKE ?)';
+    queryParams.push(`%${topicFilter}%`);
+  }
+
   let query = '';
-  let params = [];
+
+  const selectFields = `
+    p.*, u.username, u.profile_photo, u.level,
+    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+    (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
+    (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
+    (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
+    (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+    (SELECT COUNT(*) FROM bookmarks WHERE post_id = p.id AND user_id = ?) as user_bookmarked,
+    (SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = p.user_id AND status = 'accepted') as is_following
+  `;
 
   if (tab === 'following') {
-    // Takip Edilenler: İstemci zamanına göre en yeni gönderiler
     query = `
-      SELECT p.*, u.username, u.profile_photo, u.level,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted
+      SELECT ${selectFields}
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      WHERE p.user_id IN (
+      WHERE ${baseWhere} AND p.user_id IN (
         SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted'
         UNION SELECT ?
       )
       ORDER BY p.created_at DESC
       LIMIT ? OFFSET ?
     `;
-    params = [currentUserId, currentUserId, currentUserId, currentUserId, limit, offset];
+    queryParams.push(currentUserId, currentUserId, limit, offset);
   } else if (tab === 'trending') {
-    // Trendler: Son 48 saatteki yüksek etkileşim ivmesi
     query = `
-      SELECT p.*, u.username, u.profile_photo, u.level,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+      SELECT ${selectFields},
         (
           ((SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 2.0 + 
            (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 4.0 + 
-           (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 5.0) /
-          POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.5)
+           (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 5.0 +
+           COALESCE((SELECT SUM(vote_type) FROM post_votes WHERE post_id = p.id), 0) * 3.0) /
+          POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.4)
         ) as rank_score
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      WHERE datetime(p.created_at) > datetime('now', '-7 days')
+      WHERE ${baseWhere} AND datetime(p.created_at) > datetime('now', '-7 days')
       ORDER BY rank_score DESC, p.created_at DESC
       LIMIT ? OFFSET ?
     `;
-    params = [currentUserId, currentUserId, limit, offset];
-  } else {
-    // Keşfet (Discover): Gelişmiş Algoritmik Sıralama (Time Decay + Engagement Weight + Affinity)
+    queryParams.push(limit, offset);
+  } else if (tab === 'saved') {
     query = `
-      SELECT p.*, u.username, u.profile_photo, u.level,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+      SELECT ${selectFields}
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      JOIN bookmarks b ON b.post_id = p.id AND b.user_id = ?
+      WHERE ${baseWhere}
+      ORDER BY b.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    queryParams.push(currentUserId, limit, offset);
+  } else if (tab === 'questions') {
+    query = `
+      SELECT ${selectFields}
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      WHERE ${baseWhere} AND (
+        LOWER(p.content) LIKE '%?%' OR 
+        LOWER(p.content) LIKE '%soru%' OR 
+        LOWER(p.content) LIKE '%matematik%' OR 
+        LOWER(p.content) LIKE '%türev%' OR 
+        LOWER(p.content) LIKE '%integral%' OR 
+        LOWER(p.content) LIKE '%nedir%' OR 
+        LOWER(p.content) LIKE '%nasıl%'
+      )
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    queryParams.push(limit, offset);
+  } else {
+    // Keşfet (Discover) — Instagram & Reddit Algoritması
+    query = `
+      SELECT ${selectFields},
         (
           (
             (SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 1.5 + 
             (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 3.5 + 
             (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 4.5 +
+            COALESCE((SELECT SUM(vote_type) FROM post_votes WHERE post_id = p.id), 0) * 2.5 +
             CASE WHEN p.user_id IN (SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted') THEN 15.0 ELSE 0.0 END
           ) /
-          POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.3)
+          POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.25)
         ) as rank_score
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      WHERE ${baseWhere}
       ORDER BY rank_score DESC, p.created_at DESC
       LIMIT ? OFFSET ?
     `;
-    params = [currentUserId, currentUserId, currentUserId, limit, offset];
+    queryParams.push(currentUserId, limit, offset);
   }
 
-  db.all(query, params, (err, posts) => {
+  db.all(query, queryParams, (err, posts) => {
     if (err) {
       console.error('Feed fetch error:', err);
       return res.status(500).json({ error: 'Akış çekilirken hata oluştu' });
@@ -1632,18 +1617,84 @@ app.get('/api/feed/:tab', auth, (req, res) => {
 });
 
 app.post('/api/posts', auth, upload.single('image'), (req, res) => {
-  const { content } = req.body;
+  const { content, pollOptions } = req.body;
   if (content && content.length > 2000) return res.status(400).json({ error: 'İçerik çok uzun (Maks: 2000 karakter)' });
-  const image = req.file ? '/uploads/' + req.file.filename : null;
+  const image = req.file ? getFileUrl(req.file) : null;
   
   db.run('INSERT INTO posts (user_id, content, image) VALUES (?, ?, ?)', [req.user.id, content, image], function(err) {
     if (err) {
       console.error('Post insertion failed:', err);
       return res.status(500).json({ error: 'Post kaydedilemedi' });
     }
-    res.json({ postId: this.lastID });
+    const postId = this.lastID;
+
+    // Handle Poll options if present
+    if (pollOptions) {
+      let optionsList = [];
+      try {
+        optionsList = typeof pollOptions === 'string' ? JSON.parse(pollOptions) : pollOptions;
+      } catch (e) {}
+
+      if (Array.isArray(optionsList) && optionsList.length >= 2) {
+        db.run('INSERT INTO post_polls (post_id, question) VALUES (?, ?)', [postId, content || 'Anket'], function(pollErr) {
+          if (!pollErr) {
+            const pollId = this.lastID;
+            optionsList.forEach((optText, idx) => {
+              if (optText && optText.trim()) {
+                db.run('INSERT INTO poll_options (poll_id, option_text, option_index) VALUES (?, ?, ?)', [pollId, optText.trim(), idx]);
+              }
+            });
+          }
+        });
+      }
+    }
+
+    res.json({ postId });
   });
 });
+
+// Poll details & votes for a post
+app.get('/api/posts/:id/poll', auth, (req, res) => {
+  const postId = req.params.id;
+  const userId = req.user.id;
+
+  db.get('SELECT * FROM post_polls WHERE post_id = ?', [postId], (err, poll) => {
+    if (err || !poll) return res.json(null);
+
+    db.all(`
+      SELECT o.*, 
+        (SELECT COUNT(*) FROM poll_votes WHERE option_id = o.id) as vote_count,
+        (SELECT COUNT(*) FROM poll_votes WHERE option_id = o.id AND user_id = ?) as user_voted
+      FROM poll_options o
+      WHERE o.poll_id = ?
+      ORDER BY o.option_index ASC
+    `, [userId, poll.id], (err, options) => {
+      const totalVotes = options ? options.reduce((sum, o) => sum + (o.vote_count || 0), 0) : 0;
+      const userVotedOption = options ? options.find(o => o.user_voted > 0) : null;
+      
+      res.json({
+        pollId: poll.id,
+        question: poll.question,
+        options: options || [],
+        totalVotes,
+        userVotedOptionId: userVotedOption ? userVotedOption.id : null
+      });
+    });
+  });
+});
+
+// Vote in poll
+app.post('/api/polls/:pollId/vote', auth, (req, res) => {
+  const pollId = req.params.pollId;
+  const { optionId } = req.body;
+  const userId = req.user.id;
+
+  db.run('INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES (?, ?, ?)', [pollId, optionId, userId], (err) => {
+    if (err) return res.status(400).json({ error: 'Zaten oy kullandın' });
+    res.json({ success: true });
+  });
+});
+
 
 app.post('/api/posts/:id/like', auth, (req, res) => {
   db.run('INSERT INTO likes (user_id, post_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
@@ -1698,6 +1749,20 @@ app.get('/api/posts/:id/comments', auth, (req, res) => {
   });
 });
 
+app.post('/api/comments/:id/like', auth, (req, res) => {
+  db.run('CREATE TABLE IF NOT EXISTS comment_likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, comment_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, comment_id))', () => {
+    db.run('INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
+      if (err) {
+        db.run('DELETE FROM comment_likes WHERE user_id = ? AND comment_id = ?', [req.user.id, req.params.id], () => {
+          res.json({ success: true, unliked: true });
+        });
+      } else {
+        res.json({ success: true, liked: true });
+      }
+    });
+  });
+});
+
 app.post('/api/posts/:id/repost', auth, (req, res) => {
   db.run('INSERT INTO reposts (user_id, post_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
     if (err) {
@@ -1714,6 +1779,67 @@ app.post('/api/posts/:id/repost', auth, (req, res) => {
     }
   });
 });
+
+// Single Post Detail (For Shorts / Direct Modal view)
+app.get('/api/posts/:id', auth, (req, res) => {
+  const postId = req.params.id;
+  const currentUserId = req.user.id;
+  const query = `
+    SELECT p.*, u.username, u.profile_photo, u.level,
+      (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+      (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
+      (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
+      (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
+      (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+      (SELECT COUNT(*) FROM bookmarks WHERE post_id = p.id AND user_id = ?) as user_bookmarked,
+      (SELECT COUNT(*) FROM friendships WHERE user_id = ? AND friend_id = p.user_id AND status = 'accepted') as is_following
+    FROM posts p
+    JOIN users u ON p.user_id = u.id
+    WHERE p.id = ?
+  `;
+  db.get(query, [currentUserId, currentUserId, currentUserId, currentUserId, postId], (err, post) => {
+    if (err || !post) return res.status(404).json({ error: 'Post bulunamadı' });
+    res.json(post);
+  });
+});
+
+// Post Vote (Reddit-style Upvote/Downvote)
+app.post('/api/posts/:id/vote', auth, (req, res) => {
+  const postId = req.params.id;
+  const userId = req.user.id;
+  const voteType = parseInt(req.body.voteType) || 0; // 1, -1, or 0 (cancel)
+
+  if (voteType === 0) {
+    db.run('DELETE FROM post_votes WHERE user_id = ? AND post_id = ?', [userId, postId], (err) => {
+      res.json({ success: true, user_vote: 0 });
+    });
+  } else {
+    db.run('INSERT INTO post_votes (user_id, post_id, vote_type) VALUES (?, ?, ?) ON CONFLICT(user_id, post_id) DO UPDATE SET vote_type = ?',
+      [userId, postId, voteType, voteType],
+      (err) => {
+        if (err) return res.status(500).json({ error: 'Oylama kaydedilemedi' });
+        res.json({ success: true, user_vote: voteType });
+      }
+    );
+  }
+});
+
+// Post Bookmark (Kaydetme)
+app.post('/api/posts/:id/bookmark', auth, (req, res) => {
+  const postId = req.params.id;
+  const userId = req.user.id;
+
+  db.run('INSERT INTO bookmarks (user_id, post_id) VALUES (?, ?)', [userId, postId], (err) => {
+    if (err) {
+      db.run('DELETE FROM bookmarks WHERE user_id = ? AND post_id = ?', [userId, postId], () => {
+        res.json({ success: true, bookmarked: false });
+      });
+    } else {
+      res.json({ success: true, bookmarked: true });
+    }
+  });
+});
+
 
 app.delete('/api/posts/:id/repost', auth, (req, res) => {
   // Remove from reposts table
@@ -1783,6 +1909,38 @@ app.post('/api/comments/:id/like', auth, (req, res) => {
       });
       res.json({ success: true });
     }
+  });
+});
+
+// Dedicated Real Follow & Unfollow API Endpoints
+app.post('/api/follow/:username', auth, (req, res) => {
+  const targetUsername = req.params.username;
+  db.get('SELECT id FROM users WHERE username = ?', [targetUsername], (err, targetUser) => {
+    if (err || !targetUser) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    if (targetUser.id === req.user.id) return res.status(400).json({ error: 'Kendini takip edemezsin' });
+
+    db.run(
+      `INSERT INTO friendships (user_id, friend_id, status) VALUES (?, ?, 'accepted')
+       ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'`,
+      [req.user.id, targetUser.id],
+      (err) => {
+        if (err) return res.status(500).json({ error: 'Takip işlemi başarısız' });
+        createAndPushNotification(targetUser.id, 'friend_accept', req.user.id);
+        res.json({ success: true, is_following: true });
+      }
+    );
+  });
+});
+
+app.post('/api/unfollow/:username', auth, (req, res) => {
+  const targetUsername = req.params.username;
+  db.get('SELECT id FROM users WHERE username = ?', [targetUsername], (err, targetUser) => {
+    if (err || !targetUser) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+
+    db.run('DELETE FROM friendships WHERE user_id = ? AND friend_id = ?', [req.user.id, targetUser.id], (err) => {
+      if (err) return res.status(500).json({ error: 'Takipten çıkma başarısız' });
+      res.json({ success: true, is_following: false });
+    });
   });
 });
 
@@ -3147,7 +3305,7 @@ app.delete('/api/messages/:id', auth, (req, res) => {
 // CHAT IMAGE UPLOAD
 app.post('/api/messages/upload-image', auth, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Görsel yüklenemedi' });
-  const imageUrl = `/uploads/${req.file.filename}`;
+  const imageUrl = getFileUrl(req.file);
   res.json({ success: true, imageUrl });
 });
 
@@ -3468,6 +3626,29 @@ setInterval(() => {
 
 
 // SPA routing - tüm non-API istekleri index.html'e yönlendir (en sonda, tüm API route'larından sonra)
+// Global Post SEO Route
+app.get('/post/:id', (req, res) => {
+  const postId = req.params.id;
+  db.get('SELECT p.*, u.username FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?', [postId], (err, post) => {
+    let indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+    if (!err && post) {
+      const title = `${post.username}'in Gönderisi - Blunk`;
+      const desc = post.content ? post.content.substring(0, 150).replace(/<[^>]*>?/gm, '') : 'Blunk üzerinde bir gönderi';
+      const image = post.image_url ? (post.image_url.startsWith('http') ? post.image_url : `https://blunk.app${post.image_url}`) : 'https://blunk.app/img/logo.png';
+      
+      const metaTags = `
+        <meta property="og:title" content="${title}" />
+        <meta property="og:description" content="${desc}" />
+        <meta property="og:image" content="${image}" />
+        <meta property="og:url" content="https://blunk.app/post/${postId}" />
+        <meta name="twitter:card" content="summary_large_image" />
+      `;
+      indexHtml = indexHtml.replace('</head>', `${metaTags}</head>`);
+    }
+    res.send(indexHtml);
+  });
+});
+
 app.get('*', (req, res) => {
   // API isteklerini, statik dosyaları ve uploads'ı atla
   if (req.path.startsWith('/api') ||
@@ -3520,184 +3701,13 @@ server.on('error', (err) => {
   }
 });
 
-// --- WEBSOCKET SERVER IMPLEMENTATION ---
+// --- WEBSOCKET SERVER ---
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
 
-global.partyConnections = new Map();
-global.closePartyWebSocket = (partyId, userId, reason = 'Oda üyesi değilsiniz') => {
-  const partyConns = global.partyConnections.get(parseInt(partyId));
-  if (partyConns && partyConns.has(parseInt(userId))) {
-    const conn = partyConns.get(parseInt(userId));
-    try {
-      conn.ws.close(4004, reason);
-    } catch (e) {}
-  }
-};
+// Graceful shutdown: clean WebSocket + HTTP close on SIGTERM/SIGINT
+require('./gracefulShutdown')(server, wss);
 
-wss.on('connection', (ws, req) => {
-  const cookies = {};
-  if (req.headers.cookie) {
-    req.headers.cookie.split(';').forEach(cookie => {
-      const parts = cookie.split('=');
-      cookies[parts[0].trim()] = decodeURIComponent(parts[1] || '').trim();
-    });
-  }
-
-  const token = cookies.token;
-  if (!token) {
-    ws.close(4001, 'Giriş yapmalısın');
-    return;
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err || !decoded || !decoded.id) {
-      ws.close(4002, 'Geçersiz oturum');
-      return;
-    }
-
-    const userId = decoded.id;
-    const username = decoded.username;
-
-    const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    const partyId = parseInt(urlObj.searchParams.get('partyId'));
-
-    if (!partyId) {
-      ws.close(4003, 'partyId gerekli');
-      return;
-    }
-
-    db.get('SELECT id FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, userId], (dbErr, member) => {
-      if (dbErr || !member) {
-        ws.close(4004, 'Oda üyesi değilsiniz');
-        return;
-      }
-
-      db.get(`SELECT id FROM party_voice_moderation WHERE party_id = ? AND user_id = ? AND (expires_at IS NULL OR expires_at > datetime('now'))`, [partyId, userId], (muteErr, muteRow) => {
-        const serverMuted = !muteErr && !!muteRow;
-
-        if (!global.partyVoiceStates) global.partyVoiceStates = {};
-        if (!global.partyVoiceStates[partyId]) {
-          global.partyVoiceStates[partyId] = {};
-        }
-
-        if (!global.partyConnections.has(partyId)) {
-          global.partyConnections.set(partyId, new Map());
-        }
-        
-        const connections = global.partyConnections.get(partyId);
-        if (connections.has(userId)) {
-          try { connections.get(userId).ws.close(4005, 'Başka sekmede bağlandınız'); } catch (e) {}
-        }
-        
-        connections.set(userId, { ws, username });
-        let socketDeviceId = null;
-
-        const broadcastToParty = (data) => {
-          const payload = JSON.stringify(data);
-          const partyConns = global.partyConnections.get(partyId);
-          if (partyConns) {
-            partyConns.forEach((conn) => {
-              if (conn.ws.readyState === 1) { // WebSocket.OPEN
-                conn.ws.send(payload);
-              }
-            });
-          }
-        };
-
-        ws.on('message', (messageStr) => {
-          try {
-            const message = JSON.parse(messageStr);
-            const { type } = message;
-
-            if (type === 'ping') {
-              ws.send(JSON.stringify({ type: 'pong' }));
-              return;
-            }
-
-            if (type === 'voice_state_update') {
-              const { micMuted, deafened, channelId, pingMs, deviceId } = message;
-              if (deviceId) {
-                socketDeviceId = deviceId;
-              }
-              
-              global.partyVoiceStates[partyId][userId] = {
-                username,
-                micMuted: !!micMuted || serverMuted,
-                serverMuted,
-                deafened: !!deafened,
-                channelId: channelId ? parseInt(channelId) : null,
-                pingMs: parseInt(pingMs) || 0,
-                deviceId: deviceId || null,
-                lastSeen: Date.now()
-              };
-
-              if (deviceId && channelId) {
-                global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
-                global.userActiveVoiceSessions[userId] = {
-                  partyId: parseInt(partyId),
-                  channelId: parseInt(channelId),
-                  deviceId: deviceId || null,
-                  lastSeen: Date.now()
-                };
-              } else {
-                if (global.userActiveVoiceSessions) {
-                  delete global.userActiveVoiceSessions[userId];
-                }
-              }
-
-              broadcastToParty({
-                type: 'voice_state_list',
-                members: global.partyVoiceStates[partyId]
-              });
-
-            } else if (type === 'rtc_signal') {
-              const { toUsername, signal } = message;
-              const partyConns = global.partyConnections.get(partyId);
-              if (partyConns) {
-                const targetConn = Array.from(partyConns.values()).find(conn => conn.username === toUsername);
-                if (targetConn && targetConn.ws.readyState === 1) { // WebSocket.OPEN
-                  targetConn.ws.send(JSON.stringify({
-                    type: 'rtc_signal',
-                    fromUsername: username,
-                    signal
-                  }));
-                }
-              }
-            }
-          } catch (e) {
-            console.error('[WS Message Error] Error:', e);
-          }
-        });
-
-        ws.on('close', () => {
-          const partyConns = global.partyConnections.get(partyId);
-          if (partyConns) {
-            partyConns.delete(userId);
-            if (partyConns.size === 0) {
-              global.partyConnections.delete(partyId);
-            }
-          }
-
-          if (global.partyVoiceStates && global.partyVoiceStates[partyId]) {
-            delete global.partyVoiceStates[partyId][userId];
-            broadcastToParty({
-              type: 'voice_state_list',
-              members: global.partyVoiceStates[partyId]
-            });
-          }
-
-          if (global.userActiveVoiceSessions && global.userActiveVoiceSessions[userId]) {
-            if (global.userActiveVoiceSessions[userId].deviceId === socketDeviceId) {
-              delete global.userActiveVoiceSessions[userId];
-            }
-          }
-        });
-
-        ws.on('error', () => {
-          ws.close();
-        });
-      });
-    });
-  });
-});
+// WebSocket logic (Redis pub/sub with in-memory fallback)
+const { setupWebSocketServer } = require('./wsManager');
+setupWebSocketServer(wss, db);

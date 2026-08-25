@@ -9,7 +9,14 @@ if (usePostgres) {
   const { Pool } = require('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+    ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+    max: parseInt(process.env.PG_POOL_SIZE) || 5,       // per worker; 4 workers = 20 total
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 3000,
+  });
+
+  pool.on('error', (err) => {
+    console.error('[DB] Unexpected pool error:', err.message);
   });
 
   // Query translation helper

@@ -2111,8 +2111,8 @@ function scrollToMessage(messageId) {
 }
 
 async function openSharedPostInChat(postId) {
-  if (typeof openPostModal === 'function') {
-    openPostModal(postId);
+  if (typeof openGlobalPostModal === 'function') {
+    openGlobalPostModal(postId);
   } else if (typeof openProfilePostDetail === 'function') {
     openProfilePostDetail(postId);
   } else {

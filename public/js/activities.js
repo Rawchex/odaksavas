@@ -39,6 +39,123 @@ const _activitiesDb = {
     "Yemek Yapmak", "Yeni Tarif Denemek", "Bitki Bakımı", "Koleksiyon Düzenlemek", "Seyahat Planlamak", "Masa Oyunu Oynamak",
     "Kağıt Oyunları", "Zeka Soruları Çözmek", "Kutu Oyunu Oynamak", "Model Uçak Yapmak", "Lego Tasarlamak"
   ],
+  "KPSS Lisans": [
+    // Türkçe
+    "KPSS Lisans Türkçe Paragraf Soruları", "KPSS Lisans Türkçe Sözcükte ve Cümlede Anlam", "KPSS Lisans Türkçe Dil Bilgisi",
+    "KPSS Lisans Türkçe Sözel Mantık Soru Çözümü", "KPSS Lisans Türkçe Yazım Kuralları ve Noktalama", "KPSS Lisans Türkçe Ses ve Yapı Bilgisi",
+    "KPSS Lisans Türkçe Deneme Sınavı", "KPSS Lisans Türkçe Deneme Analizi",
+    // Matematik & Geometri
+    "KPSS Lisans Matematik Temel Kavramlar", "KPSS Lisans Matematik Rasyonel ve Ondalık Sayılar", "KPSS Lisans Matematik Üslü ve Köklü Sayılar",
+    "KPSS Lisans Matematik Mutlak Değer ve Eşitsizlikler", "KPSS Lisans Matematik Çarpanlara Ayırma", "KPSS Lisans Matematik Oran-Orantı",
+    "KPSS Lisans Matematik Problemler (Sayı, Kesir, Yaş)", "KPSS Lisans Matematik Hız, İşçi ve Yüzde Problemleri", "KPSS Lisans Matematik Kâr-Zarar ve Karışım Problemleri",
+    "KPSS Lisans Sayısal Mantık Soru Çözümü", "KPSS Lisans Matematik Kümeler ve Fonksiyonlar", "KPSS Lisans Matematik Permütasyon, Kombinasyon, Olasılık",
+    "KPSS Lisans Geometri Açılar ve Üçgenler", "KPSS Lisans Geometri Dörtgenler ve Çokgenler", "KPSS Lisans Geometri Analitik Geometri ve Katı Cisimler",
+    "KPSS Lisans Matematik Deneme Sınavı", "KPSS Lisans Matematik Deneme Analizi",
+    // Tarih
+    "KPSS Lisans Tarih İslam Öncesi Türk Tarihi", "KPSS Lisans Tarih İlk Türk-İslam Devletleri", "KPSS Lisans Tarih Osmanlı Devleti Siyasi Tarihi",
+    "KPSS Lisans Tarih Osmanlı Kültür ve Medeniyeti", "KPSS Lisans Tarih Osmanlı Islahatları ve Dağılma Dönemi", "KPSS Lisans Tarih Milli Mücadele Hazırlık Dönemi",
+    "KPSS Lisans Tarih Kurtuluş Savaşı Muharebeler Dönemi", "KPSS Lisans Tarih Atatürk İlke ve İnkılapları", "KPSS Lisans Tarih Atatürk Dönemi Dış Politika",
+    "KPSS Lisans Tarih Çağdaş Türk ve Dünya Tarihi", "KPSS Lisans Tarih Kronoloji ve Bilgilendirme Kartları", "KPSS Lisans Tarih Deneme Sınavı",
+    // Coğrafya
+    "KPSS Lisans Coğrafya Türkiye'nin Coğrafi Konumu", "KPSS Lisans Coğrafya Türkiye'nin Fiziki Özellikleri ve Yeryüzü Şekilleri", "KPSS Lisans Coğrafya İklim ve Bitki Örtüsü",
+    "KPSS Lisans Coğrafya Türkiye'de Nüfus ve Yerleşme", "KPSS Lisans Coğrafya Türkiye'de Tarım ve Hayvancılık", "KPSS Lisans Coğrafya Madenler ve Enerji Kaynakları",
+    "KPSS Lisans Coğrafya Sanayi, Ulaşım, Ticaret ve Turizm", "KPSS Lisans Coğrafya Harita Çalışması ve Görsel Analiz", "KPSS Lisans Coğrafya Deneme Sınavı",
+    // Vatandaşlık & Anayasa & Güncel
+    "KPSS Lisans Hukukun Temel Kavramları", "KPSS Lisans Anayasa Hukuku ve Devlet Organları", "KPSS Lisans 1982 Anayasası Madde İncelemeleri",
+    "KPSS Lisans Yasama, Yürütme ve Yargı Organları", "KPSS Lisans İdare Hukuku ve Temel İlkeleri", "KPSS Lisans Uluslararası Kuruluşlar ve Güncel Bilgiler",
+    "KPSS Lisans Vatandaşlık Deneme Sınavı",
+    // Genel Deneme & Çıkmış Sorular
+    "KPSS Lisans GY-GK Genel Deneme Sınavı", "KPSS Lisans Çıkmış Sorular Analizi", "KPSS Lisans Yanlış Defteri Analizi"
+  ],
+  "KPSS Ön Lisans": [
+    // Ön Lisans Türkçe & Matematik
+    "KPSS Ön Lisans Türkçe Paragraf Çözümü", "KPSS Ön Lisans Türkçe Dil Bilgisi", "KPSS Ön Lisans Sözel Mantık Soruları",
+    "KPSS Ön Lisans Matematik Temel Kavramlar", "KPSS Ön Lisans Matematik Problemler Kampı", "KPSS Ön Lisans Sayısal Mantık Çözümü",
+    "KPSS Ön Lisans Geometri Soru Çözümü",
+    // Ön Lisans Tarih & Coğrafya & Vatandaşlık
+    "KPSS Ön Lisans Tarih İslam Öncesi ve Türk-İslam Tarihi", "KPSS Ön Lisans Tarih Osmanlı Kültür ve Medeniyeti", "KPSS Ön Lisans Tarih İnkılap Tarihi ve Atatürkçülük",
+    "KPSS Ön Lisans Tarih Çağdaş Türk ve Dünya Tarihi", "KPSS Ön Lisans Coğrafya Türkiye Fiziki Coğrafyası", "KPSS Ön Lisans Coğrafya Nüfus, Tarım ve Madenler",
+    "KPSS Ön Lisans Coğrafya Harita Çalışması", "KPSS Ön Lisans Vatandaşlık Hukuk Kavramları ve Anayasa", "KPSS Ön Lisans İdare Hukuku ve Güncel Bilgiler",
+    // Genel
+    "KPSS Ön Lisans Genel Deneme Sınavı", "KPSS Ön Lisans Branş Denemeleri", "KPSS Ön Lisans Çıkmış Sorular Çözümü"
+  ],
+  "KPSS Ortaöğretim": [
+    "KPSS Ortaöğretim Türkçe Paragraf Soruları", "KPSS Ortaöğretim Türkçe Dil Bilgisi", "KPSS Ortaöğretim Sözel Mantık",
+    "KPSS Ortaöğretim Matematik Temel Kavramlar", "KPSS Ortaöğretim Matematik Problemler", "KPSS Ortaöğretim Sayısal Mantık",
+    "KPSS Ortaöğretim Tarih Osmanlı ve İnkılap Tarihi", "KPSS Ortaöğretim Coğrafya Türkiye Coğrafyası", "KPSS Ortaöğretim Vatandaşlık ve Anayasa",
+    "KPSS Ortaöğretim Güncel Bilgiler Ezberi", "KPSS Ortaöğretim Genel Deneme Sınavı", "KPSS Ortaöğretim Çıkmış Sorular Analizi"
+  ],
+  "KPSS Eğitim Bilimleri & ÖABT": [
+    // Eğitim Bilimleri
+    "Eğitim Bilimleri Öğretim İlke ve Yöntemleri (ÖYT)", "Eğitim Bilimleri Program Geliştirme ve Uyarlama", "Eğitim Bilimleri Sınıf Yönetimi İlkeleri",
+    "Eğitim Bilimleri Öğretim Teknolojileri ve Materyal Tasarımı", "Eğitim Bilimleri Ölçme ve Değerlendirme Teknikleri", "Eğitim Bilimleri Gelişim Psikolojisi",
+    "Eğitim Bilimleri Öğrenme Psikolojisi ve Kuramları", "Eğitim Bilimleri Rehberlik ve Özel Eğitim", "Eğitim Bilimleri Genel Deneme Sınavı",
+    // ÖABT
+    "ÖABT Türkçe Öğretmenliği Alan Bilgisi & Eğitimi", "ÖABT İlköğretim Matematik Alan Bilgisi & Eğitimi", "ÖABT Lise Matematik Alan Bilgisi",
+    "ÖABT Fen Bilimleri / Fen ve Teknoloji", "ÖABT Fizik Alan Bilgisi ve Test Çözümü", "ÖABT Kimya Alan Bilgisi ve Test Çözümü",
+    "ÖABT Biyoloji Alan Bilgisi ve Test Çözümü", "ÖABT Tarih Öğretmenliği Alan Bilgisi", "ÖABT Coğrafya Öğretmenliği Alan Bilgisi",
+    "ÖABT Türk Dili ve Edebiyatı Alan Bilgisi", "ÖABT Sosyal Bilgiler Alan Bilgisi", "ÖABT Din Kültürü (DKAB / İHL) Alan Bilgisi",
+    "ÖABT Okul Öncesi Öğretmenliği Alan Bilgisi", "ÖABT Sınıf Öğretmenliği Alan Bilgisi", "ÖABT İngilizce Öğretmenliği (ÖABT)",
+    "ÖABT Beden Eğitimi Öğretmenliği Alan Bilgisi", "ÖABT Rehber Öğretmen (PDR) Alan Bilgisi", "ÖABT Branş Deneme Sınavı"
+  ],
+  "KPSS A Grubu (Alan)": [
+    "KPSS A Anayasa ve İdare Hukuku", "KPSS A Ceza Hukuku ve Genel Hükümler", "KPSS A Medeni Hukuk ve Borçlar Hukuku",
+    "KPSS A Ticaret Hukuku ve İcra-İflas Hukuku", "KPSS A Mikro İktisat Konu Anlatımı ve Soru Çözümü", "KPSS A Makro İktisat Konu Anlatımı ve Soru Çözümü",
+    "KPSS A Para-Banka-Kredi ve Uluslararası İktisat", "KPSS A İktisadi Düşünceler Tarihi ve Türkiye Ekonomisi", "KPSS A Maliye Teorisi ve Kamu Harcamaları",
+    "KPSS A Kamu Borçlanması ve Bütçe", "KPSS A Vergi Hukuku ve Türk Vergi Sistemi", "KPSS A Genel Muhasebe Soru Çözümü",
+    "KPSS A Mali Tablolar Analizi ve İhtisas Muhasebesi", "KPSS A Kamu Yönetimi ve Siyaset Bilimi", "KPSS A Çalışma Ekonomisi (ÇEKO)",
+    "KPSS A Uluslararası İlişkiler", "KPSS A Grubu Genel Deneme Sınavı"
+  ],
+  "ALES & DGS": [
+    // ALES
+    "ALES Sayısal Matematik Soru Çözüm Kampı", "ALES Sayısal Mantık Soru Çözümü", "ALES Geometri Soru Çözümü",
+    "ALES Sözel Paragrafta Anlam ve Mantık", "ALES Sözel Mantık Soruları Çözmek", "ALES Hız ve Zaman Yönetimi Pratiği",
+    "ALES Sayısal Deneme Sınavı", "ALES Sözel Deneme Sınavı", "ALES Çıkmış Sorular Analizi",
+    // DGS
+    "DGS Matematik Temel Kavramlar ve Problemler", "DGS Sayısal Mantık Özel Soru Çözümü", "DGS Geometri Konu ve Soru Çözümü",
+    "DGS Türkçe Paragraf ve Cümle Anlamı", "DGS Sözel Mantık Soru Kampı", "DGS Genel Deneme Sınavı", "DGS Çıkmış Sorular Çözümü"
+  ],
+  "YDS & YÖKDİL": [
+    "YDS İngilizce Kelime Ezberi ve Kartlar", "YDS İngilizce Gramer ve Bağlaçlar", "YDS Paragraf Okuma ve Soru Çözümü",
+    "YDS Çeviri Soruları (İngilizce-Türkçe)", "YDS Cümle Tamamlama ve Cloze Test", "YDS Genel Deneme Sınavı",
+    "YÖKDİL Sağlık Bilimleri Kelime ve Metin Okuma", "YÖKDİL Fen Bilimleri Metin Okuma ve Soru Çözümü", "YÖKDİL Sosyal Bilimleri Metin Okuma ve Soru Çözümü",
+    "YÖKDİL Almanca / Fransızca Hazırlık", "YDT (YKS Dil) İngilizce Soru Çözümü", "IELTS / TOEFL Hazırlık Çalışması"
+  ],
+  "Diğer Sınavlar (TUS, DUS, EKPSS, MSÜ)": [
+    "TUS Temel Tıp Bilimleri (Anatomi, Histoloji, Fizyoloji)", "TUS Temel Tıp Bilimleri (Biyokimya, Mikrobiyoloji, Patoloji, Farmakoloji)",
+    "TUS Klinik Tıp Bilimleri (Dahiliye, Pediatri, Genel Cerrahi, Kadın Doğum)", "TUS Deneme Sınavı ve Spot Bilgiler",
+    "DUS Temel ve Klinik Diş Hekimliği Hazırlık", "EUS Eczacılıkta Uzmanlık Sınavı Hazırlık",
+    "EKPSS Ortaöğretim / Ön Lisans / Lisans Hazırlık", "MSÜ Sınavı Genel Deneme ve Soru Çözümü",
+    "Adli ve İdari Yargı Hakimliği Hazırlık", "Kaymakamlık Sınavı Mevzuat ve İdare Hukuku", "Sayıştay Denetçi Yardımcılığı Hazırlık"
+  ],
+  "Ehliyet & Mesleki Sertifikalar": [
+    "Ehliyet Sınavı İlk Yardım Bilgisi", "Ehliyet Sınavı Trafik ve Çevre Bilgisi", "Ehliyet Sınavı Araç Tekniği ve Motor",
+    "Ehliyet Sınavı Trafik Adabı", "Ehliyet E-Sınav Denemesi Çözmek", "Direksiyon Sınavı Park ve Güzergah Hazırlığı",
+    "SMMM Staja Başlama Sınavı Hazırlık", "SMMM Yeterlilik Sınavı Konu Çalışması",
+    "İSG (İş Sağlığı ve Güvenliği) A/B/C Sınıfı Uzmanlık Sınavı", "İş Yeri Hekimliği Sınavı Hazırlık",
+    "SPK Lisanslama Düzey 1/2/3 Sınavı", "SPK Türev Araçlar Lisanslama", "SPK Gayrimenkul Değerleme Uzmanlığı",
+    "SRC 1/2/3/4 Mesleki Yeterlilik Sınavı"
+  ],
+  "Üniversite & Akademik": [
+    "Üniversite Vize Sınavlarına Hazırlık", "Üniversite Final Sınavlarına Hazırlık", "Üniversite Bütünleme Sınavı Çalışması",
+    "Üniversite Ders Notlarını Düzenlemek", "Lisans Bitirme Tezi Yazımı", "Yüksek Lisans / Doktora Tezi Çalışması",
+    "Akademik Makale İnceleme ve Özet Çıkarma", "Akademik Sunum Hazırlığı", "Staj Raporu ve Dosyası Yazımı",
+    "Laboratuvar Deney Raporu Hazırlama", "Açıköğretim (AÖF / AUZEF / ATA-AÖF) Sınav Hazırlığı", "Akademik Literatür Taraması"
+  ],
+  "Yabancı Dil & Sertifikalar": [
+    "YDS İngilizce Kelime Ezberi ve Kartlar", "YDS İngilizce Gramer ve Bağlaçlar", "YDS Paragraf Okuma ve Soru Çözümü",
+    "YDS Çeviri Soruları (İngilizce-Türkçe)", "YDS Cümle Tamamlama ve Cloze Test", "YDS Genel Deneme Sınavı",
+    "YÖKDİL Sağlık Bilimleri Metin Okuma", "YÖKDİL Fen Bilimleri Metin Okuma", "YÖKDİL Sosyal Bilimleri Metin Okuma",
+    "IELTS Academic / General Reading & Writing", "TOEFL iBT Reading & Listening Pratiği", "PTE Academic Sınav Hazırlığı",
+    "Cambridge C1 Advanced / C2 Proficiency", "Goethe-Zertifikat Almanca (A1-C2)", "TestDaF Almanca Sınavı Hazırlık",
+    "DELF / DALF Fransızca Sınavı", "DELE İspanyolca Hazırlık", "JLPT Japonca N5-N1 Kanji Ezberi", "HSK Çince Karakter Çalışması"
+  ],
+  "Tasarım & Medya": [
+    "Figma UI/UX Arayüz Tasarımı", "Figma Tasarım Sistemi ve Prototipleme", "Adobe Photoshop Görsel Düzenleme",
+    "Adobe Illustrator Vektör ve Logo Çizimi", "Adobe Premiere Pro Video Kurgu ve Montaj", "After Effects Hareketli Grafik (Motion Graphics)",
+    "DaVinci Resolve Renk Düzenleme (Color Grading)", "Blender 3D Modelleme ve Render", "Blender Karakter Animasyonu",
+    "Unreal Engine 5 Blueprint ve Oyun Sahnesi", "Unity 3D C# Oyun Kodlama", "Canva Sosyal Medya Tasarımı"
+  ],
   "Lise & YKS": [
     // Matematik
     "TYT Matematik Soru Çözümü", "AYT Matematik Soru Çözümü", "YKS Geometri Soru Çözümü",
@@ -191,6 +308,9 @@ const _activitiesDb = {
     "Eski E-postaları Silmek", "Telefon Dosya Temizliği", "Bilgisayar Masaüstü Temizliği", "Şifreleri Güncellemek/Düzenlemek",
     "Haftalık Alışveriş Planı", "Gider Tablosu Güncellemek", "Kişisel Günlük Yazmak", "Geleceğe Mektup Yazmak",
     "Yeni Alışkanlık Takip Tablosu", "Yaratıcı Yazarlık Egzersizi", "Meditasyon Müziği Dinlemek", "Sessiz Tefekkür",
-    "Diksiyon ve Konuşma Egzersizleri", "Nefes Farkındalığı Seansı", "Vücut Germe ve Rahatlama"
   ]
 };
+
+if (typeof window !== 'undefined') {
+  window._activitiesDb = _activitiesDb;
+}
