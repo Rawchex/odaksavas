@@ -3634,7 +3634,7 @@ app.get('/post/:id', (req, res) => {
     if (!err && post) {
       const title = `${post.username}'in Gönderisi - Blunk`;
       const desc = post.content ? post.content.substring(0, 150).replace(/<[^>]*>?/gm, '') : 'Blunk üzerinde bir gönderi';
-      const image = post.image_url ? (post.image_url.startsWith('http') ? post.image_url : `https://blunk.app${post.image_url}`) : 'https://blunk.app/img/logo.png';
+      const image = post.image ? (post.image.startsWith('http') ? post.image : `https://blunk.app${post.image}`) : 'https://blunk.app/favicon.svg';
       
       const metaTags = `
         <meta property="og:title" content="${title}" />

@@ -182,20 +182,49 @@ router.delete('/posts/:id/repost', auth, (req, res) => {
   });
 });
 
-// DELETE Post (IDOR Protected: Only post owner can delete)
+// GET Post by ID (views++, likers, nested comments)
+router.get('/posts/:id', auth, (req, res) => {
+  db.run('UPDATE posts SET views = COALESCE(views, 0) + 1 WHERE id = ?', [req.params.id], () => {
+    db.get(`
+      SELECT p.*, u.username, u.profile_photo, u.level,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
+        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
+        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted
+      FROM posts p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.id = ?
+    `, [req.user.id, req.user.id, req.params.id], (err, post) => {
+      if (!post) return res.status(404).json({ error: 'Bulunamadı' });
+      db.all(`SELECT u.username, u.profile_photo FROM likes l JOIN users u ON l.user_id = u.id WHERE l.post_id = ? ORDER BY l.created_at DESC LIMIT 5`, [req.params.id], (err, likers) => {
+        db.all(`
+          SELECT c.*, COALESCE(u.username, 'silinmiş_kullanıcı') as username, COALESCE(u.profile_photo, '') as profile_photo,
+            (SELECT COUNT(*) FROM comment_likes WHERE comment_id = c.id) as like_count,
+            (SELECT COUNT(*) FROM comment_likes WHERE comment_id = c.id AND user_id = ?) as user_liked
+          FROM comments c LEFT JOIN users u ON c.user_id = u.id
+          WHERE c.post_id = ? ORDER BY c.created_at ASC
+        `, [req.user.id, req.params.id], (err, comments) => {
+          res.json({ ...post, likers: likers || [], comments: comments || [] });
+        });
+      });
+    });
+  });
+});
+
+// DELETE Post (cascade: reposts, likes, comments, notifications)
 router.delete('/posts/:id', auth, (req, res) => {
-  const postId = req.params.id;
-  db.get('SELECT user_id FROM posts WHERE id = ?', [postId], (err, post) => {
-    if (!post) return res.status(404).json({ error: 'Gönderi bulunamadı' });
-    if (post.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Bu gönderiyi silme yetkiniz yok' });
-    }
+  db.get('SELECT * FROM posts WHERE id = ?', [req.params.id], (err, post) => {
+    if (!post) return res.status(404).json({ error: 'Post bulunamadı' });
+    if (post.user_id !== req.user.id) return res.status(403).json({ error: 'Yetkisiz' });
 
     db.serialize(() => {
-      db.run('DELETE FROM likes WHERE post_id = ?', [postId]);
-      db.run('DELETE FROM comments WHERE post_id = ?', [postId]);
-      db.run('DELETE FROM reposts WHERE post_id = ?', [postId]);
-      db.run('DELETE FROM posts WHERE id = ? AND user_id = ?', [postId, req.user.id], (err) => {
+      db.run('DELETE FROM likes WHERE post_id = ? OR post_id IN (SELECT id FROM posts WHERE repost_of_post_id = ?)', [req.params.id, req.params.id]);
+      db.run('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)', [req.params.id]);
+      db.run('DELETE FROM comments WHERE post_id = ?', [req.params.id]);
+      db.run('DELETE FROM reposts WHERE post_id = ?', [req.params.id]);
+      db.run('DELETE FROM notifications WHERE post_id = ?', [req.params.id]);
+      db.run('DELETE FROM posts WHERE id = ? OR repost_of_post_id = ?', [req.params.id, req.params.id], (err) => {
         if (err) return res.status(500).json({ error: 'Gönderi silinemedi' });
         res.json({ success: true });
       });
@@ -203,26 +232,38 @@ router.delete('/posts/:id', auth, (req, res) => {
   });
 });
 
-// DELETE Comment (IDOR Protected: Comment owner OR post owner can delete)
+// DELETE Comment (cascade: alt-yorumlar + comment_likes + notifications)
 router.delete('/comments/:id', auth, (req, res) => {
   const commentId = req.params.id;
   db.get(`
-    SELECT c.user_id as comment_owner, p.user_id as post_owner 
-    FROM comments c 
-    JOIN posts p ON c.post_id = p.id 
+    SELECT c.user_id as comment_owner, p.user_id as post_owner
+    FROM comments c
+    JOIN posts p ON c.post_id = p.id
     WHERE c.id = ?
   `, [commentId], (err, row) => {
     if (!row) return res.status(404).json({ error: 'Yorum bulunamadı' });
     if (row.comment_owner !== req.user.id && row.post_owner !== req.user.id) {
-      return res.status(403).json({ error: 'Bu yorumu silme yetkiniz yok' });
+      return res.status(403).json({ error: 'Yetkisiz' });
     }
-
     db.serialize(() => {
-      db.run('DELETE FROM comment_likes WHERE comment_id = ?', [commentId]);
+      db.run('DELETE FROM comment_likes WHERE comment_id = ? OR comment_id IN (SELECT id FROM comments WHERE parent_id = ?)', [commentId, commentId]);
+      db.run('DELETE FROM notifications WHERE comment_id = ?', [commentId]);
       db.run('DELETE FROM comments WHERE id = ? OR parent_id = ?', [commentId, commentId], (err) => {
         if (err) return res.status(500).json({ error: 'Yorum silinemedi' });
         res.json({ success: true });
       });
+    });
+  });
+});
+
+// PUT Post (edit content, owner only)
+router.put('/posts/:id', auth, (req, res) => {
+  const { content } = req.body;
+  db.get('SELECT * FROM posts WHERE id = ?', [req.params.id], (err, post) => {
+    if (!post) return res.status(404).json({ error: 'Post bulunamadı' });
+    if (post.user_id !== req.user.id) return res.status(403).json({ error: 'Yetkisiz' });
+    db.run('UPDATE posts SET content = ? WHERE id = ?', [content, req.params.id], () => {
+      res.json({ success: true });
     });
   });
 });
@@ -304,88 +345,6 @@ router.delete('/friends/:id', auth, (req, res) => {
   });
 });
 
-
-
-// DELETE POSTS & COMMENTS
-// ============================================================
-router.get('/posts/:id', auth, (req, res) => {
-  // Increment view count dynamically
-  db.run('UPDATE posts SET views = COALESCE(views, 0) + 1 WHERE id = ?', [req.params.id], () => {
-    db.get(`
-      SELECT p.*, u.username, u.profile_photo, u.level,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-        (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-        (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted
-      FROM posts p
-      JOIN users u ON p.user_id = u.id
-      WHERE p.id = ?
-    `, [req.user.id, req.user.id, req.params.id], (err, post) => {
-    if (!post) return res.status(404).json({ error: 'Bulunamadı' });
-    // Get likers (up to 5)
-    db.all(`SELECT u.username, u.profile_photo FROM likes l JOIN users u ON l.user_id = u.id WHERE l.post_id = ? ORDER BY l.created_at DESC LIMIT 5`, [req.params.id], (err, likers) => {
-      // Get comments with author info
-      db.all(`
-        SELECT c.*, COALESCE(u.username, 'silinmiş_kullanıcı') as username, COALESCE(u.profile_photo, '') as profile_photo,
-          (SELECT COUNT(*) FROM comment_likes WHERE comment_id = c.id) as like_count,
-          (SELECT COUNT(*) FROM comment_likes WHERE comment_id = c.id AND user_id = ?) as user_liked
-        FROM comments c LEFT JOIN users u ON c.user_id = u.id
-        WHERE c.post_id = ? ORDER BY c.created_at ASC
-      `, [req.user.id, req.params.id], (err, comments) => {
-        res.json({ ...post, likers: likers || [], comments: comments || [] });
-      });
-    });
-  });
-  });
-});
-
-router.delete('/posts/:id', auth, (req, res) => {
-  db.get('SELECT * FROM posts WHERE id = ?', [req.params.id], (err, post) => {
-    if (!post) return res.status(404).json({ error: 'Post bulunamadı' });
-    if (post.user_id !== req.user.id) return res.status(403).json({ error: 'Yetkisiz' });
-    
-    db.run('DELETE FROM posts WHERE id = ? OR repost_of_post_id = ?', [req.params.id, req.params.id], () => {
-      db.run('DELETE FROM likes WHERE post_id = ? OR post_id IN (SELECT id FROM posts WHERE repost_of_post_id = ?)', [req.params.id, req.params.id]);
-      db.run('DELETE FROM comments WHERE post_id = ? OR post_id IN (SELECT id FROM posts WHERE repost_of_post_id = ?)', [req.params.id, req.params.id]);
-      db.run('DELETE FROM reposts WHERE post_id = ?', [req.params.id]);
-      db.run('DELETE FROM notifications WHERE post_id = ?', [req.params.id]);
-      res.json({ success: true });
-    });
-  });
-});
-
-router.put('/posts/:id', auth, (req, res) => {
-  const { content } = req.body;
-  db.get('SELECT * FROM posts WHERE id = ?', [req.params.id], (err, post) => {
-    if (!post) return res.status(404).json({ error: 'Post bulunamadı' });
-    if (post.user_id !== req.user.id) return res.status(403).json({ error: 'Yetkisiz' });
-    db.run('UPDATE posts SET content = ? WHERE id = ?', [content, req.params.id], () => {
-      res.json({ success: true });
-    });
-  });
-});
-
-router.delete('/comments/:id', auth, (req, res) => {
-  db.get(`
-    SELECT c.*, p.user_id as post_owner_id 
-    FROM comments c 
-    JOIN posts p ON c.post_id = p.id 
-    WHERE c.id = ?
-  `, [req.params.id], (err, comment) => {
-    if (!comment) return res.status(404).json({ error: 'Yorum bulunamadı' });
-    // Allow if commenter is the user OR if user is the post owner
-    if (comment.user_id !== req.user.id && comment.post_owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Yetkisiz' });
-    }
-    
-    db.run('DELETE FROM comments WHERE id = ?', [req.params.id], () => {
-      db.run('DELETE FROM comment_likes WHERE comment_id = ?', [req.params.id]);
-      db.run('DELETE FROM notifications WHERE comment_id = ?', [req.params.id]);
-      res.json({ success: true });
-    });
-  });
-});
 
 
   return router;

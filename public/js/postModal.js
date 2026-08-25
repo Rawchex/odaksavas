@@ -1,4 +1,4 @@
-// Global Post Modal definition
+﻿// Global Post Modal definition
 async function openGlobalPostModal(postId, isOwn, isRepost) {
   // Remove existing modal if any
   const existing = document.getElementById('profilePostPreview');
@@ -39,7 +39,7 @@ async function openGlobalPostModal(postId, isOwn, isRepost) {
   const firstSheet = document.createElement('div');
   firstSheet.className = 'pdetail-sheet';
   firstSheet.style.scrollSnapAlign = 'center';
-  firstSheet.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">Y├£KLEN─░YOR...</div>';
+  firstSheet.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">Yâ”œÂ£KLENâ”€â–‘YOR...</div>';
   scrollBox.appendChild(firstSheet);
   requestAnimationFrame(() => firstSheet.classList.add('open'));
 
@@ -54,7 +54,7 @@ async function openGlobalPostModal(postId, isOwn, isRepost) {
     if (post) {
       renderPostDetailSheet(firstSheet, post, isOwn, isRepost);
     } else {
-      firstSheet.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">G├Ânderi y├╝klenemedi</div></div>';
+      firstSheet.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">Gâ”œÃ‚nderi yâ”œâ•klenemedi</div></div>';
     }
   }
 
@@ -96,11 +96,8 @@ async function openGlobalPostModal(postId, isOwn, isRepost) {
   });
 }
 
-window.openPostModal = openPostModal;
-function openGlobalPostModal(postId, isOwn, isRepost) {
-  return openGlobalPostModal(postId, isOwn, isRepost);
-}
-window.openProfilePostDetail = openProfilePostDetail;
+window.openPostModal = openGlobalPostModal;
+window.openProfilePostDetail = openGlobalPostModal;
 
 function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   const isSelfPost = post.username === currentUser.username;
@@ -117,7 +114,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
         ${likers.slice(0, 3).map(l => renderAvatar({ username: l.username, profile_photo: l.profile_photo }, 'avatar avatar-xs')).join('')}
       </div>
       <span class="pdetail-likers-text">
-        ${likers[0]?.username ? `<strong>${esc(likers[0].username)}</strong>` : ''}${likers.length > 1 ? ` ve ${post.like_count - 1} ki┼şi` : ''} be─şendi
+        ${likers[0]?.username ? `<strong>${esc(likers[0].username)}</strong>` : ''}${likers.length > 1 ? ` ve ${post.like_count - 1} kiâ”¼ÅŸi` : ''} beâ”€ÅŸendi
       </span>
     </div>
   ` : '';
@@ -133,7 +130,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   });
 
   const commentsHtml = parents.length === 0
-    ? `<div class="pdetail-no-comment" style="color:var(--t-text-muted);font-size:13px;text-align:center;padding:24px 0">Hen├╝z yorum yok. ─░lk yorumu sen yaz!</div>`
+    ? `<div class="pdetail-no-comment" style="color:var(--t-text-muted);font-size:13px;text-align:center;padding:24px 0">Henâ”œâ•z yorum yok. â”€â–‘lk yorumu sen yaz!</div>`
     : parents.map(c => renderPdetailCommentTree(c, childrenMap[c.id] || [], post)).join('');
 
   sheet.innerHTML = `
@@ -142,7 +139,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
       <div class="pdetail-media-column">
         ${post.image ? `
           <div class="pdetail-image-box">
-            <img src="${post.image}" class="pdetail-image" alt="G├Ânderi g├Ârseli">
+            <img src="${post.image}" class="pdetail-image" alt="Gâ”œÃ‚nderi gâ”œÃ‚rseli">
           </div>
         ` : `
           <div class="pdetail-text-card-content">
@@ -164,14 +161,14 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             ${(isOwn || isSelfPost) && !isRepost ? `
-              <button class="pdetail-menu-btn" onclick="openDetailMenu(${post.id})" data-tooltip="Se├ğenekler" data-tooltip-pos="bottom">
+              <button class="pdetail-menu-btn" onclick="openDetailMenu(${post.id})" data-tooltip="Seâ”œÄŸenekler" data-tooltip-pos="bottom">
                 <span></span><span></span><span></span>
               </button>` : ''}
             ${isRepost ? `
-              <button class="pdetail-menu-btn" onclick="profileRemoveRepostFromDetail(${post.id})" data-tooltip="Repostu Kald─▒r" data-tooltip-pos="bottom">
+              <button class="pdetail-menu-btn" onclick="profileRemoveRepostFromDetail(${post.id})" data-tooltip="Repostu Kaldâ”€â–’r" data-tooltip-pos="bottom">
                 <span></span><span></span><span></span>
               </button>` : ''}
-            <button onclick="closeGlobalPostModal()" class="pdetail-close-btn" data-tooltip="Kapat" data-tooltip-pos="bottom" aria-label="Kapat">Ô£ò</button>
+            <button onclick="closeGlobalPostModal()" class="pdetail-close-btn" data-tooltip="Kapat" data-tooltip-pos="bottom" aria-label="Kapat">Ã”Â£Ã²</button>
           </div>
         </div>
 
@@ -194,23 +191,23 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
         <div class="pdetail-bottom-panel">
           <div class="pdetail-actions">
             <div class="pdetail-action-left">
-              <button class="pdetail-action-btn ${post.user_liked ? 'liked' : ''}" onclick="pdetailLike(${post.id}, this)" data-tooltip="${post.user_liked ? 'Be─şeniyi Kald─▒r' : 'Be─şen'}" data-tooltip-pos="top">
+              <button class="pdetail-action-btn ${post.user_liked ? 'liked' : ''}" onclick="pdetailLike(${post.id}, this)" data-tooltip="${post.user_liked ? 'Beâ”€ÅŸeniyi Kaldâ”€â–’r' : 'Beâ”€ÅŸen'}" data-tooltip-pos="top">
                 <svg viewBox="0 0 24 24" fill="${post.user_liked ? '#ff3b30' : 'none'}" stroke="${post.user_liked ? '#ff3b30' : 'currentColor'}" stroke-width="2" width="24" height="24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               </button>
-              <button class="pdetail-action-btn ${(post.user_reposted || isRepost) ? 'reposted' : ''}" onclick="pdetailRepost(${post.id}, this)" data-tooltip="${(post.user_reposted || isRepost) ? 'Repostu Kald─▒r' : 'Repost Et'}" data-tooltip-pos="top">
+              <button class="pdetail-action-btn ${(post.user_reposted || isRepost) ? 'reposted' : ''}" onclick="pdetailRepost(${post.id}, this)" data-tooltip="${(post.user_reposted || isRepost) ? 'Repostu Kaldâ”€â–’r' : 'Repost Et'}" data-tooltip-pos="top">
                 <svg viewBox="0 0 24 24" fill="none" stroke="${(post.user_reposted || isRepost) ? '#32d74b' : 'currentColor'}" stroke-width="2" width="22" height="22"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
               </button>
-              <button class="pdetail-action-btn" onclick="openSharePostModal(${post.id})" data-tooltip="G├Ânderiyi Payla┼ş" data-tooltip-pos="top">
+              <button class="pdetail-action-btn" onclick="openSharePostModal(${post.id})" data-tooltip="Gâ”œÃ‚nderiyi Paylaâ”¼ÅŸ" data-tooltip-pos="top">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
               </button>
             </div>
           </div>
 
           <div class="pdetail-counts">
-            <span id="pdetail-like-count">${post.like_count || 0} be─şeni</span>
-            <span style="color:var(--text-3)">┬À</span>
+            <span id="pdetail-like-count">${post.like_count || 0} beâ”€ÅŸeni</span>
+            <span style="color:var(--text-3)">â”¬Ã€</span>
             <span>${post.comment_count || 0} yorum</span>
-            <span style="color:var(--text-3)">┬À</span>
+            <span style="color:var(--text-3)">â”¬Ã€</span>
             <span id="pdetail-repost-count-${post.id}">${post.repost_count || 0} repost</span>
           </div>
 
@@ -219,7 +216,7 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
           <div class="pdetail-comment-input-row">
             ${renderAvatar(currentUser, 'avatar avatar-xs')}
             <input id="pdetailCommentInput-${post.id}" class="pdetail-comment-input" placeholder="Yorum ekle..." onkeydown="if(event.key==='Enter') pdetailComment(${post.id})">
-            <button class="pdetail-comment-send" onclick="pdetailComment(${post.id})">G├Ânder</button>
+            <button class="pdetail-comment-send" onclick="pdetailComment(${post.id})">Gâ”œÃ‚nder</button>
           </div>
         </div>
       </div>
@@ -228,10 +225,10 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
     <!-- Detail 3-dot menu panel -->
     <div id="pdetailMenuOverlay-${post.id}" class="profile-menu-overlay" onclick="closeDetailMenu(${post.id})" style="display:none"></div>
     <div id="pdetailMenuPanel-${post.id}" class="profile-post-menu-panel" style="display:none">
-      <div class="profile-post-menu-title">G├û├ûNDER─░ Y├ûNET─░M─░</div>
-      <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(displayContent)}\`)">D├╝zenle</button>
-      <button class="profile-post-menu-item" onclick="pdetailShareFromMenu(${post.id})">Mesajda payla┼ş</button>
-      <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">G├Ânderiyi sil</button>
+      <div class="profile-post-menu-title">Gâ”œÃ»â”œÃ»NDERâ”€â–‘ Yâ”œÃ»NETâ”€â–‘Mâ”€â–‘</div>
+      <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(displayContent)}\`)">Dâ”œâ•zenle</button>
+      <button class="profile-post-menu-item" onclick="pdetailShareFromMenu(${post.id})">Mesajda paylaâ”¼ÅŸ</button>
+      <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">Gâ”œÃ‚nderiyi sil</button>
     </div>
   `;
 
@@ -299,8 +296,8 @@ function pdetailEditPost(postId, currentContent) {
   const header = document.createElement('div');
   header.className = 'profile-edit-modal-header';
   header.innerHTML = `
-    <span>G├û├ûNDER─░Y─░ D├£ZENLE</span>
-    <button class="profile-edit-modal-close" onclick="document.getElementById('pdetailEditSheet')?.remove()">Ô£ò</button>
+    <span>Gâ”œÃ»â”œÃ»NDERâ”€â–‘Yâ”€â–‘ Dâ”œÂ£ZENLE</span>
+    <button class="profile-edit-modal-close" onclick="document.getElementById('pdetailEditSheet')?.remove()">Ã”Â£Ã²</button>
   `;
 
   const body = document.createElement('div');
@@ -309,7 +306,7 @@ function pdetailEditPost(postId, currentContent) {
   const textarea = document.createElement('textarea');
   textarea.className = 'profile-edit-modal-textarea';
   textarea.value = currentContent || '';
-  textarea.placeholder = 'G├Ânderi i├ğeri─şinizi d├╝zenleyin...';
+  textarea.placeholder = 'Gâ”œÃ‚nderi iâ”œÄŸeriâ”€ÅŸinizi dâ”œâ•zenleyin...';
   body.appendChild(textarea);
 
   const footer = document.createElement('div');
@@ -317,7 +314,7 @@ function pdetailEditPost(postId, currentContent) {
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'profile-edit-modal-cancel';
-  cancelBtn.textContent = '─░ptal';
+  cancelBtn.textContent = 'â”€â–‘ptal';
   cancelBtn.onclick = () => el.remove();
 
   const saveBtn = document.createElement('button');
@@ -334,18 +331,18 @@ function pdetailEditPost(postId, currentContent) {
         body: JSON.stringify({ content })
       });
       if (res.ok) {
-        showToast('G├Ânderi g├╝ncellendi');
+        showToast('Gâ”œÃ‚nderi gâ”œâ•ncellendi');
         el.remove();
         openGlobalPostModal(postId);
         if (typeof loadFeed === 'function') loadFeed();
         if (typeof loadMyProfile === 'function') loadMyProfile();
       } else {
-        showToast('G├╝ncellenemedi');
+        showToast('Gâ”œâ•ncellenemedi');
         saveBtn.disabled = false;
         saveBtn.textContent = 'Kaydet';
       }
     } catch {
-      showToast('Ba─şlant─▒ hatas─▒');
+      showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
       saveBtn.disabled = false;
       saveBtn.textContent = 'Kaydet';
     }
@@ -366,35 +363,35 @@ function pdetailEditPost(postId, currentContent) {
 // Delete from detail
 async function pdetailDeletePost(postId) {
   closeDetailMenu(postId);
-  if (!(await window.showConfirm('Bu g├Ânderiyi silmek istedi─şinizden emin misiniz?'))) return;
+  if (!(await window.showConfirm('Bu gâ”œÃ‚nderiyi silmek istediâ”€ÅŸinizden emin misiniz?'))) return;
   try {
     const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
     if (res.ok) {
-      showToast('G├Ânderi silindi');
+      showToast('Gâ”œÃ‚nderi silindi');
       closeGlobalPostModal();
       loadMyProfile();
     } else {
       showToast('Silinemedi');
     }
   } catch {
-    showToast('Ba─şlant─▒ hatas─▒');
+    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
   }
 }
 
 // Remove repost from detail
 async function profileRemoveRepostFromDetail(postId) {
-  if (!(await window.showConfirm('Repost\'u kald─▒rmak istedi─şinizden emin misiniz?'))) return;
+  if (!(await window.showConfirm('Repost\'u kaldâ”€â–’rmak istediâ”€ÅŸinizden emin misiniz?'))) return;
   try {
     const res = await fetch(`/api/posts/${postId}/repost`, { method: 'DELETE' });
     if (res.ok) {
-      showToast('Repost kald─▒r─▒ld─▒');
+      showToast('Repost kaldâ”€â–’râ”€â–’ldâ”€â–’');
       closeGlobalPostModal();
       loadMyProfile();
     } else {
-      showToast('Kald─▒r─▒lamad─▒');
+      showToast('Kaldâ”€â–’râ”€â–’lamadâ”€â–’');
     }
   } catch {
-    showToast('Ba─şlant─▒ hatas─▒');
+    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
   }
 }
 
@@ -412,7 +409,7 @@ async function pdetailLike(postId, btn) {
       const countEl = document.getElementById('pdetail-like-count');
       if (countEl) {
         const cur = parseInt(countEl.textContent) || 0;
-        countEl.textContent = `${liked ? cur + 1 : Math.max(0, cur - 1)} be─şeni`;
+        countEl.textContent = `${liked ? cur + 1 : Math.max(0, cur - 1)} beâ”€ÅŸeni`;
       }
     }
   } catch {}
@@ -425,7 +422,7 @@ async function pdetailRepost(postId, btn) {
     const res = await fetch(`/api/posts/${postId}/repost`, { method: isReposted ? 'DELETE' : 'POST' });
     if (res.ok) {
       if (isReposted) {
-        showToast('Repost kald─▒r─▒ld─▒');
+        showToast('Repost kaldâ”€â–’râ”€â–’ldâ”€â–’');
         btn.querySelector('svg').setAttribute('stroke', 'currentColor');
         btn.classList.remove('reposted');
         // If we are on the reposts tab, close and refresh so the item disappears from grid
@@ -433,7 +430,7 @@ async function pdetailRepost(postId, btn) {
           closeGlobalPostModal();
         }
       } else {
-        showToast('Repost yap─▒ld─▒');
+        showToast('Repost yapâ”€â–’ldâ”€â–’');
         btn.querySelector('svg').setAttribute('stroke', '#32d74b');
         btn.classList.add('reposted');
       }
@@ -447,10 +444,10 @@ async function pdetailRepost(postId, btn) {
       loadMyProfile();
     } else {
       const d = await res.json().catch(() => ({}));
-      showToast(d.error || 'Repost i┼şlemi ba┼şar─▒s─▒z');
+      showToast(d.error || 'Repost iâ”¼ÅŸlemi baâ”¼ÅŸarâ”€â–’sâ”€â–’z');
     }
   } catch {
-    showToast('Ba─şlant─▒ hatas─▒');
+    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
   }
 }
 
@@ -492,7 +489,7 @@ function setPdetailReplyTo(postId, parentId, username) {
   _pdetailReplyStates[postId] = { parentId, username };
   const input = document.getElementById(`pdetailCommentInput-${postId}`);
   if (input) {
-    input.placeholder = `@${username} kullan─▒c─▒s─▒na yan─▒t yaz...`;
+    input.placeholder = `@${username} kullanâ”€â–’câ”€â–’sâ”€â–’na yanâ”€â–’t yaz...`;
     input.value = `@${username} ` + input.value.replace(/^@[a-zA-Z0-9_.]+\s*/, '');
     input.focus();
   }
@@ -519,8 +516,8 @@ function renderPdetailReplyBar(postId) {
   if (state) {
     container.innerHTML = `
       <div class="reply-active-indicator" style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);padding:6px 12px;border-radius:6px;font-size:11px;margin-bottom:8px;color:#aaa">
-        <span>@${state.username} kullan─▒c─▒s─▒na yan─▒t veriliyor</span>
-        <button onclick="cancelPdetailReply(${postId})" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-weight:bold;font-size:12px;padding:2px 6px">Ô£ò</button>
+        <span>@${state.username} kullanâ”€â–’câ”€â–’sâ”€â–’na yanâ”€â–’t veriliyor</span>
+        <button onclick="cancelPdetailReply(${postId})" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-weight:bold;font-size:12px;padding:2px 6px">Ã”Â£Ã²</button>
       </div>
     `;
     container.style.display = 'block';
@@ -537,12 +534,12 @@ function togglePdetailRepliesContainer(btn, parentId) {
   if (!isOpen) {
     container.classList.add('open');
     if (btn && btn.querySelector('.text')) {
-      btn.querySelector('.text').textContent = 'Yan─▒tlar─▒ gizle';
+      btn.querySelector('.text').textContent = 'Yanâ”€â–’tlarâ”€â–’ gizle';
     }
   } else {
     container.classList.remove('open');
     if (btn && btn.querySelector('.text')) {
-      btn.querySelector('.text').textContent = `Yan─▒tlar─▒ g├Âr (${container.children.length})`;
+      btn.querySelector('.text').textContent = `Yanâ”€â–’tlarâ”€â–’ gâ”œÃ‚r (${container.children.length})`;
     }
   }
 }
@@ -570,13 +567,13 @@ async function loadPdetailComments(postId) {
     const post = cachedPost ? cachedPost : { id: postId, username: null };
 
     section.innerHTML = parents.length === 0
-      ? `<div class="pdetail-no-comment">Hen├╝z yorum yok</div>`
+      ? `<div class="pdetail-no-comment">Henâ”œâ•z yorum yok</div>`
       : parents.map(c => renderPdetailCommentTree(c, childrenMap[c.id] || [], post)).join('');
   } catch {}
 }
 
 async function deletePdetailComment(commentId, postId) {
-  if (!(await window.showConfirm('Bu yorumu silmek istedi─şinizden emin misiniz?'))) return;
+  if (!(await window.showConfirm('Bu yorumu silmek istediâ”€ÅŸinizden emin misiniz?'))) return;
   try {
     const res = await fetch(`/api/comments/${commentId}`, { method: 'DELETE' });
     if (res.ok) {
@@ -586,7 +583,7 @@ async function deletePdetailComment(commentId, postId) {
       showToast('Silinemedi');
     }
   } catch {
-    showToast('Ba─şlant─▒ hatas─▒');
+    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
   }
 }
 
@@ -615,7 +612,7 @@ function renderPdetailCommentTree(c, replies, post) {
               <svg viewBox="0 0 24 24" style="width:12px;height:12px;${c.user_liked ? 'fill:var(--danger);stroke:var(--danger)' : 'stroke:#555'}"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               <span id="cl-count-${c.id}" style="font-size:10px;color:#555">${c.like_count || 0}</span>
             </button>
-            <button onclick="setPdetailReplyTo(${post.id}, ${c.id}, '${esc(c.username)}')" style="background:none;border:none;color:#888;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Yan─▒tla</button>
+            <button onclick="setPdetailReplyTo(${post.id}, ${c.id}, '${esc(c.username)}')" style="background:none;border:none;color:#888;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Yanâ”€â–’tla</button>
             ${canDelete ? `
               <button onclick="deletePdetailComment(${c.id}, ${post.id})" style="background:none;border:none;color:#ff3b30;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Sil</button>
             ` : ''}
@@ -627,7 +624,7 @@ function renderPdetailCommentTree(c, replies, post) {
         <div class="pdetail-replies-wrapper" style="margin-left:36px;margin-top:6px;">
           <button class="pdetail-replies-toggle-btn" onclick="togglePdetailRepliesContainer(this, ${c.id})" style="background:none;border:none;color:var(--t-text-muted);cursor:pointer;padding:4px 0;font-size:10px;font-weight:600;display:flex;align-items:center;gap:6px">
             <span class="line" style="display:inline-block;width:16px;height:1px;background:var(--t-border-strong)"></span>
-            <span class="text">Yan─▒tlar─▒ g├Âr (${replies.length})</span>
+            <span class="text">Yanâ”€â–’tlarâ”€â–’ gâ”œÃ‚r (${replies.length})</span>
           </button>
           <div class="pdetail-replies-list" id="pdetail-replies-list-${c.id}">
             ${repliesHtml}
@@ -659,7 +656,7 @@ function renderPdetailReplyItem(r, post) {
             <svg viewBox="0 0 24 24" style="width:12px;height:12px;${r.user_liked ? 'fill:var(--danger);stroke:var(--danger)' : 'stroke:#555'}"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             <span id="cl-count-${r.id}" style="font-size:10px;color:#555">${r.like_count || 0}</span>
           </button>
-          <button onclick="setPdetailReplyTo(${post.id}, ${r.parent_id}, '${esc(r.username)}')" style="background:none;border:none;color:#888;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Yan─▒tla</button>
+          <button onclick="setPdetailReplyTo(${post.id}, ${r.parent_id}, '${esc(r.username)}')" style="background:none;border:none;color:#888;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Yanâ”€â–’tla</button>
           ${canDelete ? `
             <button onclick="deletePdetailComment(${r.id}, ${post.id})" style="background:none;border:none;color:#ff3b30;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Sil</button>
           ` : ''}
