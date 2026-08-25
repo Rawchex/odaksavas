@@ -409,3 +409,49 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
+-- ════════════════════════════════════════════════════════════════
+-- INVENTORY, STORE & SEASON PASS
+-- ════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS user_inventory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  item_id TEXT NOT NULL,
+  item_type TEXT NOT NULL,
+  claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_inventory_user ON user_inventory(user_id);
+
+-- ════════════════════════════════════════════════════════════════
+-- CATEGORIES & TAGS
+-- ════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  icon TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ════════════════════════════════════════════════════════════════
+-- PERFORMANCE INDEXES
+-- ════════════════════════════════════════════════════════════════
+CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
+CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_likes_user_post ON likes(user_id, post_id);
+CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_reposts_post ON reposts(post_id);
+CREATE INDEX IF NOT EXISTS idx_reposts_user_post ON reposts(user_id, post_id);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id, post_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
+CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, start_time);
