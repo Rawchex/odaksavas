@@ -11,6 +11,30 @@ let _profileUserReposts = [];
 let _profileMenuPostId = null;
 let _profileMenuIsRepost = false;
 
+function getFeelingIconSvg(feeling) {
+  if (!feeling) return '';
+  const f = String(feeling).toLowerCase();
+  if (f.includes('gurur') || f.includes('zafer') || f.includes('başar')) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H7v4h10v-4h-2c-.55 0-1-.45-1-1v-2.34"/><path d="M18 4H6v7a6 6 0 0 0 12 0V4z"/></svg>`;
+  }
+  if (f.includes('mutlu') || f.includes('harika') || f.includes('iyi') || f.includes('neşeli')) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`;
+  }
+  if (f.includes('motive') || f.includes('ateş') || f.includes('enerjik')) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+  }
+  if (f.includes('odak') || f.includes('sakin') || f.includes('verim')) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`;
+  }
+  if (f.includes('yorgun') || f.includes('bitkin') || f.includes('uyku')) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+  }
+  if (f.includes('stres') || f.includes('zor') || f.includes('bunal')) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+}
+
 // ============================================================
 // LOAD MY PROFILE
 // ============================================================
@@ -62,50 +86,69 @@ function renderMyProfile(user) {
   if (_profileActiveTab === 'posts') {
     tabContentHtml = posts.length === 0
       ? `<div class="profile-empty-tab">Blunk ile hiç bir şey paylaşmadın... (lütfen paylaş lütfeeennn!!!)</div>`
-      : `<div class="profile-post-grid">${posts.map(p => renderPostGridItem(p, true, false)).join('')}</div>`;
+      : `<div class="feed-list twitter-feed-timeline" style="padding-top:12px;">${posts.map(p => window.renderTweetCard(p)).join('')}</div>`;
   } else if (_profileActiveTab === 'sessions') {
     tabContentHtml = sessions.length === 0
-      ? `<div class="profile-empty-tab">Blunk ile hiç odak oturumu başlatmadın...</div>`
+      ? `<div class="profile-empty-tab">Blunk ile henüz bir odak oturumu başlatmadın.</div>`
       : `<div class="profile-sessions-list">${sessions.slice(0, 30).map(s => {
-          const detailParts = [];
-          if (s.feeling) detailParts.push(`<span class="session-detail-feeling">${esc(s.feeling)}</span>`);
-          if (s.category) detailParts.push(`<span class="session-detail-category">${esc(s.category)}</span>`);
-          if (s.activity) detailParts.push(`<span class="session-detail-activity">${esc(s.activity)}</span>`);
-          
-          const detailsHtml = detailParts.length > 0 
-            ? `<div class="session-row-details" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:10px; color:var(--text-3); font-weight:600;">
-                 ${detailParts.join('<span style="opacity:0.3">•</span>')}
-               </div>`
-            : '';
+          const activityTitle = s.activity || s.category || 'Odak Seansı';
+          const isCompleted = s.status === 'completed';
+
+          const tags = [];
+          if (s.feeling) {
+            tags.push(`<span class="session-mini-tag">${getFeelingIconSvg(s.feeling)}<span>${esc(s.feeling)}</span></span>`);
+          }
+          if (s.category && s.category !== activityTitle) {
+            tags.push(`<span class="session-mini-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>${esc(s.category)}</span></span>`);
+          }
+
+          const tagsHtml = tags.length > 0 ? `<div class="session-tags-row">${tags.join('')}</div>` : '';
 
           const noteHtml = s.note
-            ? `<div class="session-row-note" style="margin-top: 8px; font-size: 11px; color: var(--text-2); font-style: italic; background: rgba(255,255,255,0.02); border-left: 2px solid rgba(255,255,255,0.15); padding: 4px 8px; border-radius: 0 4px 4px 0; word-break: break-word;">
+            ? `<div class="session-row-note">
                  "${esc(s.note)}"
                </div>`
             : '';
 
+          const statusIconHtml = isCompleted
+            ? `<div class="session-status-icon completed" data-tooltip="Kullanıcı bu seansı başarıyla tamamladı">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="#23a55a" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+               </div>`
+            : `<div class="session-status-icon incomplete" data-tooltip="Bu seans tamamlanamadı veya terk edildi">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+               </div>`;
+
           return `
-          <div class="session-row" style="flex-direction:column; align-items:stretch; padding:16px 20px;">
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-              <div>
-                <div style="display:flex; align-items:center; gap:6px;">
-                  <div class="session-row-time">${fmtTime(s.duration || 0)}</div>
-                  <span class="session-mode-badge" style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:2px 6px; border-radius:4px; background:${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)'}; color:${s.mode === 'pomodoro' ? '#ef4444' : 'var(--text-3)'}; border:1px solid ${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.1)'};">${s.mode === 'pomodoro' ? 'POMODORO' : 'SERBEST'}</span>
-                </div>
-                <div class="session-row-date">${fmtDate(s.start_time)}</div>
+          <div class="session-row">
+            <div class="session-row-top">
+              <div class="session-title-wrap" onclick="if (typeof openSessionLeague === 'function') openSessionLeague('${esc(activityTitle)}', '${s.activity ? 'activity' : 'category'}')" data-tooltip="${esc(activityTitle)} ligine git">
+                <span class="session-main-title">${esc(activityTitle)}</span>
+                <svg class="session-link-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><path d="M7 17l9.2-9.2M17 17V8H8"/></svg>
               </div>
-              <div class="session-badge ${s.status === 'completed' ? 'ok' : 'fail'}">
-                ${s.status === 'completed' ? 'TAMAM' : s.status === 'violated' ? 'İHLAL' : 'TERK'}
+              <div class="session-top-meta">
+                <div class="session-row-date" data-tooltip="Başlangıç Zamanı">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>${fmtDate(s.start_time)}</span>
+                </div>
+                ${statusIconHtml}
               </div>
             </div>
-            ${detailsHtml}
+            
+            <div class="session-row-sub">
+              <div class="session-duration-tag">
+                <span class="session-duration-val">${fmtTime(s.duration || 0)}</span>
+                <span class="session-mode-pill ${s.mode === 'pomodoro' ? 'pomo' : 'free'}">${s.mode === 'pomodoro' ? 'POMODORO' : 'SERBEST'}</span>
+              </div>
+              ${tagsHtml}
+            </div>
+
             ${noteHtml}
           </div>`;
         }).join('')}</div>`;
   } else if (_profileActiveTab === 'reposts') {
     tabContentHtml = reposts.length === 0
       ? `<div class="profile-empty-tab">HENÜZ REPOST YOK</div>`
-      : `<div class="profile-post-grid">${reposts.map(p => renderPostGridItem(p, false, true)).join('')}</div>`;
+      : `<div class="feed-list twitter-feed-timeline" style="padding-top:12px;">${reposts.map(p => window.renderTweetCard(p)).join('')}</div>`;
   }
 
   const hdrTitle = document.getElementById('myProfileHeaderTitle');
@@ -178,30 +221,6 @@ function renderMyProfile(user) {
   if (typeof updateThemeToggleIcons === 'function') {
     updateThemeToggleIcons(currentTheme);
   }
-}
-
-// ============================================================
-// POST GRID ITEM
-// ============================================================
-function renderPostGridItem(p, isOwn, isRepost) {
-  const hasImage = !!p.image;
-  const thumb = hasImage
-    ? `<img src="${p.image}" class="profile-grid-thumb" loading="lazy">`
-    : `<div class="profile-grid-text"><span>${esc((p.content || '').slice(0, 80))}</span></div>`;
-
-  const list = isRepost ? _profileUserReposts : _profileUserPosts;
-  const idx = list.findIndex(x => x.id === p.id);
-
-  return `
-    <div class="profile-grid-item" onclick="openGlobalPostModal(${p.id})">
-      ${thumb}
-      ${(p.like_count > 0 || p.comment_count > 0) ? `
-        <div class="profile-grid-overlay">
-          <span>♥ ${p.like_count || 0}</span>
-          <span>💬 ${p.comment_count || 0}</span>
-        </div>` : ''}
-    </div>
-  `;
 }
 
 // ============================================================

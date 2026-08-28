@@ -14,3 +14,12 @@
 - **Database Logging**: All payment transactions must be logged in the database (`orders` or similar table) with status tracking (pending, completed, failed) before initiating requests to external providers.
 - **Webhook Security**: All webhooks from external providers (like Shopier) MUST be verified using signature or token validation to prevent spoofing.
 - **Idempotency**: Any operation that increments user balances (like adding coins) must be idempotent. Always check if the order status is already `completed` before updating balances to prevent double-spending.
+
+## 4. AI Tool Usage Rules
+- **Direct File Editing**: When fixing text errors, typos, or mojibake in files, NEVER create or run Node.js scripts. ALWAYS use the IDE's file editing tools (`replace_file_content` or `multi_replace_file_content`) to change the specific lines directly.
+- **No Redundant Testing**: Do not waste time running `grep` or `node` scripts in the terminal to verify or test your actions before replying. Just write/edit the code and finish directly.
+
+## 5. Scalability & Architecture (Massive Scale)
+- **Strict Tech Stack**: Frontend is purely Vanilla JS & CSS for ultra-fast performance. Backend is Node.js/Express.
+- **High Concurrency First**: This is a competitive platform for hundreds of thousands of users. All live data (leaderboards, active focus sessions, presence) MUST go through Redis (`redis.js`). SQLite is only for persistent/cold storage.
+- **Zero-Experimentation Policy**: Write production-ready code on the first try. No trial-and-error, no hacking around, no intermediate testing scripts. Analyze the existing structure, locate the exact file, and inject the optimal solution directly.

@@ -695,7 +695,8 @@
   // Diverse Test Matrix Generator (3 Players Active, 2 Players Almost Active, 1 Player In-Progress, 0 Players Unstarted)
   function getLeagueTestData(leagueName) {
     const nameLower = (leagueName || '').toLowerCase();
-    const currentUsername = (window.currentUser && window.currentUser.username) ? window.currentUser.username : 'sen';
+    const gUser = (typeof currentUser !== 'undefined' ? currentUser : null);
+    const currentUsername = (gUser && gUser.username) ? gUser.username : 'sen';
 
     // 1. FULLY ACTIVE LEAGUE (6 Players - Medals Active! 1-min intervals)
     if (nameLower.includes('minecraft')) {
@@ -758,9 +759,9 @@
 
     try {
       const url = `/api/leaderboard/leagues?timeframe=${currentLeagueState.timeframe}&league_type=${currentLeagueState.league_type}&league_name=${encodeURIComponent(currentLeagueState.league_name)}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
+      const resLeaderboard = await fetch(url);
+      if (resLeaderboard.ok) {
+        const data = await resLeaderboard.json();
         items = data.leaderboard || [];
         if (data.meta) meta = data.meta;
       }
@@ -809,7 +810,8 @@
     let html = '';
 
     // Check current user position for Rival Distance Card
-    const currentUsername = window.currentUser ? window.currentUser.username : null;
+    const gUser = (typeof currentUser !== 'undefined' ? currentUser : null);
+    const currentUsername = gUser ? gUser.username : null;
     if (currentUsername) {
       const userIndex = items.findIndex(u => u.username === currentUsername);
       const currentRank = userIndex >= 0 ? items[userIndex].rank : null;
@@ -1216,7 +1218,7 @@
   }
 
   function openMyActivityModal() {
-    const user = window.currentUser || window.user;
+    const user = (typeof currentUser !== 'undefined' ? currentUser : null) || window.user;
     if (user && (user.id || user.username)) {
       openUserActivityModal(user.id || user.username, user.username);
       return;
@@ -1230,7 +1232,11 @@
       })
       .then(userData => {
         if (userData && (userData.id || userData.username)) {
-          window.currentUser = userData;
+          if (typeof currentUser !== 'undefined') {
+            currentUser = userData;
+          } else {
+            window.user = userData;
+          }
           openUserActivityModal(userData.id || userData.username, userData.username);
         } else {
           showAuthRequiredNotification();
@@ -1531,6 +1537,23 @@
     loadLeaderboardData();
   }
 
+  function openSpecificLeague(name, type = 'activity') {
+    currentLeagueState.league_type = type || 'overall';
+    currentLeagueState.league_name = name || 'Genel';
+    if (typeof showPage === 'function') showPage('leaderboard');
+    renderSeasonBanner(lastSeasonStatusData);
+    renderLeagueControls();
+    loadLeaderboardData();
+  }
+
+  window.openSessionLeague = (name, type) => {
+    if (window.BLUNK_LEAGUES?.openSpecificLeague) {
+      window.BLUNK_LEAGUES.openSpecificLeague(name, type);
+    } else {
+      if (typeof showPage === 'function') showPage('leaderboard');
+    }
+  };
+
   window.BLUNK_LEAGUES = {
     init: initLeagueStatus,
     getIconSvg,
@@ -1543,6 +1566,7 @@
     openWeeklyView,
     openSearchModal,
     openSeasonCalendarModal,
+    openSpecificLeague,
     goToTimerPage
   };
 

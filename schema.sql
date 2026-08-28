@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   feeling TEXT,
   category TEXT,
   activity TEXT,
+  accumulated_duration INTEGER DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (party_id) REFERENCES parties(id)
 );

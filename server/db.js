@@ -140,6 +140,15 @@ if (usePostgres) {
   
   const sqliteDb = new sqlite3.Database(DB_PATH);
 
+  // High Concurrency Optimizations for SQLite (WAL Mode + Timeout)
+  sqliteDb.serialize(() => {
+    sqliteDb.run('PRAGMA journal_mode = WAL;');
+    sqliteDb.run('PRAGMA busy_timeout = 10000;');
+    sqliteDb.run('PRAGMA synchronous = NORMAL;');
+    sqliteDb.run('PRAGMA cache_size = -64000;'); // 64MB cache
+    sqliteDb.run('PRAGMA temp_store = MEMORY;');
+  });
+
   db = {
     get: (sql, params, cb) => {
       const { actualParams, actualCb } = parseArgs(params, cb);

@@ -860,34 +860,98 @@ p, span, div, .ps-toggle-desc, .ps-section-desc, .auth-card-sub {
 
 [data-theme="light"] .msg-body-wrapper:not(.msg-sender-bubble),
 [data-theme="light"] [class*="msg-body-wrapper"]:not([class*="msg-sender-bubble"]),
+[data-theme="light"] .msg-them,
 [data-theme="light"] .chat-messages div[style*="background:#0a0a0a"],
 [data-theme="light"] .chat-messages div[style*="background: #0a0a0a"] {
   background-color: #ffffff !important;
   background: #ffffff !important;
   color: #12131c !important;
-  border: 1px solid rgba(108, 99, 255, 0.15) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
 }
 
 [data-theme="light"] .msg-body-wrapper:not(.msg-sender-bubble) *,
+[data-theme="light"] .msg-them *,
 [data-theme="light"] .chat-messages div[style*="background:#0a0a0a"] * {
   color: #12131c !important;
 }
 
 [data-theme="light"] .msg-sender-bubble,
+[data-theme="light"] .msg-me,
 [data-theme="light"] [class*="msg-sender-bubble"] {
-  background: linear-gradient(135deg, #6c63ff 0%, #a855f7 100%) !important;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+}
+
+[data-theme="light"] .msg-sender-bubble *,
+[data-theme="light"] .msg-me * {
   color: #ffffff !important;
 }
 
-[data-theme="light"] .msg-sender-bubble * {
-  color: #ffffff !important;
+[data-theme="light"] .chat-reply-preview-bar {
+  background: #f8fafc !important;
+  border-top-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .chat-reply-text {
+  color: #475569 !important;
+}
+
+[data-theme="light"] .msg-action-popover {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="light"] .react-svg-btn {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .react-svg-btn:hover {
+  background: #e2e8f0 !important;
+}
+
+[data-theme="light"] .msg-action-btn {
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .msg-action-btn:hover {
+  background: #f1f5f9 !important;
+}
+
+[data-theme="light"] .msg-reaction-badge {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .msg-reaction-count {
+  color: #334155 !important;
+}
+
+[data-theme="light"] .msg-swipe-reply-icon {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .forward-target-item {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .forward-target-item:hover {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
 }
 
 [data-theme="light"] .chat-msg-author,
 [data-theme="light"] .chat-msg-time,
+[data-theme="light"] .msg-timestamp,
 [data-theme="light"] [style*="color:#555"],
 [data-theme="light"] [style*="color: #555"] {
-  color: #62667d !important;
+  color: #64748b !important;
 }
 
 /* Focus Summary Modal & Steps Light Mode Fixes */

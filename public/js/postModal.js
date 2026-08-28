@@ -1,4 +1,4 @@
-﻿// Global Post Modal definition
+// Global Post Modal definition
 async function openGlobalPostModal(postId, isOwn, isRepost) {
   // Remove existing modal if any
   const existing = document.getElementById('profilePostPreview');
@@ -10,114 +10,69 @@ async function openGlobalPostModal(postId, isOwn, isRepost) {
   // Backdrop
   const el = document.createElement('div');
   el.id = 'profilePostPreview';
-  el.className = 'pdetail-backdrop';
-  el.onclick = (e) => { if (e.target === el) closeGlobalPostModal(); };
+  el.className = 'thread-modal-backdrop';
+  el.onclick = (e) => { 
+    if (e.target === el || e.target.classList.contains('thread-modal-container') || e.target.classList.contains('thread-modal-content-wrapper')) {
+      closeGlobalPostModal(); 
+    }
+  };
 
-  // Scroll Container for Feed Queue
+  // Scroll Container
   const scrollBox = document.createElement('div');
-  scrollBox.className = 'pdetail-scroll-queue';
-  scrollBox.style.cssText = 'width:100%; height:100%; overflow-y:auto; scroll-snap-type:y mandatory; display:flex; flex-direction:column; align-items:center; padding:40px 0; gap:24px;';
+  scrollBox.className = 'thread-modal-container';
   
+  // Wrapper for centering
+  const contentWrapper = document.createElement('div');
+  contentWrapper.className = 'thread-modal-content-wrapper';
+  
+  const threadWrapper = document.createElement('div');
+  threadWrapper.className = 'thread-modal-content';
+  threadWrapper.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">YÜKLENİYOR...</div>';
+  
+  contentWrapper.appendChild(threadWrapper);
+  scrollBox.appendChild(contentWrapper);
   el.appendChild(scrollBox);
   document.body.appendChild(el);
+
+  window._previousUrlBeforePostModal = window.location.pathname;
+
   if (!window._isPostPopstate) {
-    history.pushState({ modal: "post", postId: postId }, "", "/post/" + postId);
+    const encId = window.encodeId ? window.encodeId(postId) : postId;
+    history.pushState({ modal: "post", postId: encId }, "", "/post/" + encId);
   }
   window._isPostPopstate = false;
   window._currentOpenPostId = postId;
 
-
-  // Store queue state
-  window._modalFeedQueue = {
-    loadedIds: new Set([postId]),
-    offset: 0,
-    isLoading: false,
-    hasMore: true
-  };
-
-  // Render initial target post
-  const firstSheet = document.createElement('div');
-  firstSheet.className = 'pdetail-sheet';
-  firstSheet.style.scrollSnapAlign = 'center';
-  firstSheet.innerHTML = '<div class="loading-row" style="color:#aaa;padding:40px;text-align:center;font-weight:700;">Yâ”œÂ£KLENâ”€â–‘YOR...</div>';
-  scrollBox.appendChild(firstSheet);
-  requestAnimationFrame(() => firstSheet.classList.add('open'));
+  requestAnimationFrame(() => el.classList.add('open'));
 
   try {
     const res = await fetch(`/api/posts/${postId}`);
     if (!res.ok) throw new Error();
     const post = await res.json();
-    renderPostDetailSheet(firstSheet, post, isOwn, isRepost);
+    renderPostDetailSheet(threadWrapper, post, isOwn, isRepost);
   } catch {
-    const list = isRepost ? _profileUserReposts : _profileUserPosts;
-    const post = (list || []).find(p => p.id === postId);
+    const list = isRepost ? (typeof _profileUserReposts !== 'undefined' ? _profileUserReposts : []) : (typeof _profileUserPosts !== 'undefined' ? _profileUserPosts : []);
+    const post = (list || window.FeedEngine?.posts || []).find(p => p.id === postId);
     if (post) {
-      renderPostDetailSheet(firstSheet, post, isOwn, isRepost);
+      renderPostDetailSheet(threadWrapper, post, isOwn, isRepost);
     } else {
-      firstSheet.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">Gâ”œÃ‚nderi yâ”œâ•klenemedi</div></div>';
+      threadWrapper.innerHTML = '<div class="empty-state" style="color:#888;padding:40px;text-align:center;"><div class="empty-title">Gönderi yüklenemedi</div></div>';
     }
   }
-
-  // Infinite Scroll Handler for Discover Queue inside modal
-  scrollBox.addEventListener('scroll', async () => {
-    const state = window._modalFeedQueue;
-    if (!state || state.isLoading || !state.hasMore) return;
-
-    if (scrollBox.scrollTop + scrollBox.clientHeight >= scrollBox.scrollHeight - 400) {
-      state.isLoading = true;
-      try {
-        const res = await fetch(`/api/feed/discover?limit=10&offset=${state.offset}`);
-        if (res.ok) {
-          const nextPosts = await res.json();
-          state.offset += 10;
-          let addedCount = 0;
-          
-          nextPosts.forEach(p => {
-            if (!state.loadedIds.has(p.id)) {
-              state.loadedIds.add(p.id);
-              addedCount++;
-              const sheetNode = document.createElement('div');
-              sheetNode.className = 'pdetail-sheet open';
-              sheetNode.style.scrollSnapAlign = 'center';
-              renderPostDetailSheet(sheetNode, p, p.username === currentUser?.username, false);
-              scrollBox.appendChild(sheetNode);
-            }
-          });
-
-          if (addedCount === 0 && nextPosts.length < 10) {
-            state.hasMore = false;
-          }
-        }
-      } catch (e) {
-        console.warn('Queue feed load error:', e);
-      }
-      state.isLoading = false;
-    }
-  });
 }
 
 window.openPostModal = openGlobalPostModal;
 window.openProfilePostDetail = openGlobalPostModal;
+window.openGlobalPostModal = openGlobalPostModal;
 
-function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
-  const isSelfPost = post.username === currentUser.username;
-  const displayContent = (post.content || '').replace(/^Repost: /, '');
+function renderPostDetailSheet(wrapper, post, isOwn, isRepost) {
   const comments = post.comments || [];
-  const likers = post.likers || [];
+  window._loadedPostForModal = post; // Used globally for likes/bookmarks
 
-  const authorPhoto = isSelfPost ? (currentUser.profile_photo || post.profile_photo) : post.profile_photo;
-  const authorObj = { username: post.username, profile_photo: authorPhoto };
-
-  const likersHtml = likers.length > 0 ? `
-    <div class="pdetail-likers" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--t-text-muted)">
-      <div class="pdetail-likers-avatars" style="display:flex;margin-right:2px">
-        ${likers.slice(0, 3).map(l => renderAvatar({ username: l.username, profile_photo: l.profile_photo }, 'avatar avatar-xs')).join('')}
-      </div>
-      <span class="pdetail-likers-text">
-        ${likers[0]?.username ? `<strong>${esc(likers[0].username)}</strong>` : ''}${likers.length > 1 ? ` ve ${post.like_count - 1} kiâ”¼ÅŸi` : ''} beâ”€ÅŸendi
-      </span>
-    </div>
-  ` : '';
+  let rootHtml = '';
+  if (typeof window.renderTweetCard === 'function') {
+    rootHtml = window.renderTweetCard(post, { isThreadView: true });
+  }
 
   const parents = comments.filter(c => !c.parent_id || c.parent_id === 'null' || c.parent_id === '0' || c.parent_id === 0);
   const childrenMap = {};
@@ -130,105 +85,54 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
   });
 
   const commentsHtml = parents.length === 0
-    ? `<div class="pdetail-no-comment" style="color:var(--t-text-muted);font-size:13px;text-align:center;padding:24px 0">Henâ”œâ•z yorum yok. â”€â–‘lk yorumu sen yaz!</div>`
+    ? `<div class="pdetail-no-comment" style="color:var(--t-text-muted);font-size:13.5px;text-align:center;padding:32px 0; font-weight:600;">Henüz yanıt yok. İlk yanıtı sen yaz!</div>`
     : parents.map(c => renderPdetailCommentTree(c, childrenMap[c.id] || [], post)).join('');
 
-  sheet.innerHTML = `
-    <div class="pdetail-modal-container">
-      <!-- Media / Content Column (Left) -->
-      <div class="pdetail-media-column">
-        ${post.image ? `
-          <div class="pdetail-image-box">
-            <img src="${post.image}" class="pdetail-image" alt="Gâ”œÃ‚nderi gâ”œÃ‚rseli">
-          </div>
-        ` : `
-          <div class="pdetail-text-card-content">
-            <p>${esc(displayContent)}</p>
-          </div>
-        `}
+  const activeUser = (typeof currentUser !== 'undefined' ? currentUser : null);
+  const guestCta = `
+    <div class="thread-reply-guest-cta" style="padding: 16px 20px; text-align: center; background: var(--t-bg-input, rgba(255,255,255,0.04)); border-radius: 14px; border: 1px solid var(--t-border-subtle, rgba(255,255,255,0.08));">
+      <div style="font-size: 15px; font-weight: 800; color: var(--t-text-primary, #fff); margin-bottom: 6px;">Senin Düşüncen Ne?</div>
+      <div style="font-size: 13px; color: var(--t-text-muted, #8a9099); margin-bottom: 14px; line-height: 1.45;">Topluluğa katıl, kendi fikrini belirt ve fikirlerine değer veren insanlarla etkileşime geç.</div>
+      <button onclick="closeGlobalPostModal(); showLogin();" class="mono-btn-primary" style="padding: 10px 24px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer;">Hemen Giriş Yap / Kaydol</button>
+    </div>
+  `;
+
+  const replyRow = `
+    <div id="pdetail-reply-bar-${post.id}" class="pdetail-reply-bar" style="display:none;"></div>
+    <div class="thread-reply-input-row">
+      ${renderAvatar(activeUser || { profile_photo: '/default-avatar.png' }, 'avatar avatar-sm')}
+      <input id="pdetailCommentInput-${post.id}" class="thread-comment-input" placeholder="Yanıtını gönder..." onkeydown="if(event.key==='Enter') pdetailComment(${post.id})">
+      <button class="thread-comment-send" onclick="pdetailComment(${post.id})">Yanıtla</button>
+    </div>
+  `;
+
+  wrapper.innerHTML = `
+    <div class="thread-modal-header">
+      <div class="thread-back-btn" onclick="closeGlobalPostModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
       </div>
-
-      <!-- Info / Comments Column (Right) -->
-      <div class="pdetail-info-column">
-        <!-- Header -->
-        <div class="pdetail-header">
-          <div class="pdetail-author" onclick="openUserPage('${esc(post.username)}')">
-            ${renderAvatar(authorObj, 'avatar avatar-sm')}
-            <div style="display:flex;flex-direction:column;line-height:1.2">
-              <span class="pdetail-author-name">${esc(post.username)}</span>
-              <span style="font-size:10px;color:#777">${fmtPostTime(post.created_at)}</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            ${(isOwn || isSelfPost) && !isRepost ? `
-              <button class="pdetail-menu-btn" onclick="openDetailMenu(${post.id})" data-tooltip="Seâ”œÄŸenekler" data-tooltip-pos="bottom">
-                <span></span><span></span><span></span>
-              </button>` : ''}
-            ${isRepost ? `
-              <button class="pdetail-menu-btn" onclick="profileRemoveRepostFromDetail(${post.id})" data-tooltip="Repostu Kaldâ”€â–’r" data-tooltip-pos="bottom">
-                <span></span><span></span><span></span>
-              </button>` : ''}
-            <button onclick="closeGlobalPostModal()" class="pdetail-close-btn" data-tooltip="Kapat" data-tooltip-pos="bottom" aria-label="Kapat">Ã”Â£Ã²</button>
-          </div>
-        </div>
-
-        <!-- Scrollable Middle Section (Caption + Likers + Comments) -->
-        <div class="pdetail-comments-scroll" id="pdetailCommentsScroll-${post.id}">
-          ${displayContent && post.image ? `
-            <div class="pdetail-caption">
-              <strong class="pdetail-caption-author" onclick="openUserPage('${esc(post.username)}')">${esc(post.username)}</strong>${esc(displayContent)}
-            </div>
-          ` : ''}
-
-          ${likersHtml}
-
-          <div class="pdetail-comments-section" id="pdetailComments-${post.id}">
-            ${commentsHtml}
-          </div>
-        </div>
-
-        <!-- Bottom Panel (Actions + Counts + Reply Bar + Comment Input) -->
-        <div class="pdetail-bottom-panel">
-          <div class="pdetail-actions">
-            <div class="pdetail-action-left">
-              <button class="pdetail-action-btn ${post.user_liked ? 'liked' : ''}" onclick="pdetailLike(${post.id}, this)" data-tooltip="${post.user_liked ? 'Beâ”€ÅŸeniyi Kaldâ”€â–’r' : 'Beâ”€ÅŸen'}" data-tooltip-pos="top">
-                <svg viewBox="0 0 24 24" fill="${post.user_liked ? '#ff3b30' : 'none'}" stroke="${post.user_liked ? '#ff3b30' : 'currentColor'}" stroke-width="2" width="24" height="24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              </button>
-              <button class="pdetail-action-btn ${(post.user_reposted || isRepost) ? 'reposted' : ''}" onclick="pdetailRepost(${post.id}, this)" data-tooltip="${(post.user_reposted || isRepost) ? 'Repostu Kaldâ”€â–’r' : 'Repost Et'}" data-tooltip-pos="top">
-                <svg viewBox="0 0 24 24" fill="none" stroke="${(post.user_reposted || isRepost) ? '#32d74b' : 'currentColor'}" stroke-width="2" width="22" height="22"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-              </button>
-              <button class="pdetail-action-btn" onclick="openSharePostModal(${post.id})" data-tooltip="Gâ”œÃ‚nderiyi Paylaâ”¼ÅŸ" data-tooltip-pos="top">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="pdetail-counts">
-            <span id="pdetail-like-count">${post.like_count || 0} beâ”€ÅŸeni</span>
-            <span style="color:var(--text-3)">â”¬Ã€</span>
-            <span>${post.comment_count || 0} yorum</span>
-            <span style="color:var(--text-3)">â”¬Ã€</span>
-            <span id="pdetail-repost-count-${post.id}">${post.repost_count || 0} repost</span>
-          </div>
-
-          <div id="pdetail-reply-bar-${post.id}" class="pdetail-reply-bar" style="display:none"></div>
-
-          <div class="pdetail-comment-input-row">
-            ${renderAvatar(currentUser, 'avatar avatar-xs')}
-            <input id="pdetailCommentInput-${post.id}" class="pdetail-comment-input" placeholder="Yorum ekle..." onkeydown="if(event.key==='Enter') pdetailComment(${post.id})">
-            <button class="pdetail-comment-send" onclick="pdetailComment(${post.id})">Gâ”œÃ‚nder</button>
-          </div>
-        </div>
-      </div>
+      <div class="thread-header-title">Gönderi</div>
+    </div>
+    
+    <div class="thread-root-container">
+      ${rootHtml}
     </div>
 
+    <div class="thread-comments-container" id="pdetailComments-${post.id}">
+      ${commentsHtml}
+    </div>
+
+    <div class="thread-reply-container">
+      ${activeUser ? replyRow : guestCta}
+    </div>
+  
     <!-- Detail 3-dot menu panel -->
     <div id="pdetailMenuOverlay-${post.id}" class="profile-menu-overlay" onclick="closeDetailMenu(${post.id})" style="display:none"></div>
     <div id="pdetailMenuPanel-${post.id}" class="profile-post-menu-panel" style="display:none">
-      <div class="profile-post-menu-title">Gâ”œÃ»â”œÃ»NDERâ”€â–‘ Yâ”œÃ»NETâ”€â–‘Mâ”€â–‘</div>
-      <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(displayContent)}\`)">Dâ”œâ•zenle</button>
-      <button class="profile-post-menu-item" onclick="pdetailShareFromMenu(${post.id})">Mesajda paylaâ”¼ÅŸ</button>
-      <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">Gâ”œÃ‚nderiyi sil</button>
+      <div class="profile-post-menu-title">GÖNDERİ YÖNETİMİ</div>
+      <button class="profile-post-menu-item" onclick="pdetailEditPost(${post.id}, \`${esc(post.content || '')}\`)">Düzenle</button>
+      <button class="profile-post-menu-item" onclick="pdetailShareFromMenu(${post.id})">Mesajda paylaş</button>
+      <button class="profile-post-menu-item danger" onclick="pdetailDeletePost(${post.id})">Gönderiyi sil</button>
     </div>
   `;
 
@@ -241,10 +145,20 @@ function renderPostDetailSheet(sheet, post, isOwn, isRepost) {
 
 function closeGlobalPostModal() {
   if (window._currentOpenPostId && !window._isPostPopstate) {
-    if (location.pathname.startsWith("/post/")) {
-      history.replaceState(null, "", "/feed");
-    } else {
+    if (history.state && history.state.modal === 'post') {
       history.back();
+    } else {
+      const userProfileEl = document.getElementById('userProfilePage');
+      const isUserProfileActive = userProfileEl && userProfileEl.classList.contains('active') && userProfileEl.style.display !== 'none';
+      
+      let targetUrl = '/feed';
+      if (isUserProfileActive && window._previousUrlBeforePostModal && window._previousUrlBeforePostModal.startsWith('/u/')) {
+        targetUrl = window._previousUrlBeforePostModal;
+      } else {
+        const pageToReturn = (typeof activePage !== 'undefined' && activePage) ? activePage : 'feed';
+        targetUrl = (typeof getPathForPage === 'function') ? getPathForPage(pageToReturn) : '/feed';
+      }
+      history.replaceState({ pageName: isUserProfileActive ? 'userProfile' : activePage }, '', targetUrl);
     }
   }
   window._currentOpenPostId = null;
@@ -252,21 +166,27 @@ function closeGlobalPostModal() {
 
   const el = document.getElementById('profilePostPreview');
   if (el) {
-    const sheet = el.querySelector('.pdetail-sheet');
-    if (sheet) sheet.classList.remove('open');
+    el.classList.remove('open');
     setTimeout(() => {
       el.remove();
-      // Restore body scroll
-      document.body.style.overflow = '';
-    }, 280);
+      // Restore body scroll only if userProfilePage is not active
+      const userProfileEl = document.getElementById('userProfilePage');
+      const isUserProfileActive = userProfileEl && userProfileEl.classList.contains('active') && userProfileEl.style.display !== 'none';
+      if (!isUserProfileActive) {
+        document.body.style.overflow = '';
+      }
+    }, 200);
   }
 }
 
 // Detail menu
 function openDetailMenu(postId) {
-  document.getElementById(`pdetailMenuOverlay-${postId}`).style.display = 'block';
-  document.getElementById(`pdetailMenuPanel-${postId}`).style.display = 'flex';
+  const o = document.getElementById(`pdetailMenuOverlay-${postId}`);
+  const p = document.getElementById(`pdetailMenuPanel-${postId}`);
+  if (o) o.style.display = 'block';
+  if (p) p.style.display = 'flex';
 }
+
 function closeDetailMenu(postId) {
   const o = document.getElementById(`pdetailMenuOverlay-${postId}`);
   const p = document.getElementById(`pdetailMenuPanel-${postId}`);
@@ -296,8 +216,8 @@ function pdetailEditPost(postId, currentContent) {
   const header = document.createElement('div');
   header.className = 'profile-edit-modal-header';
   header.innerHTML = `
-    <span>Gâ”œÃ»â”œÃ»NDERâ”€â–‘Yâ”€â–‘ Dâ”œÂ£ZENLE</span>
-    <button class="profile-edit-modal-close" onclick="document.getElementById('pdetailEditSheet')?.remove()">Ã”Â£Ã²</button>
+    <span>GÖNDERİYİ DÜZENLE</span>
+    <button class="profile-edit-modal-close" onclick="document.getElementById('pdetailEditSheet')?.remove()">✕</button>
   `;
 
   const body = document.createElement('div');
@@ -306,7 +226,7 @@ function pdetailEditPost(postId, currentContent) {
   const textarea = document.createElement('textarea');
   textarea.className = 'profile-edit-modal-textarea';
   textarea.value = currentContent || '';
-  textarea.placeholder = 'Gâ”œÃ‚nderi iâ”œÄŸeriâ”€ÅŸinizi dâ”œâ•zenleyin...';
+  textarea.placeholder = 'Gönderi içeriğinizi düzenleyin...';
   body.appendChild(textarea);
 
   const footer = document.createElement('div');
@@ -314,7 +234,7 @@ function pdetailEditPost(postId, currentContent) {
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'profile-edit-modal-cancel';
-  cancelBtn.textContent = 'â”€â–‘ptal';
+  cancelBtn.textContent = 'İptal';
   cancelBtn.onclick = () => el.remove();
 
   const saveBtn = document.createElement('button');
@@ -331,18 +251,18 @@ function pdetailEditPost(postId, currentContent) {
         body: JSON.stringify({ content })
       });
       if (res.ok) {
-        showToast('Gâ”œÃ‚nderi gâ”œâ•ncellendi');
+        showToast('Gönderi güncellendi');
         el.remove();
         openGlobalPostModal(postId);
         if (typeof loadFeed === 'function') loadFeed();
         if (typeof loadMyProfile === 'function') loadMyProfile();
       } else {
-        showToast('Gâ”œâ•ncellenemedi');
+        showToast('Güncellenemedi');
         saveBtn.disabled = false;
         saveBtn.textContent = 'Kaydet';
       }
     } catch {
-      showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
+      showToast('Bağlantı hatası');
       saveBtn.disabled = false;
       saveBtn.textContent = 'Kaydet';
     }
@@ -363,35 +283,37 @@ function pdetailEditPost(postId, currentContent) {
 // Delete from detail
 async function pdetailDeletePost(postId) {
   closeDetailMenu(postId);
-  if (!(await window.showConfirm('Bu gâ”œÃ‚nderiyi silmek istediâ”€ÅŸinizden emin misiniz?'))) return;
+  if (!(await window.showConfirm('Bu gönderiyi silmek istediğinizden emin misiniz?'))) return;
   try {
     const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
     if (res.ok) {
-      showToast('Gâ”œÃ‚nderi silindi');
+      showToast('Gönderi silindi');
       closeGlobalPostModal();
-      loadMyProfile();
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+      if (typeof loadFeed === 'function') loadFeed();
     } else {
       showToast('Silinemedi');
     }
   } catch {
-    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
+    showToast('Bağlantı hatası');
   }
 }
 
 // Remove repost from detail
 async function profileRemoveRepostFromDetail(postId) {
-  if (!(await window.showConfirm('Repost\'u kaldâ”€â–’rmak istediâ”€ÅŸinizden emin misiniz?'))) return;
+  if (!(await window.showConfirm('Repost\'u kaldırmak istediğinizden emin misiniz?'))) return;
   try {
     const res = await fetch(`/api/posts/${postId}/repost`, { method: 'DELETE' });
     if (res.ok) {
-      showToast('Repost kaldâ”€â–’râ”€â–’ldâ”€â–’');
+      showToast('Repost kaldırıldı');
       closeGlobalPostModal();
-      loadMyProfile();
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+      if (typeof loadFeed === 'function') loadFeed();
     } else {
-      showToast('Kaldâ”€â–’râ”€â–’lamadâ”€â–’');
+      showToast('Kaldırılamadı');
     }
   } catch {
-    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
+    showToast('Bağlantı hatası');
   }
 }
 
@@ -409,7 +331,7 @@ async function pdetailLike(postId, btn) {
       const countEl = document.getElementById('pdetail-like-count');
       if (countEl) {
         const cur = parseInt(countEl.textContent) || 0;
-        countEl.textContent = `${liked ? cur + 1 : Math.max(0, cur - 1)} beâ”€ÅŸeni`;
+        countEl.textContent = `${liked ? cur + 1 : Math.max(0, cur - 1)} beğeni`;
       }
     }
   } catch {}
@@ -422,15 +344,14 @@ async function pdetailRepost(postId, btn) {
     const res = await fetch(`/api/posts/${postId}/repost`, { method: isReposted ? 'DELETE' : 'POST' });
     if (res.ok) {
       if (isReposted) {
-        showToast('Repost kaldâ”€â–’râ”€â–’ldâ”€â–’');
+        showToast('Repost kaldırıldı');
         btn.querySelector('svg').setAttribute('stroke', 'currentColor');
         btn.classList.remove('reposted');
-        // If we are on the reposts tab, close and refresh so the item disappears from grid
-        if (_profileActiveTab === 'reposts') {
+        if (typeof _profileActiveTab !== 'undefined' && _profileActiveTab === 'reposts') {
           closeGlobalPostModal();
         }
       } else {
-        showToast('Repost yapâ”€â–’ldâ”€â–’');
+        showToast('Repost yapıldı');
         btn.querySelector('svg').setAttribute('stroke', '#32d74b');
         btn.classList.add('reposted');
       }
@@ -441,13 +362,59 @@ async function pdetailRepost(postId, btn) {
         countEl.textContent = `${isReposted ? Math.max(0, cur - 1) : cur + 1} repost`;
       }
 
-      loadMyProfile();
+      if (typeof loadMyProfile === 'function') loadMyProfile();
     } else {
       const d = await res.json().catch(() => ({}));
-      showToast(d.error || 'Repost iâ”¼ÅŸlemi baâ”¼ÅŸarâ”€â–’sâ”€â–’z');
+      showToast(d.error || 'Repost işlemi başarısız');
     }
   } catch {
-    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
+    showToast('Bağlantı hatası');
+  }
+}
+
+// ============================================================
+// PROFILE DETAIL NESTED COMMENTS HELPERS
+// ============================================================
+let _pdetailReplyStates = {};
+const _openReplyParentIds = new Set();
+
+// Toggle comment / reply like
+async function toggleCommentLike(commentId) {
+  if (window.requireAuth && window.requireAuth()) return;
+  if (!commentId) return;
+
+  const btn = document.getElementById(`clbtn-${commentId}`);
+  const cnt = document.getElementById(`cl-count-${commentId}`);
+  const svg = btn ? btn.querySelector('svg') : null;
+
+  const isLiked = btn ? btn.classList.contains('liked') : false;
+  const currentCount = cnt ? parseInt(cnt.textContent || '0', 10) : 0;
+  const nextCount = Math.max(0, currentCount + (isLiked ? -1 : 1));
+
+  // Optimistic UI Update
+  if (btn) btn.classList.toggle('liked', !isLiked);
+  if (cnt) cnt.textContent = nextCount;
+  if (svg) {
+    svg.style.fill = !isLiked ? 'var(--danger, #ff3b30)' : 'none';
+    svg.style.stroke = !isLiked ? 'var(--danger, #ff3b30)' : 'currentColor';
+  }
+
+  try {
+    const res = await fetch(`/api/comments/${commentId}/like`, { method: 'POST' });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    if (typeof showToast === 'function') {
+      showToast(data.liked ? 'Yanıt beğenildi' : 'Beğeni kaldırıldı');
+    }
+  } catch (err) {
+    // Revert UI on failure
+    if (btn) btn.classList.toggle('liked', isLiked);
+    if (cnt) cnt.textContent = currentCount;
+    if (svg) {
+      svg.style.fill = isLiked ? 'var(--danger, #ff3b30)' : 'none';
+      svg.style.stroke = isLiked ? 'var(--danger, #ff3b30)' : 'currentColor';
+    }
+    if (typeof showToast === 'function') showToast('İşlem gerçekleştirilemedi');
   }
 }
 
@@ -468,6 +435,9 @@ async function pdetailComment(postId) {
     });
     if (res.ok) {
       input.value = '';
+      if (parentId) {
+        _openReplyParentIds.add(parentId);
+      }
       if (replyState) {
         cancelPdetailReply(postId);
       }
@@ -480,20 +450,27 @@ function focusDetailComment(postId) {
   document.getElementById(`pdetailCommentInput-${postId}`)?.focus();
 }
 
-// ============================================================
-// PROFILE DETAIL NESTED COMMENTS HELPERS
-// ============================================================
-let _pdetailReplyStates = {};
-
 function setPdetailReplyTo(postId, parentId, username) {
   _pdetailReplyStates[postId] = { parentId, username };
+  if (parentId) {
+    _openReplyParentIds.add(parentId);
+  }
   const input = document.getElementById(`pdetailCommentInput-${postId}`);
   if (input) {
-    input.placeholder = `@${username} kullanâ”€â–’câ”€â–’sâ”€â–’na yanâ”€â–’t yaz...`;
+    input.placeholder = `@${username} kullanıcısına yanıt yaz...`;
     input.value = `@${username} ` + input.value.replace(/^@[a-zA-Z0-9_.]+\s*/, '');
     input.focus();
   }
   renderPdetailReplyBar(postId);
+  
+  if (parentId) {
+    const list = document.getElementById(`pdetail-replies-list-${parentId}`);
+    if (list) list.classList.add('open');
+    const toggleBtn = document.querySelector(`[data-reply-parent-id="${parentId}"]`);
+    if (toggleBtn && toggleBtn.querySelector('.text')) {
+      toggleBtn.querySelector('.text').textContent = 'Yanıtları gizle';
+    }
+  }
 }
 
 function cancelPdetailReply(postId) {
@@ -501,7 +478,7 @@ function cancelPdetailReply(postId) {
   delete _pdetailReplyStates[postId];
   const input = document.getElementById(`pdetailCommentInput-${postId}`);
   if (input) {
-    input.placeholder = "Yorum ekle...";
+    input.placeholder = "Yanıtını gönder...";
     if (replyState && input.value.startsWith(`@${replyState.username} `)) {
       input.value = input.value.substring(replyState.username.length + 2);
     }
@@ -515,9 +492,9 @@ function renderPdetailReplyBar(postId) {
   const state = _pdetailReplyStates[postId];
   if (state) {
     container.innerHTML = `
-      <div class="reply-active-indicator" style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);padding:6px 12px;border-radius:6px;font-size:11px;margin-bottom:8px;color:#aaa">
-        <span>@${state.username} kullanâ”€â–’câ”€â–’sâ”€â–’na yanâ”€â–’t veriliyor</span>
-        <button onclick="cancelPdetailReply(${postId})" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-weight:bold;font-size:12px;padding:2px 6px">Ã”Â£Ã²</button>
+      <div class="reply-active-indicator">
+        <span>@${esc(state.username)} kullanıcısına yanıt veriliyor</span>
+        <button onclick="cancelPdetailReply(${postId})" style="background:none;border:none;color:var(--danger, #ff3b30);cursor:pointer;font-weight:bold;font-size:13px;padding:2px 6px">✕</button>
       </div>
     `;
     container.style.display = 'block';
@@ -533,13 +510,15 @@ function togglePdetailRepliesContainer(btn, parentId) {
   const isOpen = container.classList.contains('open');
   if (!isOpen) {
     container.classList.add('open');
+    _openReplyParentIds.add(parentId);
     if (btn && btn.querySelector('.text')) {
-      btn.querySelector('.text').textContent = 'Yanâ”€â–’tlarâ”€â–’ gizle';
+      btn.querySelector('.text').textContent = 'Yanıtları gizle';
     }
   } else {
     container.classList.remove('open');
+    _openReplyParentIds.delete(parentId);
     if (btn && btn.querySelector('.text')) {
-      btn.querySelector('.text').textContent = `Yanâ”€â–’tlarâ”€â–’ gâ”œÃ‚r (${container.children.length})`;
+      btn.querySelector('.text').textContent = `Yanıtları gör (${container.children.length})`;
     }
   }
 }
@@ -561,19 +540,18 @@ async function loadPdetailComments(postId) {
       }
     });
 
-    // Try to get post owner username from cached data
-    const cachedPost = (_profileUserPosts || []).find(p => p.id === postId)
-      || (_profileUserReposts || []).find(p => p.id === postId);
+    const cachedPost = (typeof _profileUserPosts !== 'undefined' ? _profileUserPosts : []).find(p => p.id === postId)
+      || (typeof _profileUserReposts !== 'undefined' ? _profileUserReposts : []).find(p => p.id === postId);
     const post = cachedPost ? cachedPost : { id: postId, username: null };
 
     section.innerHTML = parents.length === 0
-      ? `<div class="pdetail-no-comment">Henâ”œâ•z yorum yok</div>`
+      ? `<div class="pdetail-no-comment" style="color:var(--t-text-muted);font-size:13.5px;text-align:center;padding:32px 0; font-weight:600;">Henüz yanıt yok. İlk yanıtı sen yaz!</div>`
       : parents.map(c => renderPdetailCommentTree(c, childrenMap[c.id] || [], post)).join('');
   } catch {}
 }
 
 async function deletePdetailComment(commentId, postId) {
-  if (!(await window.showConfirm('Bu yorumu silmek istediâ”€ÅŸinizden emin misiniz?'))) return;
+  if (!(await window.showConfirm('Bu yorumu silmek istediğinizden emin misiniz?'))) return;
   try {
     const res = await fetch(`/api/comments/${commentId}`, { method: 'DELETE' });
     if (res.ok) {
@@ -583,50 +561,68 @@ async function deletePdetailComment(commentId, postId) {
       showToast('Silinemedi');
     }
   } catch {
-    showToast('Baâ”€ÅŸlantâ”€â–’ hatasâ”€â–’');
+    showToast('Bağlantı hatası');
   }
+}
+
+function formatCommentContent(raw) {
+  if (!raw) return '';
+  const escaped = esc(raw);
+  // Match @username
+  return escaped.replace(/@([a-zA-Z0-9_.]+)/g, (match, uname) => {
+    return `<span class="tweet-mention" data-hovercard-user="${uname}" onclick="openUserPage('${uname}'); event.stopPropagation();">@${uname}</span>`;
+  });
 }
 
 function renderPdetailCommentTree(c, replies, post) {
   const canDelete = currentUser && (c.username === currentUser.username || (post && post.username === currentUser.username));
   const repliesHtml = replies.map(r => renderPdetailReplyItem(r, post)).join('');
   const hasReplies = replies.length > 0;
+  const isExpanded = _openReplyParentIds.has(c.id);
 
   return `
-    <div class="pdetail-comment-tree-node" id="pdetail-comment-node-${c.id}" style="margin-bottom:12px;display:flex;flex-direction:column;">
-      <div class="pdetail-comment" id="pdetail-comment-item-${c.id}" style="display:flex;gap:10px;align-items:flex-start;">
-        ${renderAvatar({ username: c.username, profile_photo: c.profile_photo }, 'avatar avatar-xs')}
-        <div class="pdetail-comment-body" style="flex:1">
-          <div class="pdetail-comment-meta" style="margin-bottom:2px;">
-            <span class="pdetail-comment-user" style="font-weight:700;color:var(--t-text-primary);cursor:pointer;" onclick="openUserPage('${esc(c.username)}')">${esc(c.username)}</span>
-            <span style="font-size:10px;color:var(--t-text-muted);margin-left:6px;">${fmtPostTime(c.created_at)}</span>
+    <div class="pdetail-comment-tree-node" id="pdetail-comment-node-${c.id}">
+      <div class="pdetail-comment" id="pdetail-comment-item-${c.id}">
+        <div class="pdetail-comment-left">
+          <div class="pdetail-comment-avatar-wrap" data-hovercard-user="${esc(c.username)}" onclick="openUserPage('${esc(c.username)}'); event.stopPropagation();">
+            ${renderAvatar({ username: c.username, profile_photo: c.profile_photo }, 'avatar avatar-sm')}
           </div>
-          <span class="pdetail-comment-text" style="font-size:13px;color:var(--t-text-secondary);word-break:break-word;">${esc(c.content)}</span>
-          <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
-            <button
-              class="comment-like-btn ${c.user_liked ? 'liked' : ''}"
-              id="clbtn-${c.id}"
-              onclick="toggleCommentLike(${c.id})"
-              style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px"
-            >
-              <svg viewBox="0 0 24 24" style="width:12px;height:12px;${c.user_liked ? 'fill:var(--danger);stroke:var(--danger)' : 'stroke:#555'}"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              <span id="cl-count-${c.id}" style="font-size:10px;color:#555">${c.like_count || 0}</span>
-            </button>
-            <button onclick="setPdetailReplyTo(${post.id}, ${c.id}, '${esc(c.username)}')" style="background:none;border:none;color:#888;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Yanâ”€â–’tla</button>
-            ${canDelete ? `
-              <button onclick="deletePdetailComment(${c.id}, ${post.id})" style="background:none;border:none;color:#ff3b30;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Sil</button>
-            ` : ''}
+          <div class="pdetail-comment-body">
+            <div class="pdetail-comment-meta">
+              <span class="pdetail-comment-user" data-hovercard-user="${esc(c.username)}" onclick="openUserPage('${esc(c.username)}')">${esc(c.username)}</span>
+              <span class="pdetail-comment-time">${fmtPostTime(c.created_at)}</span>
+            </div>
+            <div class="pdetail-comment-text">${formatCommentContent(c.content)}</div>
+            <div class="pdetail-comment-actions">
+              <button class="comment-reply-action-btn" onclick="setPdetailReplyTo(${post.id}, ${c.id}, '${esc(c.username)}')">Yanıtla</button>
+              ${canDelete ? `
+                <span class="comment-action-dot">·</span>
+                <button class="comment-delete-action-btn" onclick="deletePdetailComment(${c.id}, ${post.id})">Sil</button>
+              ` : ''}
+            </div>
           </div>
+        </div>
+
+        <div class="pdetail-comment-right">
+          <button
+            class="comment-like-btn ${c.user_liked ? 'liked' : ''}"
+            id="clbtn-${c.id}"
+            onclick="toggleCommentLike(${c.id})"
+            title="Beğen"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="${c.user_liked ? 'var(--danger, #ff3b30)' : 'none'}" stroke="${c.user_liked ? 'var(--danger, #ff3b30)' : 'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span id="cl-count-${c.id}" class="comment-like-num">${c.like_count ? c.like_count : ''}</span>
+          </button>
         </div>
       </div>
 
       ${hasReplies ? `
-        <div class="pdetail-replies-wrapper" style="margin-left:36px;margin-top:6px;">
-          <button class="pdetail-replies-toggle-btn" onclick="togglePdetailRepliesContainer(this, ${c.id})" style="background:none;border:none;color:var(--t-text-muted);cursor:pointer;padding:4px 0;font-size:10px;font-weight:600;display:flex;align-items:center;gap:6px">
-            <span class="line" style="display:inline-block;width:16px;height:1px;background:var(--t-border-strong)"></span>
-            <span class="text">Yanâ”€â–’tlarâ”€â–’ gâ”œÃ‚r (${replies.length})</span>
+        <div class="pdetail-replies-wrapper">
+          <button class="pdetail-replies-toggle-btn" data-reply-parent-id="${c.id}" onclick="togglePdetailRepliesContainer(this, ${c.id})">
+            <span class="line"></span>
+            <span class="text">${isExpanded ? 'Yanıtları gizle' : `Yanıtları gör (${replies.length})`}</span>
           </button>
-          <div class="pdetail-replies-list" id="pdetail-replies-list-${c.id}">
+          <div class="pdetail-replies-list ${isExpanded ? 'open' : ''}" id="pdetail-replies-list-${c.id}">
             ${repliesHtml}
           </div>
         </div>
@@ -638,35 +634,38 @@ function renderPdetailCommentTree(c, replies, post) {
 function renderPdetailReplyItem(r, post) {
   const canDelete = currentUser && (r.username === currentUser.username || (post && post.username === currentUser.username));
   return `
-    <div class="pdetail-comment reply-item" id="pdetail-comment-item-${r.id}" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:4px;">
-      ${renderAvatar({ username: r.username, profile_photo: r.profile_photo }, 'avatar avatar-xs')}
-      <div class="pdetail-comment-body" style="flex:1">
-        <div class="pdetail-comment-meta" style="margin-bottom:2px;">
-          <span class="pdetail-comment-user" style="font-weight:700;color:var(--t-text-primary);cursor:pointer;" onclick="openUserPage('${esc(r.username)}')">${esc(r.username)}</span>
-          <span style="font-size:10px;color:var(--t-text-muted);margin-left:6px;">${fmtPostTime(r.created_at)}</span>
+    <div class="pdetail-comment reply-item" id="pdetail-comment-item-${r.id}">
+      <div class="pdetail-comment-left">
+        <div class="pdetail-comment-avatar-wrap" data-hovercard-user="${esc(r.username)}" onclick="openUserPage('${esc(r.username)}'); event.stopPropagation();">
+          ${renderAvatar({ username: r.username, profile_photo: r.profile_photo }, 'avatar avatar-xs')}
         </div>
-        <span class="pdetail-comment-text" style="font-size:13px;color:var(--t-text-secondary);word-break:break-word;">${esc(r.content)}</span>
-        <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
-          <button
-            class="comment-like-btn ${r.user_liked ? 'liked' : ''}"
-            id="clbtn-${r.id}"
-            onclick="toggleCommentLike(${r.id})"
-            style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px"
-          >
-            <svg viewBox="0 0 24 24" style="width:12px;height:12px;${r.user_liked ? 'fill:var(--danger);stroke:var(--danger)' : 'stroke:#555'}"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            <span id="cl-count-${r.id}" style="font-size:10px;color:#555">${r.like_count || 0}</span>
-          </button>
-          <button onclick="setPdetailReplyTo(${post.id}, ${r.parent_id}, '${esc(r.username)}')" style="background:none;border:none;color:#888;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Yanâ”€â–’tla</button>
-          ${canDelete ? `
-            <button onclick="deletePdetailComment(${r.id}, ${post.id})" style="background:none;border:none;color:#ff3b30;cursor:pointer;padding:0;font-size:10px;font-weight:bold">Sil</button>
-          ` : ''}
+        <div class="pdetail-comment-body">
+          <div class="pdetail-comment-meta">
+            <span class="pdetail-comment-user" data-hovercard-user="${esc(r.username)}" onclick="openUserPage('${esc(r.username)}')">${esc(r.username)}</span>
+            <span class="pdetail-comment-time">${fmtPostTime(r.created_at)}</span>
+          </div>
+          <div class="pdetail-comment-text">${formatCommentContent(r.content)}</div>
+          <div class="pdetail-comment-actions">
+            <button class="comment-reply-action-btn" onclick="setPdetailReplyTo(${post.id}, ${r.parent_id}, '${esc(r.username)}')">Yanıtla</button>
+            ${canDelete ? `
+              <span class="comment-action-dot">·</span>
+              <button class="comment-delete-action-btn" onclick="deletePdetailComment(${r.id}, ${post.id})">Sil</button>
+            ` : ''}
+          </div>
         </div>
+      </div>
+
+      <div class="pdetail-comment-right">
+        <button
+          class="comment-like-btn ${r.user_liked ? 'liked' : ''}"
+          id="clbtn-${r.id}"
+          onclick="toggleCommentLike(${r.id})"
+          title="Beğen"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="${r.user_liked ? 'var(--danger, #ff3b30)' : 'none'}" stroke="${r.user_liked ? 'var(--danger, #ff3b30)' : 'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span id="cl-count-${r.id}" class="comment-like-num">${r.like_count ? r.like_count : ''}</span>
+        </button>
       </div>
     </div>
   `;
 }
-
-// ============================================================
-// PROFILE TAB SWITCH
-// ============================================================window.openProfilePostDetail = openGlobalPostModal;
-window.openGlobalPostModal = openGlobalPostModal;

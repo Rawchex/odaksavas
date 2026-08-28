@@ -596,9 +596,26 @@ app.post('/sessions/end/:id', authMiddleware, async (c) => {
 
   if (!session) return c.json({ error: 'Session bulunamadi' }, 404);
 
-  const now = new Date();
-  const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
-  let rawDuration = customDuration !== null && !isNaN(customDuration) ? customDuration : Math.floor((now - start) / 1000);
+  let rawDuration = 0;
+  if (customDuration !== null && !isNaN(customDuration)) {
+    rawDuration = customDuration;
+  } else if (session.mode === 'pomodoro') {
+    let currentRoundSecs = 0;
+    if (session.pomo_state === 'focusing' || session.pomo_state === 'overtime') {
+      if (session.state_start_time) {
+        const stateStart = new Date(session.state_start_time.replace(' ', 'T') + 'Z');
+        const diffSecs = Math.max(0, Math.floor((Date.now() - stateStart.getTime()) / 1000));
+        const maxAllowed = (session.target_duration || 0) + 1800;
+        currentRoundSecs = Math.min(diffSecs, maxAllowed);
+      }
+    }
+    rawDuration = (session.accumulated_duration || 0) + currentRoundSecs;
+  } else {
+    const now = new Date();
+    const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
+    rawDuration = Math.floor((now - start) / 1000);
+  }
+
   if (isNaN(rawDuration) || rawDuration < 0) rawDuration = 0;
   const duration = Math.min(rawDuration, 43200);
   const status = violation ? 'violated' : 'completed';

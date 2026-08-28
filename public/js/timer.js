@@ -854,6 +854,8 @@ function startBreakTimer(totalSecs) {
   if (statusTxt)   statusTxt.innerHTML        = '';
   const skipBtn = el('pomoSkipBreakBtn');
   if (skipBtn)     skipBtn.classList.remove('hidden');
+  const stopBtn = el('timerStopBtn');
+  if (stopBtn)     stopBtn.classList.remove('hidden');
   _updatePomoRoundBadge();
   _updateBreakDisplay(_breakRemaining);
 
@@ -921,6 +923,8 @@ function _onBreakComplete() {
   if (statusTxt)   statusTxt.innerHTML      = 'Yeni tura hazır mısın?';
   const skipBtn = el('pomoSkipBreakBtn');
   if (skipBtn)     skipBtn.classList.add('hidden');
+  const stopBtn = el('timerStopBtn');
+  if (stopBtn)     stopBtn.classList.remove('hidden');
   if (phaseIcon)   { phaseIcon.innerHTML = SVG_ICONS.tomato; phaseIcon.style.color = '#ef4444'; }
   if (phaseLabel)  { phaseLabel.textContent = `${_pomoRound}. TUR BİTTİ`; phaseLabel.style.color = '#ef4444'; }
   if (typeof showToast === 'function') showToast(`Mola tamamlandı. ${_pomoRound + 1}. tura geçiş yapabilirsiniz.`, 4000);
@@ -1120,8 +1124,10 @@ async function checkActiveSession() {
             const phaseLabel = el('pomoPhaseLabel');
             const phaseIcon  = el('pomoPhaseIcon');
             const startBtn   = el('timerStartBtn');
+            const stopBtn    = el('timerStopBtn');
             const timerDisp  = el('timerDisplaySolo');
             if (nextBtn) nextBtn.classList.remove('hidden');
+            if (stopBtn) stopBtn.classList.remove('hidden');
             if (phaseLabel) { phaseLabel.textContent = `${_pomoRound}. Tur Molası Bitti`; phaseLabel.style.color = 'var(--text)'; }
             if (phaseIcon)  { phaseIcon.innerHTML = SVG_ICONS.arrowRight; phaseIcon.style.color = 'var(--text)'; }
             if (startBtn) startBtn.style.display = 'none';
@@ -2549,7 +2555,15 @@ async function setActiveParty(partyId, isForceTransfer = false) {
   window._currentPartyId = partyId;
 
   const overlay = el('partyFocusOverlay');
-  if (overlay) { overlay.classList.add('in-active-party'); overlay.style.display = 'flex'; overlay.style.removeProperty('display'); }
+  if (overlay) {
+    overlay.classList.add('in-active-party');
+    overlay.classList.remove('collapsed', 'has-drag-pos');
+    ['position','left','top','right','bottom','transform'].forEach(p => overlay.style[p] = '');
+    overlay.style.display = 'flex';
+    overlay.style.removeProperty('display');
+    try { localStorage.setItem('os_focus_overlay_collapsed', '0'); } catch { /* ignore */ }
+    updatePartyOverlayCollapseBtn();
+  }
 
   if (typeof showPage === 'function') showPage('timer');
   playChannelSound('connect');
@@ -2892,32 +2906,32 @@ function _placeOverlayFixed(overlay) {
   overlay.style.transform = 'none';
   const isMobile = _isMobileView();
   const W = window.innerWidth, H = window.innerHeight;
-  const MARGIN = isMobile ? 16 : 12;
+  const MARGIN = isMobile ? 12 : 14;
   const ow = overlay.offsetWidth || 44;
-  const oh = overlay.offsetHeight || 330;
+  const oh = overlay.offsetHeight || 260;
 
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('os_overlay_snap') || 'null'); } catch { /* ignore */ }
 
   let left = MARGIN;
-  let top = isMobile 
-    ? Math.max(56, H - oh - 76) 
-    : Math.max(56, Math.round((H - oh) / 2));
+  const minTop = 64;
+  const maxTop = Math.max(minTop, H - oh - (isMobile ? 74 : 20));
+  let top = Math.max(minTop, Math.min(maxTop, Math.round((H - oh) / 2)));
 
   if (saved) {
     if (saved.side === 'right') {
       left = W - ow - MARGIN;
-    } else if (saved.side === 'left') {
+    } else {
       left = MARGIN;
     }
     if (typeof saved.top === 'number' && !isNaN(saved.top)) {
-      top = Math.max(56, Math.min(H - oh - (isMobile ? 80 : 16), saved.top));
+      top = Math.max(minTop, Math.min(maxTop, saved.top));
     }
   } else if (isMobile) {
     left = W - ow - MARGIN;
   }
 
-  overlay.style.left   = `${Math.max(0, Math.min(W - ow, left))}px`;
+  overlay.style.left   = `${Math.max(4, Math.min(W - ow - 4, left))}px`;
   overlay.style.top    = `${top}px`;
   overlay.style.right  = 'auto';
   overlay.style.bottom = 'auto';
@@ -2929,18 +2943,20 @@ function _snapToEdge(overlay) {
   if (!overlay) return;
   const isMobile = _isMobileView();
   const W      = window.innerWidth, H = window.innerHeight;
-  const MARGIN = isMobile ? 16 : 12;
+  const MARGIN = isMobile ? 12 : 14;
   const rect   = overlay.getBoundingClientRect();
   const ow     = rect.width || 44;
-  const oh     = rect.height || 330;
+  const oh     = rect.height || 260;
 
   const cx     = rect.left + ow / 2;
   const snapRight = cx > W / 2;
   const side   = snapRight ? 'right' : 'left';
   const left   = snapRight ? (W - ow - MARGIN) : MARGIN;
-  const top    = Math.max(56, Math.min(H - oh - (isMobile ? 80 : 16), rect.top));
+  const minTop = 64;
+  const maxTop = Math.max(minTop, H - oh - (isMobile ? 74 : 20));
+  const top    = Math.max(minTop, Math.min(maxTop, rect.top));
 
-  overlay.style.transition = 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1), top 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+  overlay.style.transition = 'left 0.22s cubic-bezier(0.16, 1, 0.3, 1), top 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
   overlay.style.left   = `${left}px`;
   overlay.style.top    = `${top}px`;
   overlay.style.right  = 'auto';
@@ -2950,7 +2966,7 @@ function _snapToEdge(overlay) {
     localStorage.setItem('os_overlay_snap', JSON.stringify({ side, top })); 
   } catch { /* ignore */ }
   updatePartyOverlayCollapseBtn();
-  setTimeout(() => { overlay.style.transition = ''; }, 260);
+  setTimeout(() => { overlay.style.transition = ''; }, 240);
 }
 
 function togglePartyFocusOverlay() {
@@ -3000,6 +3016,7 @@ function initDraggablePartyOverlay() {
 
   const dragStart = (clientX, clientY, target, pointerId) => {
     if (!overlay.classList.contains('collapsed')) return;
+    // Don't drag when touching buttons/links/inputs
     if (target.closest('button') || target.closest('a') || target.closest('input')) return;
     dragging = true; moved = false;
     try { overlay.setPointerCapture(pointerId); } catch { /* ignore */ }
@@ -3017,11 +3034,14 @@ function initDraggablePartyOverlay() {
   const dragMove = (clientX, clientY) => {
     if (!dragging) return;
     const dx = clientX - startX, dy = clientY - startY;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
     const W = window.innerWidth, H = window.innerHeight;
-    const ow = overlay.offsetWidth || 44, oh = overlay.offsetHeight || 330;
-    overlay.style.left = `${Math.max(0, Math.min(W - ow, initLeft + dx))}px`;
-    overlay.style.top  = `${Math.max(56, Math.min(H - oh - 8, initTop + dy))}px`;
+    const ow = overlay.offsetWidth || 44, oh = overlay.offsetHeight || 260;
+    const isMobile = _isMobileView();
+    const minTop = 64;
+    const maxTop = Math.max(minTop, H - oh - (isMobile ? 74 : 16));
+    overlay.style.left = `${Math.max(4, Math.min(W - ow - 4, initLeft + dx))}px`;
+    overlay.style.top  = `${Math.max(minTop, Math.min(maxTop, initTop + dy))}px`;
   };
 
   const dragEnd = (pointerId) => {

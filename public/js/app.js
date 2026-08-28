@@ -96,6 +96,24 @@ window.addEventListener('focus', () => {
 })();
 
 // ============================================================
+// GLOBAL UTILS FOR GUEST/AUTH & IDS
+// ============================================================
+window.ENCODE_SALT = 849320;
+window.encodeId = (id) => (parseInt(id, 10) + window.ENCODE_SALT).toString(36);
+window.decodeId = (hash) => {
+  let num = parseInt(hash, 10);
+  if (isNaN(num) || num.toString() !== hash.toString()) return parseInt(hash, 36) - window.ENCODE_SALT;
+  return num;
+};
+window.requireAuth = () => {
+  if (typeof currentUser === 'undefined' || !currentUser) {
+    showLogin();
+    return true; // auth was required (blocked)
+  }
+  return false;
+};
+
+// ============================================================
 // AUTH
 // ============================================================
 async function checkAuth(silent = false) {
@@ -111,13 +129,15 @@ async function checkAuth(silent = false) {
       }
       currentUser = user;
       document.documentElement.classList.add('is-app-user');
-      if (!silent) showMainApp();
+      if (!silent) showMainApp(false);
     } else {
       if (currentUser) {
         currentUser = null;
         location.reload();
       } else {
-        showLogin();
+        // GUEST: Show login/landing page, NOT the app
+        document.documentElement.classList.remove('is-app-user');
+        if (!silent) showLogin();
       }
     }
   } catch {
@@ -127,6 +147,13 @@ async function checkAuth(silent = false) {
 
 function showLogin() {
   document.documentElement.classList.remove('is-app-user');
+  
+  // Ensure any open post modals are closed before showing login
+  if (typeof closeGlobalPostModal === 'function') {
+    const el = document.getElementById('profilePostPreview');
+    if (el) closeGlobalPostModal();
+  }
+
   const loginEl = document.getElementById('loginScreen');
   if (loginEl) {
     loginEl.classList.add('active');
@@ -517,10 +544,10 @@ async function logout() {
   currentUser = null;
   stopNotifPoll();
   if (typeof stopChatPolling === 'function') stopChatPolling();
-  location.reload();
+  window.location.href = '/';
 }
 
-function showMainApp() {
+function showMainApp(isGuest = false) {
   const loginEl = document.getElementById('loginScreen');
   if (loginEl) {
     loginEl.classList.remove('active');
@@ -536,16 +563,21 @@ function showMainApp() {
   }
 
   handleInitialUrlRoute();
-  if (typeof window.startFocusRoomOnboarding === 'function') window.startFocusRoomOnboarding();
-  startNotifPoll();
-  updateTimerStats();
-  startHeartbeat();
-  updateTotalUnreadMessageCount();
+  
+  if (!isGuest) {
+    if (typeof window.startFocusRoomOnboarding === 'function') window.startFocusRoomOnboarding();
+    startNotifPoll();
+    updateTimerStats();
+    startHeartbeat();
+    updateTotalUnreadMessageCount();
+  }
 
   // Update navbar profile image
   const navProfileImg = document.getElementById('navProfileImg');
-  if (navProfileImg) {
+  if (navProfileImg && (typeof currentUser !== 'undefined' && currentUser)) {
     navProfileImg.src = currentUser.profile_photo || '/default-avatar.png';
+  } else if (navProfileImg) {
+    navProfileImg.src = '/default-avatar.png';
   }
 
   // Check if there was an active session (browser re-open)
@@ -702,7 +734,8 @@ function getPathForPage(pageName, subPath = '') {
     feed: '/feed',
     leaderboard: '/siralama',
     notifications: '/bildirimler',
-    profile: '/profil'
+    profile: '/profil',
+    post: '/post'
   };
   let base = map[pageName] || '/sayac';
   if (subPath) {
@@ -713,6 +746,9 @@ function getPathForPage(pageName, subPath = '') {
 
 function syncUrlState(pageName, subPath = '', replace = false) {
   const targetUrl = getPathForPage(pageName, subPath);
+  
+  // URL state is managed purely by browser history, no localStorage persistence needed
+
   if (window.location.pathname !== targetUrl) {
     if (replace) {
       history.replaceState({ pageName, subPath }, '', targetUrl);
@@ -723,6 +759,8 @@ function syncUrlState(pageName, subPath = '', replace = false) {
 }
 
 function showPage(name, pushState = true, subPath = '') {
+  if (typeof window.closeHoverCard === 'function') window.closeHoverCard();
+
   // Hide userProfilePage if switching main pages
   const userProfileEl = document.getElementById('userProfilePage');
   if (userProfileEl) {
@@ -732,7 +770,6 @@ function showPage(name, pushState = true, subPath = '') {
 
   // Clean up mobile chat view states if leaving messages/chat
   if (name !== 'messages') {
-    if (typeof closeChatArea === 'function') closeChatArea();
     document.body.classList.remove('chat-active');
   }
 
@@ -801,12 +838,12 @@ function handleInitialUrlRoute() {
   const rawParts = rawPath.split('/').filter(Boolean);
   
   if (parts.length === 0) {
-    showPage('timer', true);
+    showPage('feed', true);
   } else if (parts[0] === 'sayac' || parts[0] === 'sayaç' || parts[0] === 'sayaçc') {
     showPage('timer', false);
   } else if (parts[0] === 'mesajlar') {
-    showPage('messages', false);
     if (parts[1]) {
+      showPage('messages', false);
       const target = decodeURIComponent(rawParts[1]);
       setTimeout(() => {
         if (target.startsWith('group_')) {
@@ -816,6 +853,10 @@ function handleInitialUrlRoute() {
           if (typeof openDirectChat === 'function') openDirectChat(target);
         }
       }, 350);
+    } else {
+      // User requested to default to feed instead of messages on empty /mesajlar load
+      window.history.replaceState(null, '', '/feed');
+      showPage('feed', false);
     }
   } else if (parts[0] === 'feed') {
     showPage('feed', false);
@@ -824,6 +865,11 @@ function handleInitialUrlRoute() {
   } else if (parts[0] === 'bildirimler') {
     showPage('notifications', false);
   } else if (parts[0] === 'profil' || parts[0] === 'profile') {
+    if (!(typeof currentUser !== 'undefined' && currentUser)) {
+      showLogin();
+      setTimeout(() => showAuthAlert('Kullanıcı profillerini görmek için giriş yapmalısın.', 'authAlertBox'), 200);
+      return;
+    }
     if (parts[1]) {
       const targetUser = decodeURIComponent(rawParts[1]);
       showPage('timer', false);
@@ -835,66 +881,43 @@ function handleInitialUrlRoute() {
     }
     } else if (parts[0] === 'post' || parts[0] === 'p') {
       if (parts[1]) {
-        const postId = parts[1];
+        const postId = window.decodeId(parts[1]);
         showPage('feed', false);
         window._isPostPopstate = true;
+        // Keep the exact post URL in history
+        const encId = window.encodeId ? window.encodeId(postId) : parts[1];
+        history.replaceState({ modal: "post", postId: encId }, "", "/post/" + encId);
         setTimeout(() => {
           if (typeof openGlobalPostModal === 'function') {
             openGlobalPostModal(postId);
           }
-        }, 350);
+        }, 150);
       } else {
         showPage('feed', false);
       }
     } else if (parts[0] === 'u' && parts[1]) {
-    const targetUser = decodeURIComponent(rawParts[1]);
-    showPage('timer', false);
-    setTimeout(() => {
-      if (typeof openUserPage === 'function') openUserPage(targetUser);
-    }, 350);
-  } else if (parts.length > 0) {
-    const reservedRoutes = ['sayac', 'sayaç', 'sayaçc', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'profile', 'u', 'api', 'uploads', 'css', 'js', 'audio', 'about', 'contact', 'privacy', 'terms', 'blog'];
-    if (!reservedRoutes.includes(parts[0])) {
-      const username = decodeURIComponent(rawParts[0]).replace(/^@/, '');
+      const targetUser = decodeURIComponent(rawParts[1]);
       showPage('timer', false);
       setTimeout(() => {
-        if (typeof openUserPage === 'function') openUserPage(username);
+        if (typeof openUserPage === 'function') openUserPage(targetUser);
       }, 350);
+    } else if (parts.length > 0) {
+      const reservedRoutes = ['sayac', 'sayac', 'sayaç', 'sayaçc', 'mesajlar', 'feed', 'siralama', 'sira', 'bildirimler', 'profil', 'profile', 'u', 'api', 'uploads', 'css', 'js', 'audio', 'about', 'contact', 'privacy', 'terms', 'blog', 'post', 'p', 'oda', 'room', 'party'];
+      if (!reservedRoutes.includes(parts[0])) {
+        const username = decodeURIComponent(rawParts[0]).replace(/^@/, '');
+        showPage('timer', false);
+        setTimeout(() => {
+          if (typeof openUserPage === 'function') openUserPage(username);
+        }, 350);
+      } else {
+        showPage('feed', true);
+      }
     } else {
-      showPage('timer', true);
+      showPage('feed', true);
     }
-  } else {
-    showPage('timer', true);
-  }
 }
 
-window.addEventListener('popstate', (e) => {
-  if (e.state && e.state.modal === 'post') {
-    window._isPostPopstate = true;
-    if (typeof openGlobalPostModal === 'function') openGlobalPostModal(e.state.postId);
-    return;
-  }
-  
-  if (window._currentOpenPostId && typeof closeGlobalPostModal === 'function') {
-    window._isPostPopstate = true;
-    closeGlobalPostModal();
-  }
 
-  if (e.state && e.state.pageName) {
-    showPage(e.state.pageName, false, e.state.subPath || '');
-    if (e.state.pageName === 'messages' && e.state.subPath) {
-      const target = e.state.subPath;
-      if (target.startsWith('group_')) {
-        const groupId = parseInt(target.replace('group_', ''));
-        if (groupId && typeof openGroupChat === 'function') openGroupChat(groupId);
-      } else {
-        if (typeof openDirectChat === 'function') openDirectChat(target);
-      }
-    }
-  } else {
-    handleInitialUrlRoute();
-  }
-});
 
 // ============================================================
 // LEADERBOARD
@@ -1090,28 +1113,41 @@ async function loadNotifications() {
 
   list.innerHTML = notifs.map(n => {
     const text = notifText(n);
-    // Inline action buttons for friend_request type
     let inlineActions = '';
-    if (n.type === 'friend_request' && n.friendship_id) {
+    if (n.type === 'friend_request' && (n.friendship_id || n.from_user_id)) {
+      const fid = n.friendship_id || n.from_user_id;
       inlineActions = `
         <div style="display:flex;gap:6px;margin-top:8px">
-          <button class="mono-btn-primary" style="flex:1;height:30px;font-size:10px;padding:0 8px;margin:0"
-            onclick="acceptFriendFromNotif(event,${n.friendship_id},'${esc(n.username)}')">KABUL ET</button>
-          <button class="mono-btn-danger" style="flex:1;height:30px;font-size:10px;padding:0 8px;margin:0"
-            onclick="rejectFriendFromNotif(event,${n.friendship_id})">REDDET</button>
+          <button class="friend-action-btn primary" style="height:28px;font-size:11px;padding:0 12px;"
+            onclick="acceptFriendFromNotif(event,${fid},'${esc(n.username)}')">Kabul Et</button>
+          <button class="friend-action-btn danger" style="height:28px;font-size:11px;padding:0 12px;"
+            onclick="rejectFriendFromNotif(event,${fid})">Reddet</button>
+        </div>`;
+    } else if (n.type === 'party_invite' && n.party_id) {
+      inlineActions = `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="friend-action-btn primary" style="height:28px;font-size:11px;padding:0 14px;"
+            onclick="event.stopPropagation(); if (typeof joinParty === 'function') joinParty(${n.party_id});">Odaya Katıl</button>
+        </div>`;
+    } else if (n.type === 'message' && n.username) {
+      inlineActions = `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="friend-action-btn secondary" style="height:28px;font-size:11px;padding:0 12px;"
+            onclick="event.stopPropagation(); showPage('messages'); openDirectChat('${esc(n.username)}')">Mesajı Aç</button>
         </div>`;
     }
+
     return `
-      <div class="notif-item ${n.read ? '' : 'unread'}" style="position:relative;display:flex;align-items:center;justify-content:space-between;padding:10px 14px">
-        <div style="flex:1;display:flex;align-items:flex-start;gap:10px;cursor:pointer" onclick="handleNotifClick('${esc(n.username)}', '${n.type}', ${n.post_id || null}, ${n.party_id || null})">
+      <div class="notif-item ${n.read ? '' : 'unread'}" style="position:relative;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:12px;margin-bottom:6px;background:var(--t-bg-card);border:1px solid var(--t-border-subtle)">
+        <div style="flex:1;display:flex;align-items:flex-start;gap:12px;cursor:pointer" onclick="handleNotifClick('${esc(n.username)}', '${n.type}', ${n.post_id || null}, ${n.party_id || null})">
           ${renderAvatar({ username: n.username, profile_photo: n.profile_photo }, 'avatar avatar-sm')}
-          <div class="notif-body" style="flex:1">
-            <div class="notif-text">${text}</div>
-            <div class="notif-time">${fmtPostTime(n.created_at)}</div>
+          <div class="notif-body" style="flex:1;min-width:0;">
+            <div class="notif-text" style="font-size:13px;color:var(--t-text-primary);line-height:1.35;">${text}</div>
+            <div class="notif-time" style="font-size:10.5px;color:var(--t-text-muted);margin-top:3px;">${fmtPostTime(n.created_at)}</div>
             ${inlineActions}
           </div>
         </div>
-        <button onclick="deleteNotif(event, ${n.id})" style="background:none;border:none;color:#444;cursor:pointer;padding:8px 12px;font-size:12px;z-index:10;font-weight:bold">✕</button>
+        <button onclick="deleteNotif(event, ${n.id})" data-tooltip="Bildirimi Sil" style="background:none;border:none;color:var(--t-text-muted);cursor:pointer;padding:6px 10px;font-size:13px;z-index:10;transition:color 0.15s ease;">✕</button>
       </div>`;
   }).join('');
 }
@@ -1120,7 +1156,7 @@ async function acceptFriendFromNotif(e, friendshipId, username) {
   e.stopPropagation();
   const res = await fetch(`/api/friends/accept/${friendshipId}`, { method: 'POST' });
   if (res.ok) {
-    showToast(`${username} ile artık arkadaşsın! 🎉`);
+    showToast(`${username} ile artık arkadaşsınız!`);
     loadNotifications();
     if (typeof refreshPartyModal === 'function') refreshPartyModal();
   } else {
@@ -1138,7 +1174,7 @@ async function rejectFriendFromNotif(e, friendshipId) {
 }
 
 function notifText(n) {
-  const u = `<strong>${esc(n.username)}</strong>`;
+  const u = `<strong>@${esc(n.username)}</strong>`;
   switch (n.type) {
     case 'post_like':     return `${u} gönderini beğendi`;
     case 'post_comment':  return `${u} gönderine yorum yaptı`;
@@ -1146,22 +1182,25 @@ function notifText(n) {
     case 'comment_like':  return `${u} yorumunu beğendi`;
     case 'friend_request':return `${u} sana arkadaşlık isteği gönderdi`;
     case 'friend_accept': return `${u} arkadaşlık isteğini kabul etti`;
-    case 'party_invite':  return `${u} seni bir partiye davet etti`;
-    case 'party_join':    return `${u} partine katıldı`;
-    case 'message':       return `${u} sana mesaj gönderdi`;
-    default:              return `${u} bir şey yaptı`;
+    case 'party_invite':  return `${u} seni bir Blunk odasına davet etti`;
+    case 'party_join':    return `${u} çalışma odana katıldı`;
+    case 'message':       return `${u} sana bir mesaj gönderdi`;
+    default:              return `${u} bir işlem gerçekleştirdi`;
   }
 }
 
 function handleNotifClick(username, type, postId, partyId) {
-  if (type === 'party_invite') {
-    if (typeof openPartyModal === 'function') openPartyModal();
+  if (type === 'party_invite' && partyId) {
+    if (typeof joinParty === 'function') joinParty(partyId);
+    else if (typeof openPartyModal === 'function') openPartyModal();
   } else if (type === 'message' && username) {
     showPage('messages');
     openDirectChat(username);
   } else if (['post_like', 'post_comment', 'post_repost'].includes(type) && postId && postId !== 'null') {
     showPage('feed');
     if (typeof openSharedPostInFeed === 'function') openSharedPostInFeed(parseInt(postId));
+  } else if (type === 'friend_request' || type === 'friend_accept') {
+    if (username) openUserPage(username);
   } else if (username) {
     openUserPage(username);
   }
@@ -1215,11 +1254,66 @@ async function checkNotifCount() {
   } catch {}
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && currentUser) {
-    checkNotifCount();
+window.addEventListener('popstate', (e) => {
+  // 1. Post Modal state
+  if (e.state && e.state.modal === 'post') {
+    window._isPostPopstate = true;
+    if (typeof openGlobalPostModal === 'function') openGlobalPostModal(e.state.postId);
+    return;
+  }
+  
+  // If post modal is open and we navigated back, dismiss it cleanly
+  if (window._currentOpenPostId && typeof closeGlobalPostModal === 'function') {
+    window._isPostPopstate = true;
+    closeGlobalPostModal();
+  }
+
+  // 2. User Profile state
+  if (e.state && e.state.pageName === 'userProfile') {
+    if (typeof openUserPage === 'function' && e.state.username) {
+      openUserPage(e.state.username);
+    }
+    return;
+  } else {
+    // If not user profile state anymore, ensure user profile page is closed
+    const userProfileEl = document.getElementById('userProfilePage');
+    if (userProfileEl && userProfileEl.classList.contains('active')) {
+      if (typeof closeUserPage === 'function') closeUserPage();
+    }
+  }
+
+  // 3. Regular Page state
+  if (e.state && e.state.pageName) {
+    showPage(e.state.pageName, false, e.state.subPath || '');
+    if (e.state.pageName === 'messages' && e.state.subPath) {
+      const target = e.state.subPath;
+      if (target.startsWith('group_')) {
+        const groupId = parseInt(target.replace('group_', ''));
+        if (groupId && typeof openGroupChat === 'function') openGroupChat(groupId);
+      } else {
+        if (typeof openDirectChat === 'function') openDirectChat(target);
+      }
+    }
+  } else {
+    handleInitialUrlRoute();
   }
 });
+
+// ============================================================
+// LEADERBOARD
+// ============================================================
+window._lbUsersCache = [];
+
+async function loadLeaderboard() {
+  const tableBody = document.getElementById('leaderboardTableBody');
+  if (!tableBody) return;
+  try {
+    const res = await fetch('/api/leaderboard?type=weekly');
+    const users = await res.json();
+    window._lbUsersCache = users;
+    renderLeaderboard(users);
+  } catch {}
+}
 
 // ============================================================
 // USER PROFILE PAGE (full-screen)
@@ -1228,16 +1322,16 @@ let _userPageActiveTab = 'posts';
 let _userPageData = null;
 
 async function openUserPage(username, tab = 'posts') {
-  if (username === currentUser?.username) {
+  if (typeof window.closeHoverCard === 'function') window.closeHoverCard();
+
+  const cleanName = (username || '').replace(/^@/, '').trim();
+  if (cleanName === currentUser?.username) {
     showPage('profile');
     return;
   }
 
-  // Update URL without page reload (use clean /u/username format)
-  const url = new URL(window.location);
-  url.searchParams.delete('u');
-  url.pathname = `/u/${username}`;
-  window.history.pushState({}, '', url);
+  // Update URL and navigation state (clean /u/username format)
+  window.history.pushState({ pageName: 'userProfile', username: cleanName }, '', `/u/${cleanName}`);
 
   _userPageActiveTab = tab;
   const page = document.getElementById('userProfilePage');
@@ -1251,11 +1345,10 @@ async function openUserPage(username, tab = 'posts') {
     page.style.flexDirection = 'column';
     page.style.position = 'fixed';
     page.style.inset = '0';
-    page.style.zIndex = '1000000';
+    page.style.zIndex = '900000';
     page.style.background = '#000';
     page.style.overflowY = 'auto';
   }
-  const cleanName = (username || '').replace(/^@/, '').trim();
   title.textContent = cleanName;
   content.innerHTML = '<div class="loading-row">YÜKLENİYOR...</div>';
 
@@ -1282,14 +1375,14 @@ function closeUserPage() {
   const headerActionsEl = document.getElementById('userPageHeaderActions');
   if (headerActionsEl) headerActionsEl.innerHTML = '';
 
-  // Clean profile URL format back to previous active page if needed
-  const targetUrl = typeof getPathForPage === 'function' ? getPathForPage(activePage || 'timer') : '/sayac';
-  if (window.location.pathname !== targetUrl) {
-    try {
-      const url = new URL(window.location);
-      url.pathname = targetUrl;
-      window.history.pushState({}, '', url);
-    } catch(e) {}
+  // Clean profile URL format back to previous active page
+  const pageToReturn = (typeof activePage !== 'undefined' && activePage) ? activePage : 'feed';
+  const targetUrl = typeof getPathForPage === 'function' ? getPathForPage(pageToReturn) : '/feed';
+  window.history.replaceState({ pageName: pageToReturn }, '', targetUrl);
+
+  // Restore body scroll if no post modal is open
+  if (!window._currentOpenPostId) {
+    document.body.style.overflow = '';
   }
 
   // Strictly hide focus room overlay if not in an active party
@@ -1417,51 +1510,70 @@ function renderUserPage(user) {
   let tabHtml = '';
   if (_userPageActiveTab === 'posts') {
     tabHtml = posts.length === 0
-      ? `<div class="profile-empty-tab">GÖÖNDERI YOK</div>`
-      : `<div class="profile-post-grid">${posts.map(p => renderPostGridItem(p, false, false)).join('')}</div>`;
+      ? `<div class="profile-empty-tab">GÖNDERİ YOK</div>`
+      : `<div class="feed-list twitter-feed-timeline" style="padding-top:12px;">${posts.map(p => window.renderTweetCard(p)).join('')}</div>`;
   } else if (_userPageActiveTab === 'sessions') {
     tabHtml = sessions.length === 0
       ? `<div class="profile-empty-tab">ODAK OTURUMU YOK</div>`
       : `<div class="profile-sessions-list">${sessions.slice(0,20).map(s => {
-          const detailParts = [];
-          if (s.feeling) detailParts.push(`<span class="session-detail-feeling">${esc(s.feeling)}</span>`);
-          if (s.category) detailParts.push(`<span class="session-detail-category">${esc(s.category)}</span>`);
-          if (s.activity) detailParts.push(`<span class="session-detail-activity">${esc(s.activity)}</span>`);
-          
-          const detailsHtml = detailParts.length > 0 
-            ? `<div class="session-row-details" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:10px; color:var(--text-3); font-weight:600;">
-                 ${detailParts.join('<span style="opacity:0.3">•</span>')}
-               </div>`
-            : '';
+          const activityTitle = s.activity || s.category || 'Odak Seansı';
+          const isCompleted = s.status === 'completed';
+
+          const tags = [];
+          if (s.feeling) {
+            tags.push(`<span class="session-mini-tag">${getFeelingIconSvg(s.feeling)}<span>${esc(s.feeling)}</span></span>`);
+          }
+          if (s.category && s.category !== activityTitle) {
+            tags.push(`<span class="session-mini-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>${esc(s.category)}</span></span>`);
+          }
+
+          const tagsHtml = tags.length > 0 ? `<div class="session-tags-row">${tags.join('')}</div>` : '';
 
           const noteHtml = s.note
-            ? `<div class="session-row-note" style="margin-top: 8px; font-size: 11px; color: var(--text-2); font-style: italic; background: rgba(255,255,255,0.02); border-left: 2px solid rgba(255,255,255,0.15); padding: 4px 8px; border-radius: 0 4px 4px 0; word-break: break-word;">
+            ? `<div class="session-row-note">
                  "${esc(s.note)}"
                </div>`
             : '';
 
+          const statusIconHtml = isCompleted
+            ? `<div class="session-status-icon completed" data-tooltip="Kullanıcı bu seansı başarıyla tamamladı">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="#23a55a" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+               </div>`
+            : `<div class="session-status-icon incomplete" data-tooltip="Bu seans tamamlanamadı veya terk edildi">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+               </div>`;
+
           return `
-          <div class="session-row" style="flex-direction:column; align-items:stretch; padding:16px 20px;">
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-              <div>
-                <div style="display:flex; align-items:center; gap:6px;">
-                  <div class="session-row-time">${fmtTime(s.duration || 0)}</div>
-                  <span class="session-mode-badge" style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:2px 6px; border-radius:4px; background:${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)'}; color:${s.mode === 'pomodoro' ? '#ef4444' : 'var(--text-3)'}; border:1px solid ${s.mode === 'pomodoro' ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.1)'};">${s.mode === 'pomodoro' ? 'POMODORO' : 'SERBEST'}</span>
-                </div>
-                <div class="session-row-date">${fmtDate(s.start_time)}</div>
+          <div class="session-row">
+            <div class="session-row-top">
+              <div class="session-title-wrap" onclick="if (typeof openSessionLeague === 'function') openSessionLeague('${esc(activityTitle)}', '${s.activity ? 'activity' : 'category'}')" data-tooltip="${esc(activityTitle)} ligine git">
+                <span class="session-main-title">${esc(activityTitle)}</span>
+                <svg class="session-link-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><path d="M7 17l9.2-9.2M17 17V8H8"/></svg>
               </div>
-              <div class="session-badge ${s.status === 'completed' ? 'ok' : 'fail'}">
-                ${s.status === 'completed' ? 'TAMAM' : s.status === 'violated' ? 'İHLAL' : 'TERK'}
+              <div class="session-top-meta">
+                <div class="session-row-date" data-tooltip="Başlangıç Zamanı">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>${fmtDate(s.start_time)}</span>
+                </div>
+                ${statusIconHtml}
               </div>
             </div>
-            ${detailsHtml}
+            
+            <div class="session-row-sub">
+              <div class="session-duration-tag">
+                <span class="session-duration-val">${fmtTime(s.duration || 0)}</span>
+                <span class="session-mode-pill ${s.mode === 'pomodoro' ? 'pomo' : 'free'}">${s.mode === 'pomodoro' ? 'POMODORO' : 'SERBEST'}</span>
+              </div>
+              ${tagsHtml}
+            </div>
+
             ${noteHtml}
           </div>`;
         }).join('')}</div>`;
   } else if (_userPageActiveTab === 'reposts') {
     tabHtml = reposts.length === 0
       ? `<div class="profile-empty-tab">REPOST YOK</div>`
-      : `<div class="profile-post-grid">${reposts.map(p => renderPostGridItem(p, false, true)).join('')}</div>`;
+      : `<div class="feed-list twitter-feed-timeline" style="padding-top:12px;">${reposts.map(p => window.renderTweetCard(p)).join('')}</div>`;
   }
 
   const titleEl = document.getElementById('userPageTitle');
@@ -1608,26 +1720,29 @@ function renderFriendListItems(users) {
     if (f.username.toLowerCase() !== (currentUser?.username || '').toLowerCase()) {
       const isFollowing = parseInt(f.is_following) > 0;
       const followBtn = isFollowing
-        ? `<button class="mono-btn-secondary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`
-        : `<button class="mono-btn-primary" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flFollowUser('${esc(f.username)}')">Takip Et</button>`;
+        ? `<button class="friend-action-btn secondary" data-tooltip="@${esc(f.username)} takipten çık" onclick="event.stopPropagation(); flUnfollowUser('${esc(f.username)}')">Takipten Çık</button>`
+        : `<button class="friend-action-btn primary" data-tooltip="@${esc(f.username)} takip et" onclick="event.stopPropagation(); flFollowUser('${esc(f.username)}')">Takip Et</button>`;
       
       if (isMyProfile && _flModalType === 'followers') {
-        const removeBtn = `<button class="mono-btn-danger" style="height:28px; padding:0 12px; font-size:10px; font-weight:700; border-radius:14px; margin:0;" onclick="event.stopPropagation(); flRemoveFollower('${esc(f.username)}')">Çıkar</button>`;
-        actionBtnHtml = `<div style="display:flex; gap:6px;">${followBtn}${removeBtn}</div>`;
+        const removeBtn = `<button class="friend-action-btn danger" data-tooltip="Takipçilerden Çıkar" onclick="event.stopPropagation(); flRemoveFollower('${esc(f.username)}')">Çıkar</button>`;
+        actionBtnHtml = `<div class="fl-actions">${followBtn}${removeBtn}</div>`;
       } else {
-        actionBtnHtml = followBtn;
+        actionBtnHtml = `<div class="fl-actions">${followBtn}</div>`;
       }
     } else {
-      actionBtnHtml = `<span style="font-size:10px; color:var(--text-3); font-weight:700; padding:0 12px;">SEN</span>`;
+      actionBtnHtml = `<span style="font-size:10.5px; color:var(--t-text-muted); font-weight:700; padding:0 8px;">SEN</span>`;
     }
 
     return `
-      <div class="fl-row" onclick="closeFriendListModal();openUserPage('${esc(f.username)}')" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; margin-bottom:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; cursor:pointer; transition:all 0.15s ease;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          ${renderAvatar(f, 'avatar avatar-md')}
+      <div class="fl-row" onclick="closeFriendListModal();openUserPage('${esc(f.username)}')" data-tooltip="@${esc(f.username)} profiline git">
+        <div class="fl-row-left">
+          ${renderAvatar(f, 'avatar avatar-sm')}
           <div class="fl-info">
-            <div class="fl-name" style="font-weight:800; color:#fff; font-size:13.5px;">${esc(f.display_name || f.username)}</div>
-            <div class="fl-sub" style="font-size:11px; color:var(--text-3); font-weight:600;">@${esc(f.username)} &bull; LVL ${f.level || 1}</div>
+            <div class="fl-name-row">
+              <span class="fl-name">${esc(f.display_name || f.username)}</span>
+              <span class="fl-level">Lvl ${f.level || 1}</span>
+            </div>
+            <div class="fl-sub">@${esc(f.username)}</div>
           </div>
         </div>
         ${actionBtnHtml}

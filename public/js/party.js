@@ -54,9 +54,9 @@ async function openPartyModal() {
       return;
     }
 
-    // Skip refresh if the inline party create form is open
-    const createForm = document.getElementById('inlinePartyCreateForm');
-    if (createForm && createForm.style.display !== 'none') {
+    // Skip refresh if the party create modal is open
+    const createModal = document.getElementById('partyCreateModal');
+    if (createModal && (createModal.classList.contains('open') || createModal.style.display !== 'none')) {
       return;
     }
 
@@ -304,7 +304,7 @@ async function buildLobbyTabHtml() {
     html += `
       <div class="lobby-welcome-dashboard">
         <div class="lobby-welcome-grid">
-          <div class="lobby-welcome-card create" onclick="togglePartyCreateForm(true)" id="btnShowCreateParty">
+          <div class="lobby-welcome-card create" onclick="openPartyCreateModal()" id="btnShowCreateParty">
             <div class="lobby-welcome-icon">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </div>
@@ -322,22 +322,6 @@ async function buildLobbyTabHtml() {
               <div class="lobby-welcome-title">Kod İle Katıl</div>
               <div class="lobby-welcome-desc">Davet kodu veya bağlantısı girerek bir lobiye katıl.</div>
             </div>
-          </div>
-        </div>
-        
-        <div id="inlinePartyCreateForm" class="lobby-create-form">
-          <div class="lobby-create-title">LOBİ OLUŞTUR</div>
-          <input class="lobby-search-input" id="inlineCreatePartyName" name="party_name_rand_field" autocomplete="new-password" placeholder="Lobi Adı (Örn: Gececi Tayfa)" style="margin:0;">
-          
-          <div class="lobby-section-title" style="margin-top:4px;">DAVET EDİLECEK ARKADAŞLAR</div>
-          <div id="lobbyCreateFriendsList" class="lobby-friends-list" style="max-height:120px;"></div>
-          
-          <label class="lobby-checkbox-label">
-            <input type="checkbox" id="inlineCreatePartyPrivate"> Gizli Lobi (Sadece davetle katılınabilir)
-          </label>
-          <div class="lobby-form-buttons">
-            <button class="discord-action-btn primary" style="padding:6px 14px; font-size:12px;" onclick="submitCreateParty()">OLUŞTUR</button>
-            <button class="discord-action-btn" style="padding:6px 14px; font-size:12px;" onclick="togglePartyCreateForm(false)">İPTAL</button>
           </div>
         </div>
       </div>
@@ -362,12 +346,26 @@ async function buildLobbyTabHtml() {
       <div style="display:flex; flex-direction:column; gap:8px;">
         ${invites.map(inv => `
           <div class="lobby-card">
-            <div style="flex:1; font-size:12px; color:var(--t-text-primary);">
-              <strong style="color:var(--t-accent-primary);">@${esc(inv.from_username)}</strong> sizi <strong>${esc(inv.party_name)}</strong> odasına çağırıyor.
+            <div class="lobby-card-left">
+              <div class="lobby-card-avatar-badge" style="color:var(--t-accent-primary); background:rgba(88,101,242,0.1);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+              </div>
+              <div class="lobby-card-info">
+                <div class="lobby-card-title">${esc(inv.party_name)}</div>
+                <div class="lobby-card-tags">
+                  <span class="lobby-tag">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Davet eden: @${esc(inv.from_username)}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div style="display:flex; gap:6px;">
-              <button class="mono-btn-primary" style="padding:6px 12px; font-size:9.5px; width:auto; border-radius:8px;" onclick="acceptPartyInvite(${inv.id})">KATIL</button>
-              <button class="mono-btn-secondary" style="padding:6px 12px; font-size:9.5px; width:auto; border-radius:8px;" onclick="rejectPartyInvite(${inv.id})">REDDET</button>
+            <div class="lobby-card-right" style="gap:8px;">
+              <button class="lobby-join-btn" style="padding:6px 12px; font-size:11px;" onclick="acceptPartyInvite(${inv.id})">KATIL</button>
+              <button class="discord-action-btn" style="padding:6px 12px; font-size:11px;" onclick="rejectPartyInvite(${inv.id})">REDDET</button>
             </div>
           </div>
         `).join('')}
@@ -378,18 +376,95 @@ async function buildLobbyTabHtml() {
   return html;
 }
 
+function renderPartyMembersStack(p) {
+  const members = p.members || [];
+  if (!members.length) {
+    if (p.owner_name) {
+      const ownerUser = {
+        username: p.owner_name,
+        profile_photo: p.owner_photo || null
+      };
+      return `
+        <div class="lobby-avatar-stack">
+          <div class="lobby-stacked-avatar" data-tooltip="Kurucu: @${esc(p.owner_name)}">
+            ${typeof renderAvatar === 'function' ? renderAvatar(ownerUser, 'avatar avatar-xs') : `<div class="avatar avatar-xs"><span class="avatar-initials">${esc(p.owner_name[0] || '?').toUpperCase()}</span></div>`}
+          </div>
+        </div>
+      `;
+    }
+    return '';
+  }
+
+  const maxVisible = 4;
+  const visible = members.slice(0, maxVisible);
+  const remaining = Math.max(0, (p.member_count || members.length) - maxVisible);
+
+  return `
+    <div class="lobby-avatar-stack">
+      ${visible.map((m, idx) => {
+        const tooltip = `@${esc(m.username)}${m.is_focusing ? ' (Odakta)' : (m.is_online ? ' (Çevrimiçi)' : '')}`;
+        return `
+          <div class="lobby-stacked-avatar" style="z-index:${10 - idx};" data-tooltip="${tooltip}">
+            ${typeof renderAvatar === 'function' ? renderAvatar(m, 'avatar avatar-xs') : `<div class="avatar avatar-xs"><span class="avatar-initials">${esc(m.username[0] || '?').toUpperCase()}</span></div>`}
+          </div>
+        `;
+      }).join('')}
+      ${remaining > 0 ? `
+        <div class="lobby-stacked-avatar lobby-avatar-overflow" style="z-index:5;" data-tooltip="+${remaining} kişi daha">
+          +${remaining}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 function buildPublicPartiesListHtml(parties) {
   const filtered = parties.filter(p => p.owner_id !== currentUser.id && p.is_member === 0);
   if (!filtered.length) {
-    return `<div style="text-align:center; padding:24px; font-size:12.5px; color:var(--t-text-muted); font-weight:600;">AKTİF GENEL LOBİ YOK</div>`;
+    return `<div style="text-align:center; padding:32px 16px; font-size:12.5px; color:var(--t-text-muted); font-weight:600;">AKTİF GENEL LOBİ YOK</div>`;
   }
   return filtered.map(p => `
     <div class="lobby-card">
-      <div style="flex:1; min-width:0; padding-right:8px;">
-        <div style="font-size:14px; font-weight:800; color:var(--t-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(p.name)}</div>
-        <div style="font-size:11px; color:var(--t-text-muted); margin-top:2px;">Kurucu: <strong>@${esc(p.owner_name)}</strong> · ${p.member_count} üye</div>
+      <div class="lobby-card-left">
+        <div class="lobby-card-avatar-badge" data-tooltip="Genel Çalışma Odası">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+        </div>
+        <div class="lobby-card-info">
+          <div class="lobby-card-title">${esc(p.name)}</div>
+          <div class="lobby-card-tags">
+            <span class="lobby-tag" data-tooltip="Oda Kurucusu">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              @${esc(p.owner_name)}
+            </span>
+            <span class="lobby-tag">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              ${p.member_count} üye
+            </span>
+            ${p.active_focus_count > 0 ? `
+              <span class="lobby-tag lobby-tag-live" data-tooltip="Şu anda odak seansında">
+                <span class="lobby-live-dot"></span>
+                ${p.active_focus_count} odakta
+              </span>
+            ` : `
+              <span class="lobby-tag lobby-tag-idle">
+                Hazır
+              </span>
+            `}
+          </div>
+        </div>
       </div>
-      <button class="discord-action-btn primary" style="padding:6px 14px; font-size:12px; flex-shrink:0;" onclick="joinParty(${p.id})" data-tooltip="${esc(p.name)} odasına katıl" data-tooltip-pos="left">KATIL</button>
+      <div class="lobby-card-right">
+        ${renderPartyMembersStack(p)}
+        <button class="lobby-join-btn" onclick="joinParty(${p.id})" data-tooltip="${esc(p.name)} odasına katıl">
+          <span>KATIL</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </div>
     </div>
   `).join('');
 }
@@ -667,7 +742,7 @@ async function buildFriendsTabHtml() {
         <div class="lobby-section-title" style="margin-top:0;">KULLANICI ARA & EKLE</div>
         <div class="lobby-invite-box" style="margin-bottom:12px;">
           <div class="lobby-invite-input-wrap">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--t-text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--t-text-muted); flex-shrink:0;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
               class="lobby-invite-input"
               id="friendSearchInput"
@@ -683,17 +758,17 @@ async function buildFriendsTabHtml() {
           <div class="lobby-section-title" style="margin-top:16px;">GELEN İSTEKLER (${requests.length})</div>
           <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:16px;">
             ${requests.map(req => `
-              <div class="lobby-friend-row" style="cursor:pointer;" onclick="closePartyModal(); openUserModal('${esc(req.username)}')">
-                <div class="lobby-friend-left">
+              <div class="lobby-friend-row">
+                <div class="lobby-friend-left" onclick="closePartyModal(); openUserModal('${esc(req.username)}')">
                   ${renderAvatar(req, 'avatar avatar-xs')}
-                  <div>
+                  <div class="lobby-friend-details">
                     <div class="lobby-friend-name">@${esc(req.username)}</div>
-                    <div style="font-size:10px; color:var(--t-text-muted);">Profili görmek için dokun</div>
+                    <div class="lobby-friend-status-text">İstek gönderdi</div>
                   </div>
                 </div>
-                <div style="display:flex; gap:6px;" onclick="event.stopPropagation()">
-                  <button class="discord-action-btn primary" style="padding:6px 12px; font-size:11px;" onclick="acceptFriendRequestBtn(${req.id})">Kabul</button>
-                  <button class="discord-action-btn danger" style="padding:6px 12px; font-size:11px; background:#ef4444 !important; border:none !important;" onclick="rejectFriendRequestBtn(${req.id})">Ret</button>
+                <div class="lobby-friend-actions" onclick="event.stopPropagation()">
+                  <button class="friend-action-btn primary" style="padding:4px 10px; height:28px;" onclick="acceptFriendRequestBtn(${req.id})">Kabul</button>
+                  <button class="friend-action-btn danger" style="padding:4px 10px; height:28px;" onclick="rejectFriendRequestBtn(${req.id})">Ret</button>
                 </div>
               </div>
             `).join('')}
@@ -703,25 +778,30 @@ async function buildFriendsTabHtml() {
       
       <div class="lobby-right-panel">
         <div class="lobby-section-title" style="margin-top:0;">ARKADAŞ LİSTESİ (${friends.length})</div>
-        <div id="lobbyFriendsList" class="lobby-friends-list" style="max-height:360px; overflow-y:auto; background:transparent !important; padding:0 !important; gap:6px;">
+        <div id="lobbyFriendsList" class="lobby-friends-list" style="max-height:420px; overflow-y:auto; background:transparent !important; padding:0 !important; gap:6px; display:flex; flex-direction:column;">
           ${friends.length === 0
-            ? `<div style="text-align:center; padding:24px; font-size:12.5px; color:var(--t-text-muted); font-weight:600;">ARKADAŞ LİSTENİZ BOŞ</div>`
+            ? `<div style="text-align:center; padding:32px 16px; font-size:12.5px; color:var(--t-text-muted); font-weight:600;">ARKADAŞ LİSTENİZ BOŞ</div>`
             : friends.map(f => {
                 const activeParty = _partiesCache.find(p => p.is_member > 0 || p.owner_id === currentUser.id);
                 const inviteBtn = activeParty
-                  ? `<button class="discord-action-btn primary" style="padding:6px 12px; font-size:11px;" onclick="event.stopPropagation(); inviteFriendToParty(${activeParty.id}, '${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısını aktif lobiye çağır" data-tooltip-pos="left">Lobiye Davet Et</button>`
+                  ? `<button class="friend-action-btn primary" onclick="event.stopPropagation(); inviteFriendToParty(${activeParty.id}, '${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısını odaya davet et"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg><span>Davet Et</span></button>`
                   : '';
-                const dmBtn = `<button class="discord-action-btn" style="padding:6px 12px; font-size:11px;" onclick="event.stopPropagation(); closePartyModal(); showPage('messages'); openDirectChat('${esc(f.username)}')" data-tooltip="@${esc(f.username)} kullanıcısına direkt mesaj gönder" data-tooltip-pos="top">Mesaj</button>`;
+                const dmBtn = `<button class="friend-action-btn secondary" onclick="event.stopPropagation(); closePartyModal(); showPage('messages'); openDirectChat('${esc(f.username)}')" data-tooltip="Mesaj Gönder"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Mesaj</span></button>`;
                 return `
-                  <div class="lobby-friend-row" style="cursor:pointer;" onclick="closePartyModal(); openUserModal('${esc(f.username)}')">
-                    <div class="lobby-friend-left">
-                      ${renderAvatar(f, 'avatar avatar-xs')}
-                      <div>
-                        <div class="lobby-friend-name">@${esc(f.username)}</div>
-                        <div style="font-size:10.5px; color:var(--t-text-muted); margin-top:2px;">Lvl ${f.level || 1} · ${f.is_online ? '<span style="color:#23a55a; font-weight:700;">Çevrimiçi</span>' : 'Çevrimdışı'}</div>
+                  <div class="lobby-friend-row">
+                    <div class="lobby-friend-left" onclick="closePartyModal(); openUserModal('${esc(f.username)}')">
+                      ${renderAvatar(f, 'avatar avatar-sm')}
+                      <div class="lobby-friend-details">
+                        <div class="lobby-friend-name-row">
+                          <span class="lobby-friend-name">@${esc(f.username)}</span>
+                          <span class="lobby-friend-level">Lvl ${f.level || 1}</span>
+                        </div>
+                        <div class="lobby-friend-status-text">
+                          ${f.is_online ? '<span class="lobby-live-dot" style="margin-right:4px;"></span><span style="color:#23a55a; font-weight:600;">Çevrimiçi</span>' : 'Çevrimdışı'}
+                        </div>
                       </div>
                     </div>
-                    <div style="display:flex; gap:6px;" onclick="event.stopPropagation()">
+                    <div class="lobby-friend-actions" onclick="event.stopPropagation()">
                       ${dmBtn}
                       ${inviteBtn}
                     </div>
@@ -755,32 +835,34 @@ function debouncedFriendSearch(value) {
 async function doFriendSearch(q) {
   const container = document.getElementById('friendSearchResults');
   if (!container) return;
-  container.innerHTML = `<div style="font-size:10px;color:#555;padding:8px 0">ARANIYOR...</div>`;
+  container.innerHTML = `<div style="font-size:11px;color:var(--t-text-muted);padding:8px 0;font-weight:600;">ARANIYOR...</div>`;
   try {
     const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
     const users = await res.json();
     if (!users.length) {
-      container.innerHTML = `<div style="font-size:11px;color:#444;padding:8px 0;font-weight:700">SONUÇ YOK</div>`;
+      container.innerHTML = `<div style="font-size:11px;color:var(--t-text-muted);padding:8px 0;font-weight:600;">Kullanıcı bulunamadı</div>`;
       return;
     }
     container.innerHTML = users.map(u => `
-      <div style="display:flex;align-items:center;justify-content:space-between;background:#0a0a0a;border:1px solid #1a1a1a;padding:8px 12px">
-        <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="closePartyModal();openUserModal('${esc(u.username)}')">
-          ${renderAvatar(u, 'avatar avatar-sm')}
-          <div>
-            <div style="font-weight:700;color:#fff;font-size:13px">${esc(u.username)}</div>
-            <div style="font-size:10px;color:#555">Lvl ${u.level}</div>
+      <div class="lobby-friend-row" style="padding:8px 12px;">
+        <div class="lobby-friend-left" onclick="closePartyModal(); openUserModal('${esc(u.username)}')">
+          ${renderAvatar(u, 'avatar avatar-xs')}
+          <div class="lobby-friend-details">
+            <div class="lobby-friend-name-row">
+              <span class="lobby-friend-name">@${esc(u.username)}</span>
+              <span class="lobby-friend-level">Lvl ${u.level || 1}</span>
+            </div>
           </div>
         </div>
         <button
-          class="mono-btn-primary"
-          style="width:auto;padding:6px 12px;font-size:9px"
+          class="friend-action-btn primary"
+          style="padding:4px 10px; font-size:11px; height:28px;"
           onclick="sendFriendReqFromSearch('${esc(u.username)}', this)"
-        >ARKADAŞ EKLE</button>
+        >Ekle</button>
       </div>
     `).join('');
   } catch {
-    container.innerHTML = `<div style="color:#ff3b30;font-size:10px;padding:8px 0">HATA OLUŞTU</div>`;
+    container.innerHTML = `<div style="color:#ef4444;font-size:11px;padding:8px 0;">Hata oluştu</div>`;
   }
 }
 
@@ -789,7 +871,7 @@ async function sendFriendReqFromSearch(username, btn) {
   const res = await fetch(`/api/friends/request/${encodeURIComponent(username)}`, { method: 'POST' });
   if (res.ok) {
     showToast('Arkadaşlık isteği gönderildi!');
-    if (btn) { btn.textContent = 'GÖÖNDERİLDİ'; btn.style.opacity = '0.5'; }
+    if (btn) { btn.textContent = 'GÖNDERİLDİ'; btn.style.opacity = '0.5'; }
   } else {
     const d = await res.json().catch(() => ({}));
     showToast(d.error || 'Gönderilemedi');
@@ -973,36 +1055,129 @@ function renderLobbyInviteOtherUsers(users) {
   `;
 }
 
-async function togglePartyCreateForm(show) {
-  const form = document.getElementById('inlinePartyCreateForm');
-  const btn = document.getElementById('btnShowCreateParty');
-  if (form) form.style.display = show ? 'flex' : 'none';
-  if (btn) btn.style.display = show ? 'none' : 'block';
-  
+function togglePartyCreateForm(show) {
   if (show) {
-    const container = document.getElementById('lobbyCreateFriendsList');
-    if (container) {
-      container.innerHTML = '<div style="font-size:10px;color:var(--t-text-muted);padding:4px">Yükleniyor...</div>';
-      try {
-        const res = await fetch('/api/friends');
-        const friends = await res.json();
-        if (friends.length === 0) {
-          container.innerHTML = '<div style="font-size:10px;color:var(--t-text-muted);padding:4px">Arkadaşınız yok</div>';
-          return;
-        }
-        container.innerHTML = friends.map(f => `
-          <label class="lobby-friend-row" style="cursor:pointer; width:100%; box-sizing:border-box;">
-            <div class="lobby-friend-left">
-              <input type="checkbox" class="lobby-create-invite-check" value="${esc(f.username)}" style="margin:0 4px 0 0;">
-              ${renderAvatar(f, 'avatar avatar-xs')}
-              <span class="lobby-friend-name">@${esc(f.username)}</span>
-            </div>
-          </label>
-        `).join('');
-      } catch (err) {
-        container.innerHTML = '<div style="font-size:10px;color:red;padding:4px">Hata oluştu</div>';
+    openPartyCreateModal();
+  } else {
+    closePartyCreateModal();
+  }
+}
+
+async function openPartyCreateModal() {
+  const modal = document.getElementById('partyCreateModal');
+  if (!modal) return;
+
+  modal.style.display = 'flex';
+  // Force reflow for smooth transition
+  void modal.offsetWidth;
+  modal.classList.add('open');
+
+  const nameInput = document.getElementById('inlineCreatePartyName');
+  if (nameInput) {
+    nameInput.value = '';
+    setTimeout(() => nameInput.focus(), 120);
+  }
+
+  const privCheck = document.getElementById('inlineCreatePartyPrivate');
+  if (privCheck) privCheck.checked = false;
+
+  const searchBox = document.getElementById('partyCreateSearchBox');
+  if (searchBox) searchBox.style.display = 'none';
+  const searchInput = document.getElementById('partyCreateFriendSearchInput');
+  if (searchInput) searchInput.value = '';
+
+  updateInviteCountHint();
+
+  const container = document.getElementById('lobbyCreateFriendsList');
+  if (container) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;padding:24px;font-size:12px;color:var(--t-text-muted);font-weight:600;"><span class="lobby-live-dot" style="margin-right:8px;"></span> Arkadaşlar yükleniyor...</div>';
+    try {
+      const res = await fetch('/api/friends');
+      const friends = await res.json();
+      if (!friends || friends.length === 0) {
+        container.innerHTML = '<div style="text-align:center;font-size:12px;color:var(--t-text-muted);padding:24px;font-weight:600;">Henüz arkadaş listenizde kimse yok</div>';
+        return;
       }
+      container.innerHTML = friends.map(f => `
+        <label class="party-create-friend-row" data-username="${esc(f.username)}" onclick="setTimeout(updateInviteCountHint, 15)">
+          <div class="party-create-friend-info">
+            ${typeof renderAvatar === 'function' ? renderAvatar(f, 'avatar avatar-sm') : `<div class="avatar avatar-sm"><span class="avatar-initials">${esc((f.username || '?')[0]).toUpperCase()}</span></div>`}
+            <div class="party-create-friend-details">
+              <span class="party-create-friend-name">@${esc(f.username)}</span>
+              <span class="party-create-friend-status">${f.is_online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
+            </div>
+          </div>
+          <div class="party-create-checkbox-wrap">
+            <input type="checkbox" class="lobby-create-invite-check" value="${esc(f.username)}">
+            <span class="party-create-custom-checkbox">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </span>
+          </div>
+        </label>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = '<div style="text-align:center;font-size:12px;color:#f23f43;padding:16px;">Arkadaşlar yüklenirken bir sorun oluştu</div>';
     }
+  }
+}
+
+function toggleFriendSearchInModal() {
+  const box = document.getElementById('partyCreateSearchBox');
+  const input = document.getElementById('partyCreateFriendSearchInput');
+  if (!box) return;
+  
+  if (box.style.display === 'none' || !box.style.display) {
+    box.style.display = 'block';
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  } else {
+    box.style.display = 'none';
+    if (input) input.value = '';
+    filterPartyCreateFriends();
+  }
+}
+
+function filterPartyCreateFriends() {
+  const input = document.getElementById('partyCreateFriendSearchInput');
+  const query = (input?.value || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('.party-create-friend-row');
+  
+  rows.forEach(row => {
+    const username = (row.getAttribute('data-username') || '').toLowerCase();
+    if (!query || username.includes(query)) {
+      row.style.display = 'flex';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+function closePartyCreateModal() {
+  const modal = document.getElementById('partyCreateModal');
+  if (modal) {
+    modal.classList.remove('open');
+    setTimeout(() => {
+      if (!modal.classList.contains('open')) {
+        modal.style.display = 'none';
+      }
+    }, 220);
+  }
+}
+
+function togglePrivateCheckbox() {
+  const check = document.getElementById('inlineCreatePartyPrivate');
+  if (check) {
+    check.checked = !check.checked;
+  }
+}
+
+function updateInviteCountHint() {
+  const hint = document.getElementById('lobbyInviteCountHint');
+  const checked = document.querySelectorAll('.lobby-create-invite-check:checked').length;
+  if (hint) {
+    hint.textContent = checked > 0 ? `(${checked} kişi seçildi)` : '(0 seçildi)';
   }
 }
 
@@ -1011,32 +1186,49 @@ async function submitCreateParty() {
   const privCheck = document.getElementById('inlineCreatePartyPrivate');
   
   const name = nameInput?.value?.trim() || 'Yeni Parti';
-  const isPrivate = privCheck?.checked || false;
+  const isPrivate = privCheck?.checked ? 1 : 0;
   
-  const res = await fetch('/api/parties', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, isPrivate })
-  });
+  const submitBtn = document.querySelector('.party-create-btn-submit');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.7';
+  }
 
-  if (res.ok) {
-    const data = await res.json();
-    const partyId = data.partyId;
-    
-    // Send invitations to checked friends
-    const checkedBoxes = document.querySelectorAll('.lobby-create-invite-check:checked');
-    const invitePromises = Array.from(checkedBoxes).map(box => {
-      return inviteFriendToParty(partyId, box.value);
+  try {
+    const res = await fetch('/api/parties', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, isPrivate })
     });
-    
-    await Promise.all(invitePromises);
-    
-    showToast('Lobi oluşturuldu!');
-    if (typeof setActiveParty === 'function') setActiveParty(partyId);
-    if (typeof window.completeFocusRoomOnboarding === 'function') window.completeFocusRoomOnboarding();
-    refreshPartyModal();
-  } else {
-    showToast('Oluşturulamadı');
+
+    if (res.ok) {
+      const data = await res.json();
+      const partyId = data.partyId;
+      
+      // Send invitations to checked friends
+      const checkedBoxes = document.querySelectorAll('.lobby-create-invite-check:checked');
+      const invitePromises = Array.from(checkedBoxes).map(box => {
+        return inviteFriendToParty(partyId, box.value);
+      });
+      
+      await Promise.all(invitePromises);
+      
+      closePartyCreateModal();
+      showToast('Lobi başarıyla oluşturuldu!');
+      if (typeof setActiveParty === 'function') setActiveParty(partyId);
+      if (typeof window.completeFocusRoomOnboarding === 'function') window.completeFocusRoomOnboarding();
+      refreshPartyModal();
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      showToast(errData.error || 'Lobi oluşturulamadı');
+    }
+  } catch (e) {
+    showToast('Bağlantı hatası oluştu');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+    }
   }
 }
 

@@ -502,16 +502,29 @@ function _updateReadReceipt(container, newId, oldId) {
   }
 }
 
+function getReactionSvgIcon(key) {
+  const map = {
+    heart: `<svg viewBox="0 0 24 24" fill="#e0245e" width="12" height="12"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`,
+    thumbsup: `<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="12" height="12"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`,
+    star: `<svg viewBox="0 0 24 24" fill="#eab308" width="12" height="12"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    flame: `<svg viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" width="12" height="12"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.38 0 2.5-1.12 2.5-2.5 0-1.75-2.5-4.5-2.5-4.5s-2.5 2.75-2.5 4.5z"/><path d="M12 2C6.5 2 2 6.5 2 12c0 3.31 1.61 6.24 4.1 8.07.41-.65.9-1.24 1.46-1.75.92-.83 2.05-1.32 3.24-1.32s2.32.49 3.24 1.32c.56.51 1.05 1.1 1.46 1.75C18.39 18.24 20 15.31 20 12c0-5.5-4.5-10-10-10z"/></svg>`,
+    bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" width="12" height="12"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`,
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>`
+  };
+  if (map[key]) return map[key];
+  return map.heart;
+}
+
 function triggerDoubleTapHeart(event, messageId) {
   event.stopPropagation();
-  const bubble = event.currentTarget;
+  const bubble = event.currentTarget || event.target.closest('.msg-body-wrapper');
   if (bubble) {
     const heart = document.createElement('div');
     heart.className = 'msg-double-tap-heart';
-    heart.innerHTML = `<svg viewBox="0 0 24 24" fill="#e0245e" width="28" height="28"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+    heart.innerHTML = `<svg viewBox="0 0 24 24" fill="#e0245e" width="32" height="32"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
     bubble.style.position = 'relative';
     bubble.appendChild(heart);
-    setTimeout(() => heart.remove(), 600);
+    setTimeout(() => heart.remove(), 650);
   }
   submitReaction(messageId, 'heart');
 }
@@ -520,25 +533,21 @@ function triggerDoubleTapHeart(event, messageId) {
 function renderMessageBubble(m, key, lastReadMsgId) {
   if (m.from_user_id === 0 || !m.from_username) {
     return `
-      <div style="align-self:center; text-align:center; margin:10px 0; font-size:11px; color:#555; font-weight:800; text-transform:uppercase; letter-spacing:1px; width:100%;">
-        ${esc(m.content)}
+      <div class="chat-system-divider-msg">
+        <span>${esc(m.content)}</span>
       </div>
     `;
   }
 
   const isMe = m.from_username === currentUser.username;
-  const align = isMe ? 'flex-end' : 'flex-start';
-  const labelColor = isMe ? 'rgba(255,255,255,0.4)' : '#555';
   const decryptedContent = decryptText(m.content, key);
   const isPostShare = decryptedContent.startsWith('[POST_SHARE]:');
   const hasImage = decryptedContent.includes('[IMAGE]:');
 
-  let bubbleClass = isMe ? 'msg-body-wrapper msg-sender-bubble' : 'msg-body-wrapper';
-  let bubbleStyle = `padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:18px;word-break:break-word;cursor:pointer;transition:transform 0.1s; touch-action:pan-y;position:relative;`;
+  let bubbleClass = isMe ? 'msg-body-wrapper msg-sender-bubble msg-me' : 'msg-body-wrapper msg-them';
   
   if (isPostShare) {
-    bubbleClass = '';
-    bubbleStyle = 'background:transparent; border:none; padding:0; box-shadow:none; cursor:pointer; display:block; touch-action:pan-y;';
+    bubbleClass = isMe ? 'msg-body-wrapper msg-post-share-bubble msg-me' : 'msg-body-wrapper msg-post-share-bubble msg-them';
   }
 
   let mainBodyHtml = '';
@@ -549,36 +558,39 @@ function renderMessageBubble(m, key, lastReadMsgId) {
     
     mainBodyHtml = `
       <div class="chat-post-share-card" id="post-share-card-${m.id}" onclick="event.stopPropagation(); openSharedPostInChat(${postId})">
-        <div style="font-size:10px;color:#888;padding:8px">Yükleniyor...</div>
+        <div style="font-size:10px;color:var(--text-3);padding:8px">Yükleniyor...</div>
       </div>
     `;
     if (extraMsg) {
-      mainBodyHtml += `<div style="margin-top:6px;font-size:12px;font-weight:600;word-break:break-word;">${esc(extraMsg)}</div>`;
+      mainBodyHtml += `<div class="chat-post-share-extra-msg">${esc(extraMsg)}</div>`;
     }
   } else if (hasImage) {
     const parts = decryptedContent.split('[IMAGE]:');
     const textPart = parts[0].trim();
     const imgUrl = parts[1].trim();
     mainBodyHtml = `
-      ${textPart ? `<div>${esc(textPart)}</div>` : ''}
+      ${textPart ? `<div class="msg-text-content">${esc(textPart)}</div>` : ''}
       <img src="${imgUrl}" class="chat-image-attachment" alt="Görsel" onclick="event.stopPropagation(); if(typeof openImageFullscreen==='function') openImageFullscreen('${imgUrl}')">
     `;
   } else {
-    mainBodyHtml = `<div>${esc(decryptedContent)}</div>`;
+    mainBodyHtml = `<div class="msg-text-content">${esc(decryptedContent)}</div>`;
   }
 
   let replyHtml = '';
   if (m.parent_content) {
     let decryptedParent = decryptText(m.parent_content, key);
     if (decryptedParent.startsWith('[POST_SHARE]:')) {
-      decryptedParent = '📄 Paylaşılan Gönderi';
+      decryptedParent = 'Paylaşılan Gönderi';
     } else if (decryptedParent.includes('[IMAGE]:')) {
-      decryptedParent = '📷 Görsel';
+      decryptedParent = 'Görsel';
     }
     replyHtml = `
-      <div class="msg-reply-bubble" style="cursor:pointer" onclick="event.stopPropagation(); scrollToMessage(${m.parent_id})">
-        <strong>@${esc(m.parent_from_username)}</strong>
-        ${esc(decryptedParent)}
+      <div class="msg-reply-bubble" onclick="event.stopPropagation(); scrollToMessage(${m.parent_id})">
+        <div class="msg-reply-bar-accent"></div>
+        <div class="msg-reply-bubble-content">
+          <strong>@${esc(m.parent_from_username)}</strong>
+          <span>${esc(decryptedParent)}</span>
+        </div>
       </div>
     `;
   }
@@ -586,7 +598,7 @@ function renderMessageBubble(m, key, lastReadMsgId) {
   let avatarHtml = '';
   if (!isMe) {
     avatarHtml = `
-      <div style="cursor:pointer" onclick="openUserModal('${esc(m.from_username)}')">
+      <div class="msg-avatar-col" onclick="openUserModal('${esc(m.from_username)}')">
         ${renderAvatar({ username: m.from_username, profile_photo: m.from_photo }, 'avatar avatar-xs')}
       </div>
     `;
@@ -605,35 +617,23 @@ function renderMessageBubble(m, key, lastReadMsgId) {
     reactionGroups[r.reaction].push(r.username);
   });
 
-function getReactionSvgIcon(key) {
-  const map = {
-    heart: `<svg viewBox="0 0 24 24" fill="#e0245e" width="12" height="12"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`,
-    thumbsup: `<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="12" height="12"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`,
-    star: `<svg viewBox="0 0 24 24" fill="#eab308" width="12" height="12"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
-    flame: `<svg viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" width="12" height="12"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.38 0 2.5-1.12 2.5-2.5 0-1.75-2.5-4.5-2.5-4.5s-2.5 2.75-2.5 4.5z"/><path d="M12 2C6.5 2 2 6.5 2 12c0 3.31 1.61 6.24 4.1 8.07.41-.65.9-1.24 1.46-1.75.92-.83 2.05-1.32 3.24-1.32s2.32.49 3.24 1.32c.56.51 1.05 1.1 1.46 1.75C18.39 18.24 20 15.31 20 12c0-5.5-4.5-10-10-10z"/></svg>`,
-    bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" width="12" height="12"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`,
-    check: `<svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>`
-  };
-  if (map[key]) return map[key];
-  if (key === '❤️') return map.heart;
-  if (key === '👍') return map.thumbsup;
-  if (key === '⭐' || key === '😮') return map.star;
-  if (key === '🔥' || key === '😂') return map.flame;
-  return map.heart;
-}
-
   let reactionsHtml = '';
   if (reactionsList.length > 0) {
     reactionsHtml = `
-      <div class="msg-reactions-container" style="align-self:${align};">
-        ${Object.entries(reactionGroups).map(([key, users]) => {
+      <div class="msg-reactions-container">
+        ${Object.entries(reactionGroups).map(([rKey, users]) => {
           const count = users.length;
           const namesText = users.join(', ');
-          const svgIcon = getReactionSvgIcon(key);
+          const svgIcon = getReactionSvgIcon(rKey);
+          const isMyReaction = users.includes(currentUser.username);
+          const myClass = isMyReaction ? 'my-reaction' : '';
           return `
-            <div class="msg-reaction-badge" title="${esc(namesText)}" onclick="showReactionDetails(${m.id})" style="display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);cursor:pointer;">
-              <span>${svgIcon}</span>
-              ${count > 1 ? `<span style="font-size:9px;font-weight:bold;color:#aaa">${count}</span>` : ''}
+            <div class="msg-reaction-badge ${myClass}" 
+                 title="${esc(namesText)}" 
+                 onclick="event.stopPropagation(); submitReaction(${m.id}, '${rKey}')" 
+                 oncontextmenu="event.preventDefault(); showReactionDetails(${m.id})">
+              <span class="msg-reaction-icon">${svgIcon}</span>
+              ${count > 1 ? `<span class="msg-reaction-count">${count}</span>` : ''}
             </div>
           `;
         }).join('')}
@@ -642,14 +642,14 @@ function getReactionSvgIcon(key) {
   }
 
   const readReceiptHtml = (() => {
-    if (m.id === lastReadMsgId) {
+    if (isMe && m.id === lastReadMsgId) {
       const photo = _activeChatPartnerPhoto;
       const init = _activeChatPartner ? _activeChatPartner[0].toUpperCase() : '?';
       const imgHtml = photo 
-        ? `<img src="${photo}" alt="${esc(_activeChatPartner)}" style="width:14px; height:14px; border-radius:50%; object-fit:cover; border:1px solid rgba(255,255,255,0.15)">`
-        : `<span style="display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; background:#222; color:#aaa; font-size:7px; font-weight:bold; border:1px solid rgba(255,255,255,0.1);">${init}</span>`;
+        ? `<img src="${photo}" alt="${esc(_activeChatPartner)}" class="msg-read-receipt-avatar">`
+        : `<span class="msg-read-receipt-init">${init}</span>`;
       return `
-        <div class="msg-read-receipt" style="display:flex; justify-content:flex-end; align-self:flex-end; margin-top:-4px; margin-bottom:4px; margin-right:2px;" title="Görüldü">
+        <div class="msg-read-receipt" title="Görüldü">
           ${imgHtml}
         </div>
       `;
@@ -658,37 +658,57 @@ function getReactionSvgIcon(key) {
   })();
 
   const selfDestructBadge = _chatDisappearingHours > 0 ? `
-    <span class="msg-self-destruct-badge" title="Süreli Mesaj (${_chatDisappearingHours}sa)" style="display:inline-flex;align-items:center;gap:3px;">
+    <span class="msg-self-destruct-badge" title="Süreli Mesaj (${_chatDisappearingHours}sa)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <span>${_chatDisappearingHours >= 24 ? (_chatDisappearingHours/24)+'g' : _chatDisappearingHours+'sa'}</span>
     </span>
   ` : '';
 
+  const groupAuthorHtml = (_activeChatType === 'group' && !isMe) 
+    ? `<div class="msg-group-author">@${esc(m.from_username)}</div>` 
+    : '';
+
+  const timeText = (() => {
+    const dateStr = m.created_at.endsWith('Z') || m.created_at.includes('+') ? m.created_at : m.created_at + 'Z';
+    return new Date(dateStr).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  })();
+
   return `
-    <div id="chat-msg-${m.id}" class="chat-msg-row-item" style="display:flex;align-items:flex-end;gap:8px;align-self:${align};max-width:75%;transition:all 0.3s ease;">
+    <div id="chat-msg-${m.id}" class="chat-msg-row-item ${isMe ? 'msg-me-row' : 'msg-them-row'}">
+      <!-- Swipe to reply indicator (mobile gesture) -->
+      <div class="msg-swipe-reply-icon" id="swipe-icon-${m.id}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15">
+          <polyline points="9 17 4 12 9 7" />
+          <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+        </svg>
+      </div>
+
       ${avatarHtml}
-      <div style="display:flex;flex-direction:column;align-self:${align};gap:4px">
+      
+      <div class="msg-column">
+        ${groupAuthorHtml}
         <div class="msg-bubble-row">
           <div class="${bubbleClass}" 
-               style="${bubbleStyle}"
+               id="bubble-${m.id}"
                ondblclick="triggerDoubleTapHeart(event, ${m.id})"
                onclick="openMessageActionsMenu(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})"
                ontouchstart="handleTouchStart(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})"
-               ontouchmove="handleTouchMove(event)"
-               ontouchend="handleTouchEnd(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})">
+               ontouchmove="handleTouchMove(event, ${m.id})"
+               ontouchend="handleTouchEnd(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})"
+               ontouchcancel="handleTouchCancel(event, ${m.id})">
             ${replyHtml}
             ${mainBodyHtml}
           </div>
+          <button class="msg-desktop-action-btn" onclick="openMessageActionsMenu(event, ${m.id}, '${esc(decryptedContent)}', '${esc(m.from_username)}', ${isMe})" title="İşlemler">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
         </div>
         ${reactionsHtml}
-        <div style="font-size:9px;color:${labelColor};font-weight:700;align-self:${align};margin-top:2px;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
-          <span>${(() => {
-            const dateStr = m.created_at.endsWith('Z') || m.created_at.includes('+') ? m.created_at : m.created_at + 'Z';
-            return new Date(dateStr).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-          })()}</span>
+        <div class="msg-meta-row">
+          <span class="msg-timestamp">${timeText}</span>
           ${selfDestructBadge}
+          ${readReceiptHtml}
         </div>
-        ${readReceiptHtml}
       </div>
     </div>
   `;
@@ -698,24 +718,30 @@ function getReactionSvgIcon(key) {
 function setReplyMessage(id, content, from_username) {
   _replyToMessage = { id, content, from_username };
   
-  // Render reply bar above input
   let replyBar = document.getElementById('chatReplyBar');
   if (!replyBar) {
     replyBar = document.createElement('div');
     replyBar.id = 'chatReplyBar';
     replyBar.className = 'chat-reply-preview-bar';
-    const inputBar = document.querySelector('.chat-input-bar');
-    if (inputBar) {
+    const inputBar = document.getElementById('chatInputBar') || document.querySelector('.chat-input-bar');
+    if (inputBar && inputBar.parentNode) {
       inputBar.parentNode.insertBefore(replyBar, inputBar);
     }
   }
 
   replyBar.style.display = 'flex';
   replyBar.innerHTML = `
-    <div class="chat-reply-preview-text">
-      <strong>@${esc(from_username)}</strong> kullanıcısına yanıt: <i>"${esc(content)}"</i>
+    <div class="chat-reply-indicator-line"></div>
+    <div class="chat-reply-content-box">
+      <div class="chat-reply-user">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+        <span>@${esc(from_username)} kullanıcısına yanıt</span>
+      </div>
+      <div class="chat-reply-text">${esc(content)}</div>
     </div>
-    <button class="chat-reply-close-btn" onclick="cancelReply()">✕</button>
+    <button class="chat-reply-close-btn" onclick="cancelReply()" title="Yanıtı İptal Et">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   `;
 }
 
@@ -785,8 +811,10 @@ function closeChatArea() {
   _lastReadReceiptMsgId = null;
   _lastInboxFingerprint = '';
   cancelReply();
-  if (typeof syncUrlState === 'function') {
-    syncUrlState('messages', '');
+  if (typeof activePage !== 'undefined' && activePage === 'messages') {
+    if (typeof syncUrlState === 'function') {
+      syncUrlState('messages', '', true);
+    }
   }
   const inboxPanel = document.getElementById('inboxPanel');
   const chatArea = document.getElementById('chatArea');
@@ -1208,16 +1236,8 @@ function openMessageActionsMenu(event, messageId, content, fromUsername, isMe) {
   _menuActiveMsgContent = content;
   _menuActiveMsgSender = fromUsername;
 
-  // Retrieve bounding rectangle synchronously before the event gets recycled
-  const bubble = event.currentTarget;
-  const rect = bubble.getBoundingClientRect();
-  const bubbleRect = {
-    top: rect.top,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height,
-    right: rect.right
-  };
+  const bubble = event.currentTarget || event.target.closest('.msg-body-wrapper');
+  const rect = bubble ? bubble.getBoundingClientRect() : { top: 120, left: 20, width: 120, height: 40, right: 140, bottom: 160 };
 
   const modal = document.getElementById('messageActionsModal');
   const popover = document.getElementById('messageActionsPopover');
@@ -1229,37 +1249,26 @@ function openMessageActionsMenu(event, messageId, content, fromUsername, isMe) {
     deleteBtn.style.display = isMe ? 'flex' : 'none';
   }
 
-  // Show container to calculate popover offset dimensions
   modal.style.display = 'block';
-  requestAnimationFrame(() => {
-    modal.classList.add('open');
+  modal.classList.add('open');
 
-    const popWidth = popover.offsetWidth || 200;
-    const popHeight = popover.offsetHeight || 180;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+  const popWidth = popover.offsetWidth || 220;
+  const popHeight = popover.offsetHeight || (isMe ? 210 : 170);
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
 
-    // Place popover relative to bubble:
-    let left = isMe ? (bubbleRect.left - popWidth - 10) : (bubbleRect.right + 10);
+  let left = isMe ? (rect.right - popWidth) : rect.left;
+  let top = rect.bottom + 8;
 
-    // Keep popover inside horizontal screen edges
-    if (left < 12) {
-      left = bubbleRect.right + 10;
-    }
-    if (left + popWidth > viewportWidth - 12) {
-      left = Math.max(12, bubbleRect.left + (bubbleRect.width - popWidth) / 2);
-    }
+  // If overflows bottom edge, show above message
+  if (top + popHeight > viewportHeight - 16) {
+    top = Math.max(16, rect.top - popHeight - 8);
+  }
+  // Clamp horizontal boundaries
+  left = Math.max(12, Math.min(left, viewportWidth - popWidth - 12));
 
-    // Keep popover inside vertical screen edges
-    let top = bubbleRect.top;
-    if (top + popHeight > viewportHeight - 12) {
-      top = viewportHeight - popHeight - 12;
-    }
-    top = Math.max(12, top);
-
-    popover.style.top = `${top}px`;
-    popover.style.left = `${left}px`;
-  });
+  popover.style.top = `${Math.round(top)}px`;
+  popover.style.left = `${Math.round(left)}px`;
 }
 
 function closeMessageActionsModal() {
@@ -1383,20 +1392,31 @@ function renderForwardTargets(targets) {
   if (!container) return;
 
   if (targets.length === 0) {
-    container.innerHTML = '<div style="font-size:11px;color:#555;padding:8px;text-align:center">Hedef bulunamadı</div>';
+    container.innerHTML = '<div style="font-size:11px;color:var(--text-3);padding:24px;text-align:center;font-weight:700">Yönlendirilecek hedef bulunamadı</div>';
     return;
   }
 
   container.innerHTML = targets.map(t => {
+    const avatar = t.is_group 
+      ? '<div class="avatar avatar-sm" style="background:rgba(255,255,255,0.08);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;border:1px solid rgba(255,255,255,0.12)">G</div>' 
+      : renderAvatar(t, 'avatar avatar-sm');
+    const subtitle = t.is_group ? 'Grup Sohbeti' : 'Direkt Mesaj';
     return `
-      <div class="group-member-row" style="cursor:pointer;" onclick="sendForwardedMessage(${t.is_group}, '${esc(t.username)}', ${t.id})">
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${t.is_group 
-            ? '<div class="avatar avatar-sm" style="background:#333;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;">G</div>' 
-            : renderAvatar(t, 'avatar avatar-sm')}
-          <span style="font-weight:800;font-size:13px;color:#fff">${esc(t.username)}</span>
+      <div class="forward-target-item" onclick="sendForwardedMessage(${t.is_group}, '${esc(t.username)}', ${t.id})">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          ${avatar}
+          <div style="min-width:0;display:flex;flex-direction:column;gap:1px;">
+            <span style="font-weight:800;font-size:13px;color:var(--t-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.username)}</span>
+            <span style="font-size:10px;color:var(--text-3);font-weight:600;">${subtitle}</span>
+          </div>
         </div>
-        <button class="mono-btn-primary" style="width:auto;padding:6px 12px;font-size:9px;font-weight:800;">GÖÖNDER</button>
+        <button class="forward-action-btn" onclick="event.stopPropagation(); sendForwardedMessage(${t.is_group}, '${esc(t.username)}', ${t.id})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+            <polyline points="15 17 20 12 15 7" />
+            <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+          </svg>
+          <span>YÖNLENDİR</span>
+        </button>
       </div>
     `;
   }).join('');
@@ -1803,9 +1823,9 @@ function updateShareSubmitBtnState(count = 0, loading = false) {
   if (!btn) return;
   btn.disabled = loading || count === 0;
   const sendSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
-  let text = 'GÖÖNDER';
-  if (loading) text = 'GÖÖNDERİLİYOR...';
-  else if (count > 0) text = `GÖÖNDER (${count})`;
+  let text = 'GÖNDER';
+  if (loading) text = 'GÖNDERİLİYOR...';
+  else if (count > 0) text = `GÖNDER (${count})`;
 
   btn.innerHTML = `${sendSvg}<span class="share-btn-text">${text}</span>`;
 }
@@ -2126,92 +2146,149 @@ function closeChatPostViewModal() {
 }
 
 // ============================================================
-// MOBILE SWIPE-TO-REACT EVENT GESTURES
+// MOBILE SWIPE-TO-REPLY & LONG-PRESS GESTURES
 // ============================================================
 let _swipeStartX = 0;
+let _swipeStartY = 0;
 let _swipeCurrentX = 0;
+let _swipeCurrentY = 0;
 let _swipeActiveEl = null;
+let _swipeIndicatorEl = null;
+let _swipeIsHorizontal = false;
 let _swipeVibrated = false;
+let _msgLongPressTimer = null;
 
 function handleTouchStart(event, messageId, content, fromUsername, isMe) {
   const touch = event.touches[0];
   _swipeStartX = touch.clientX;
+  _swipeStartY = touch.clientY;
   _swipeCurrentX = touch.clientX;
-  _swipeVibrated = false; // Reset haptic trigger state
+  _swipeCurrentY = touch.clientY;
+  _swipeIsHorizontal = false;
+  _swipeVibrated = false;
   
-  _swipeActiveEl = event.currentTarget;
+  _swipeActiveEl = event.currentTarget || event.target.closest('.msg-body-wrapper');
+  _swipeIndicatorEl = document.getElementById(`swipe-icon-${messageId}`);
+
   if (_swipeActiveEl) {
     _swipeActiveEl.style.transition = 'none';
   }
+  if (_swipeIndicatorEl) {
+    _swipeIndicatorEl.style.transition = 'none';
+    _swipeIndicatorEl.style.opacity = '0';
+    _swipeIndicatorEl.style.transform = 'translateY(-50%) scale(0.6)';
+    _swipeIndicatorEl.classList.remove('ready');
+  }
+
+  // Long press timer for opening actions popover
+  clearTimeout(_msgLongPressTimer);
+  _msgLongPressTimer = setTimeout(() => {
+    if (!_swipeIsHorizontal && Math.abs(_swipeCurrentX - _swipeStartX) < 12 && Math.abs(_swipeCurrentY - _swipeStartY) < 12) {
+      triggerHapticFeedback();
+      openMessageActionsMenu(event, messageId, content, fromUsername, isMe);
+    }
+  }, 480);
 }
 
 function triggerHapticFeedback() {
   if (navigator.vibrate) {
-    navigator.vibrate(15); // Android / Standard PWA haptic
+    navigator.vibrate(15);
   } else {
-    // iOS 18+ Taptic Engine Switch-Toggling Hack
     try {
       const input = document.createElement('input');
       input.setAttribute('type', 'checkbox');
-      input.setAttribute('switch', ''); // iOS switch layout trigger
+      input.setAttribute('switch', '');
       input.style.position = 'absolute';
       input.style.opacity = '0';
       input.style.pointerEvents = 'none';
       document.body.appendChild(input);
-      input.click(); // Trigger native WebKit toggle haptic feedback
-      input.remove(); // Cleanup immediately
-    } catch (e) {
-      console.warn('iOS haptic click workaround failed:', e);
-    }
+      input.click();
+      input.remove();
+    } catch (e) {}
   }
 }
 
-function handleTouchMove(event) {
+function handleTouchMove(event, messageId) {
   if (!_swipeActiveEl) return;
   const touch = event.touches[0];
   _swipeCurrentX = touch.clientX;
+  _swipeCurrentY = touch.clientY;
   
   const diffX = _swipeCurrentX - _swipeStartX;
-  // Allow swiping right (diffX > 0)
-  if (diffX > 0) {
-    const dragAmount = Math.min(diffX, 85);
+  const diffY = _swipeCurrentY - _swipeStartY;
+
+  // Determine gesture direction
+  if (!_swipeIsHorizontal) {
+    if (Math.abs(diffX) > 8 && Math.abs(diffX) > Math.abs(diffY) * 1.2) {
+      _swipeIsHorizontal = true;
+      clearTimeout(_msgLongPressTimer);
+    } else if (Math.abs(diffY) > 8) {
+      clearTimeout(_msgLongPressTimer);
+      return; // Normal vertical scrolling
+    }
+  }
+
+  // Drag right gesture
+  if (_swipeIsHorizontal && diffX > 0) {
+    clearTimeout(_msgLongPressTimer);
+    const maxDrag = 80;
+    // Fluid rubber-band drag amount
+    const dragAmount = Math.min(diffX * 0.65, maxDrag);
     _swipeActiveEl.style.transform = `translateX(${dragAmount}px)`;
-    
-    // Trigger a single short haptic vibration exactly when threshold is crossed
-    if (dragAmount >= 50 && !_swipeVibrated) {
-      triggerHapticFeedback();
-      _swipeVibrated = true;
+
+    const threshold = 42;
+    const progress = Math.min(dragAmount / threshold, 1);
+
+    if (_swipeIndicatorEl) {
+      _swipeIndicatorEl.style.opacity = (progress * 0.95).toFixed(2);
+      _swipeIndicatorEl.style.transform = `translateY(-50%) scale(${0.7 + progress * 0.35}) translateX(${dragAmount * 0.4}px)`;
+      
+      if (dragAmount >= threshold) {
+        _swipeIndicatorEl.classList.add('ready');
+        if (!_swipeVibrated) {
+          triggerHapticFeedback();
+          _swipeVibrated = true;
+        }
+      } else {
+        _swipeIndicatorEl.classList.remove('ready');
+        _swipeVibrated = false;
+      }
     }
     
-    // Prevent screen navigation/bounce while swiping bubbles
-    if (dragAmount > 15 && event.cancelable) {
+    if (event.cancelable) {
       event.preventDefault();
     }
   }
 }
 
 function handleTouchEnd(event, messageId, content, fromUsername, isMe) {
+  clearTimeout(_msgLongPressTimer);
   if (!_swipeActiveEl) return;
   
   const diffX = _swipeCurrentX - _swipeStartX;
+  const dragAmount = Math.min(diffX * 0.65, 80);
+  const wasTriggered = _swipeIsHorizontal && dragAmount >= 42;
   
-  // Smoothly slide back to normal
-  _swipeActiveEl.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+  // Spring bounce back to 0
+  _swipeActiveEl.style.transition = 'transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
   _swipeActiveEl.style.transform = 'translateX(0)';
   
-  // Trigger reply mode if swiped far enough (threshold: 50px)
-  if (diffX > 50) {
-    // Set active message reply mode
-    if (typeof setReplyMessage === 'function') {
-      // If content starts with post share identifier, sanitize display text for reply preview
-      let replyContentText = content;
-      if (replyContentText.startsWith('[POST_SHARE]:')) {
-        replyContentText = '📄 Paylaşılan Gönderi';
-      }
-      setReplyMessage(messageId, replyContentText, fromUsername);
+  if (_swipeIndicatorEl) {
+    _swipeIndicatorEl.style.transition = 'all 0.22s ease';
+    _swipeIndicatorEl.style.opacity = '0';
+    _swipeIndicatorEl.style.transform = 'translateY(-50%) scale(0.5)';
+    _swipeIndicatorEl.classList.remove('ready');
+  }
+
+  if (wasTriggered) {
+    let replyContentText = content;
+    if (replyContentText.startsWith('[POST_SHARE]:')) {
+      replyContentText = 'Paylaşılan Gönderi';
+    } else if (replyContentText.includes('[IMAGE]:')) {
+      replyContentText = 'Görsel';
     }
+    setReplyMessage(messageId, replyContentText, fromUsername);
     
-    // Focus chat input box and trigger virtual keyboard
     const chatInput = document.getElementById('chatInput');
     if (chatInput) {
       chatInput.focus();
@@ -2219,6 +2296,23 @@ function handleTouchEnd(event, messageId, content, fromUsername, isMe) {
   }
   
   _swipeActiveEl = null;
+  _swipeIndicatorEl = null;
+  _swipeIsHorizontal = false;
+}
+
+function handleTouchCancel(event, messageId) {
+  clearTimeout(_msgLongPressTimer);
+  if (_swipeActiveEl) {
+    _swipeActiveEl.style.transition = 'transform 0.2s ease';
+    _swipeActiveEl.style.transform = 'translateX(0)';
+  }
+  if (_swipeIndicatorEl) {
+    _swipeIndicatorEl.style.opacity = '0';
+    _swipeIndicatorEl.classList.remove('ready');
+  }
+  _swipeActiveEl = null;
+  _swipeIndicatorEl = null;
+  _swipeIsHorizontal = false;
 }
 
 // ============================================================

@@ -55,6 +55,10 @@ module.exports = function(db, auth, createAndPushNotification) {
     db.run('UPDATE friendships SET status = "accepted" WHERE id = ? AND friend_id = ?', [req.params.id, req.user.id], function() {
       if (this.changes > 0) {
         db.get('SELECT user_id FROM friendships WHERE id = ?', [req.params.id], (err, friendship) => {
+          if (friendship) {
+            // Delete the friend request notification upon accepting
+            db.run("DELETE FROM notifications WHERE type = 'friend_request' AND user_id = ? AND from_user_id = ?", [req.user.id, friendship.user_id]);
+          }
           db.run('INSERT INTO friendships (user_id, friend_id, status) VALUES (?, ?, "accepted")', [req.user.id, friendship.user_id], () => {
             createAndPushNotification(friendship.user_id, 'friend_accept', req.user.id);
             res.json({ success: true });
@@ -88,6 +92,9 @@ module.exports = function(db, auth, createAndPushNotification) {
         return res.status(403).json({ error: 'Yetkisiz' });
       db.run('DELETE FROM friendships WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)',
         [f.user_id, f.friend_id, f.friend_id, f.user_id], () => {
+        // Delete pending friend request notification if any
+        db.run("DELETE FROM notifications WHERE type = 'friend_request' AND ((user_id = ? AND from_user_id = ?) OR (user_id = ? AND from_user_id = ?))",
+          [f.friend_id, f.user_id, f.user_id, f.friend_id]);
         res.json({ success: true });
       });
     });

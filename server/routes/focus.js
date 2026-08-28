@@ -17,7 +17,7 @@ module.exports = function(db, auth, upload, sendDetailedSessionAbandonedNotifica
     const startSession = (finalTagId) => {
       db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE user_id = ? AND status = "active"', [req.user.id], () => {
         db.run(
-          'INSERT INTO sessions (user_id, start_time, status, party_id, mode, target_duration, break_duration, feeling, category_id, tag_id, pomo_state, pomo_round, state_start_time) VALUES (?, datetime("now"), "active", ?, ?, ?, ?, ?, ?, ?, "focusing", 0, datetime("now"))',
+          'INSERT INTO sessions (user_id, start_time, status, party_id, mode, target_duration, break_duration, feeling, category_id, tag_id, pomo_state, pomo_round, state_start_time, accumulated_duration) VALUES (?, datetime("now"), "active", ?, ?, ?, ?, ?, ?, ?, "focusing", 0, datetime("now"), 0)',
           [req.user.id, partyId, mode, targetDuration, breakDuration, feeling, categoryId, finalTagId],
           function() { res.json({ sessionId: this.lastID }); }
         );
@@ -59,9 +59,26 @@ module.exports = function(db, auth, upload, sendDetailedSessionAbandonedNotifica
         return res.status(400).json({ error: 'Aktif bir seans bulunamadı veya seans zaten sonlandırılmış.' });
       }
 
-      const now = new Date();
-      const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
-      let rawDuration = customDuration !== null && !isNaN(customDuration) ? customDuration : Math.floor((now - start) / 1000);
+      let rawDuration = 0;
+      if (customDuration !== null && !isNaN(customDuration)) {
+        rawDuration = customDuration;
+      } else if (session.mode === 'pomodoro') {
+        let currentRoundSecs = 0;
+        if (session.pomo_state === 'focusing' || session.pomo_state === 'overtime') {
+          if (session.state_start_time) {
+            const stateStart = new Date(session.state_start_time.replace(' ', 'T') + 'Z');
+            const diffSecs = Math.max(0, Math.floor((Date.now() - stateStart.getTime()) / 1000));
+            const maxAllowed = (session.target_duration || 0) + 1800;
+            currentRoundSecs = Math.min(diffSecs, maxAllowed);
+          }
+        }
+        // If session is ending during a break, currentRoundSecs is 0 because break time is NOT focus time
+        rawDuration = (session.accumulated_duration || 0) + currentRoundSecs;
+      } else {
+        const now = new Date();
+        const start = new Date(session.start_time.replace(' ', 'T') + 'Z');
+        rawDuration = Math.floor((now - start) / 1000);
+      }
 
       if (isNaN(rawDuration) || rawDuration < 0) rawDuration = 0;
       const duration = Math.min(rawDuration, 43200);
@@ -117,14 +134,15 @@ module.exports = function(db, auth, upload, sendDetailedSessionAbandonedNotifica
         const diffSecs = Math.floor((Date.now() - stateStart) / 1000);
 
         let isExpired = false;
-        if (session.pomo_state === 'focusing') {
-          if (diffSecs >= (session.target_duration + 1800)) isExpired = true;
-        } else if (session.pomo_state === 'overtime') {
-          if (diffSecs >= 1800) isExpired = true;
+        if (session.pomo_state === 'focusing' || session.pomo_state === 'overtime') {
+          if (diffSecs >= ((session.target_duration || 0) + 1800)) isExpired = true;
+        } else if (session.pomo_state === 'break') {
+          if (diffSecs >= ((session.break_duration || 0) + 1800)) isExpired = true;
         }
 
         if (isExpired) {
-          db.run('UPDATE sessions SET status = "abandoned", end_time = datetime("now") WHERE id = ?', [session.id], () => {
+          const finalDuration = Math.min(session.accumulated_duration || 0, 43200);
+          db.run('UPDATE sessions SET status = "abandoned", duration = ?, end_time = datetime("now") WHERE id = ?', [finalDuration, session.id], () => {
             sendDetailedSessionAbandonedNotification(session.user_id, session.pomo_round);
           });
           return res.json(null);
@@ -139,14 +157,42 @@ module.exports = function(db, auth, upload, sendDetailedSessionAbandonedNotifica
     const { state, round } = req.body;
     if (!state) return res.status(400).json({ error: 'Geçersiz parametreler' });
 
-    db.run(
-      'UPDATE sessions SET pomo_state = ?, pomo_round = ?, state_start_time = datetime("now") WHERE user_id = ? AND status = "active"',
-      [state, round || 0, req.user.id],
-      (err) => {
-        if (err) return res.status(500).json({ error: 'Durum güncellenemedi' });
-        res.json({ success: true });
+    db.get('SELECT * FROM sessions WHERE user_id = ? AND status = "active"', [req.user.id], (err, session) => {
+      if (err || !session) return res.status(400).json({ error: 'Aktif seans bulunamadı' });
+
+      let newAccumulated = session.accumulated_duration || 0;
+
+      // When transitioning from focusing/overtime to break, accumulate this round's focus seconds
+      if ((session.pomo_state === 'focusing' || session.pomo_state === 'overtime') && state === 'break') {
+        if (session.state_start_time) {
+          const stateStart = new Date(session.state_start_time.replace(' ', 'T') + 'Z');
+          const elapsedSecs = Math.max(0, Math.floor((Date.now() - stateStart.getTime()) / 1000));
+          const maxAllowed = (session.target_duration || 0) + 1800;
+          const focusToAdd = Math.min(elapsedSecs, maxAllowed);
+          newAccumulated += focusToAdd;
+        }
       }
-    );
+
+      if (state === 'overtime') {
+        db.run(
+          'UPDATE sessions SET pomo_state = ?, pomo_round = ? WHERE id = ? AND status = "active"',
+          [state, round || 0, session.id],
+          (err2) => {
+            if (err2) return res.status(500).json({ error: 'Durum güncellenemedi' });
+            res.json({ success: true, accumulated_duration: newAccumulated });
+          }
+        );
+      } else {
+        db.run(
+          'UPDATE sessions SET pomo_state = ?, pomo_round = ?, state_start_time = datetime("now"), accumulated_duration = ? WHERE id = ? AND status = "active"',
+          [state, round || 0, newAccumulated, session.id],
+          (err2) => {
+            if (err2) return res.status(500).json({ error: 'Durum güncellenemedi' });
+            res.json({ success: true, accumulated_duration: newAccumulated });
+          }
+        );
+      }
+    });
   });
 
   // GET /api/sessions/unrated

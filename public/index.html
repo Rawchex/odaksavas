@@ -632,79 +632,73 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════════ -->
-  <!-- POST MODAL (new post)                                 -->
   <!-- ══════════════════════════════════════════════════════ -->
-  <div class="post-modal-overlay" id="postModalOverlay">
-    <div class="post-modal">
+  <!-- MODERN POST COMPOSE MODAL (NEW POST)                   -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="post-modal-overlay" id="postModalOverlay" onclick="if(event.target===this) closeCreatePostModal()">
+    <div class="post-modal-card" onclick="event.stopPropagation()">
+      <!-- Modal Header -->
       <div class="post-modal-header">
-        <div class="post-modal-author-wrap" id="postModalAuthor">
-          <!-- Rendered dynamically -->
+        <div class="post-modal-header-left">
+          <span class="post-modal-title">Yeni Gönderi</span>
         </div>
-        <span class="post-modal-close" onclick="closeCreatePostModal()">✕</span>
+        <button class="post-modal-close-btn" onclick="closeCreatePostModal()" aria-label="Kapat">✕</button>
       </div>
 
-      <div class="post-modal-scroll">
-      <div style="position:relative; width:100%;">
-        <textarea class="post-textarea" id="postTextarea" placeholder="Ne düşünüyorsun?" maxlength="280"></textarea>
-        <div class="post-char-counter" id="postCharCounter">280</div>
+      <!-- Author Row -->
+      <div class="post-modal-author-row" id="postModalAuthor">
+        <!-- Rendered dynamically via JS -->
       </div>
 
-      <!-- 1x1 Crop Viewport Area -->
-      <div id="postCropContainer"
-        style="display:none; flex-direction:column; align-items:center; width:100%; margin-top:12px;">
-        <div class="crop-viewport" id="postCropViewport">
-          <img id="postCropImg" class="crop-image" alt="Kırpılacak Görsel" draggable="false">
-          <div class="crop-grid-overlay"></div>
-          <button class="post-preview-remove-btn" onclick="clearPostImage()" aria-label="Fotoğrafı Kaldır">✕</button>
-        </div>
-        <div style="width:100%; display:flex; align-items:center; gap:8px; margin-top:8px; padding:0 12px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"
-            style="color:var(--text-3)">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input type="range" id="postCropZoom" min="1" max="3" step="0.01" value="1" style="flex:1;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"
-            style="color:var(--t-text-primary)">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </div>
-      </div>
+      <!-- Text Input Area -->
+      <div class="post-modal-body">
+        <textarea class="post-modal-textarea" id="postTextarea" placeholder="Neler düşünüyorsun?" maxlength="280" rows="3"></textarea>
 
-      <!-- Live Post Preview Card -->
-      <div id="postLivePreviewContainer"
-        style="width:100%; margin-top:16px; border-top:1px solid rgba(255,255,255,0.06); padding-top:16px;">
-        <div
-          style="font-size:9px; font-weight:800; color:var(--text-3); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">
-          Canlı Önizleme</div>
-        <div id="postLivePreviewCard" class="post-card"
-          style="margin:0; border:1px solid rgba(255,255,255,0.06); border-radius:12px; background:#020202; pointer-events:none;">
-          <!-- Live feed card preview goes here -->
+        <!-- Interactive Pro Image Cropper Viewport -->
+        <div id="postCropContainer" class="post-crop-container" style="display:none;">
+          <div class="post-crop-viewport" id="postCropViewport">
+            <img id="postCropImg" class="post-crop-img" draggable="false" alt="Kırpılacak Görsel">
+            <div class="post-crop-grid" id="postCropGrid">
+              <div class="grid-line v1"></div>
+              <div class="grid-line v2"></div>
+              <div class="grid-line h1"></div>
+              <div class="grid-line h2"></div>
+            </div>
+            <button type="button" class="post-crop-remove-btn" onclick="clearPostImage()" data-tooltip="Fotoğrafı Kaldır" aria-label="Fotoğrafı Kaldır">✕</button>
+          </div>
+
+          <!-- Zoom & Crop Controls -->
+          <div class="post-crop-controls">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="crop-zoom-icon min">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+            <input type="range" id="postCropZoomSlider" min="1" max="3" step="0.01" value="1" oninput="onPostCropZoom(this.value)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" class="crop-zoom-icon max">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </div>
         </div>
       </div>
 
-      </div>
-
-      <div class="post-modal-actions">
+      <!-- Modal Footer Action Bar -->
+      <div class="post-modal-footer">
         <div class="post-modal-tools">
-          <label class="post-image-label" for="postImageInput" data-tooltip="Fotoğraf Ekle" data-tooltip-pos="top" aria-label="Fotoğraf Ekle">
-            <svg viewBox="0 0 24 24">
+          <label class="post-tool-btn" for="postImageInput" data-tooltip="Fotoğraf Ekle" aria-label="Fotoğraf Ekle">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="4" />
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
           </label>
-          <input type="file" id="postImageInput" accept="image/*" style="display:none"
-            onchange="onPostImageSelected(this)">
+          <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="onPostImageSelected(this)">
         </div>
-        <button class="post-submit-btn" onclick="submitPost()" id="postSubmitBtn" disabled data-tooltip="Gönderi Paylaş" data-tooltip-pos="top" aria-label="Gönderi Paylaş">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-          <span>PAYLAŞ</span>
-        </button>
+
+        <div class="post-modal-submit-wrap">
+          <div class="post-char-counter" id="postCharCounter">280</div>
+          <button class="post-submit-btn" onclick="submitPost()" id="postSubmitBtn" disabled>
+            <span>PAYLAŞ</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -715,6 +709,91 @@
   <div class="modal-overlay" id="partyModal">
     <div class="modal-sheet" id="partyModalSheet">
       <div id="partyModalContent" style="display:flex; flex-direction:column; width:100%; height:100%; overflow:hidden;"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- PARTY CREATE MODAL (Dedicated Centered Private Modal) -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="party-create-modal-overlay" id="partyCreateModal" style="display:none;" onclick="if(event.target===this)closePartyCreateModal()">
+    <div class="party-create-modal-card">
+      <div class="party-create-header">
+        <div class="party-create-header-left">
+          <div class="party-create-header-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="party-create-title">BLUNK ODASI</div>
+            <div class="party-create-subtitle">Kendi blunk odanı başlat ve arkadaşlarını davet et!</div>
+          </div>
+        </div>
+        <button class="party-create-close-btn" onclick="closePartyCreateModal()" data-tooltip="Kapat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="party-create-body">
+        <!-- Room Name -->
+        <div class="party-create-field">
+          <label class="party-create-label" for="inlineCreatePartyName">
+            <span>LOBİ ADI</span>
+          </label>
+          <div class="party-create-input-wrap">
+            <div class="party-create-input-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+            </div>
+            <input class="party-create-input" id="inlineCreatePartyName" name="party_name_rand_field" autocomplete="new-password" placeholder="Örn: Gececi Tayfa, YKS Kampı, Deep Focus..." onkeydown="if(event.key==='Enter')submitCreateParty()">
+          </div>
+        </div>
+
+        <!-- Privacy Switch -->
+        <div class="party-create-privacy-card" onclick="togglePrivateCheckbox()">
+          <div class="party-create-privacy-left">
+            <div class="party-create-privacy-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div>
+              <div class="party-create-privacy-title">Özel Lobi</div>
+              <div class="party-create-privacy-desc">Bunu aktif edersen odana sadece davetliler katılabilir!</div>
+            </div>
+          </div>
+          <label class="party-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="inlineCreatePartyPrivate">
+            <span class="party-slider"></span>
+          </label>
+        </div>
+
+        <!-- Friends Invitation List -->
+        <div class="party-create-field">
+          <div class="party-create-label-row">
+            <div class="party-create-label-left">
+              <span class="party-create-label-text">ARKADAŞLARINI DAVET ET</span>
+              <span class="party-create-label-hint" id="lobbyInviteCountHint">(0 seçildi)</span>
+            </div>
+            <button type="button" class="party-create-search-btn" onclick="toggleFriendSearchInModal()" data-tooltip="Arkadaş Ara">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="party-create-search-box" id="partyCreateSearchBox" style="display:none;">
+            <input type="text" id="partyCreateFriendSearchInput" class="party-create-friend-search-input" placeholder="Arkadaş ara..." oninput="filterPartyCreateFriends()" autocomplete="off">
+          </div>
+
+          <div id="lobbyCreateFriendsList" class="party-create-friends-scroll"></div>
+        </div>
+      </div>
+
+      <div class="party-create-footer">
+        <button class="party-create-btn-submit" onclick="submitCreateParty()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>BLUNK!</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -755,14 +834,14 @@
   <!-- FRIEND LIST MODAL                                     -->
   <!-- ══════════════════════════════════════════════════════ -->
   <div class="modal-overlay" id="friendListModal" style="z-index: 1000100;">
-    <div class="modal-sheet" style="max-height:80dvh">
+    <div class="modal-sheet" style="max-height:85dvh; max-width:480px; margin:0 auto; border-radius:20px; width:100%;">
       <div class="modal-drag-handle"></div>
-      <div class="modal-header">
+      <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--t-border-subtle);">
         <span id="friendListTitle"
-          style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase">Arkadaşlar</span>
-        <span class="modal-close" onclick="closeFriendListModal()">✕</span>
+          style="font-size:13px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--t-text-primary);">Arkadaşlar</span>
+        <button class="modal-close" onclick="closeFriendListModal()" data-tooltip="Kapat" style="background:none;border:none;color:var(--t-text-muted);font-size:16px;cursor:pointer;padding:4px 8px;border-radius:6px;">✕</button>
       </div>
-      <div id="friendListContent" style="padding:0 0 20px"></div>
+      <div id="friendListContent" style="padding:0 0 16px;"></div>
     </div>
   </div>
 
@@ -1257,34 +1336,45 @@
       <!-- ── FEED PAGE ── -->
       <div class="page" id="feedPage">
         <!-- Minimalist Instagram-Style Topbar -->
-        <div class="topbar feed-topbar">
-          <span class="blunk-topbar-brand">BLUNK</span>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <button id="btnToggleFeedSearch" class="feed-icon-btn" onclick="toggleFeedSearch()" data-tooltip="Ara">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-            </button>
-            <button onclick="openCreatePostModal()" class="ig-create-btn">+ PAYLAŞ</button>
+        <!-- Unified Premium Sticky Feed Header -->
+        <header class="unified-feed-header" id="feedUnifiedHeader">
+          <div class="unified-feed-header-inner">
+            <div class="feed-header-left">
+              <span class="blunk-topbar-brand" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">BLUNK</span>
+            </div>
+
+            <!-- Centered Compact Segment Tabs -->
+            <nav class="feed-header-tabs" id="feedTabsRow">
+              <button class="feed-tab active" data-tab="discover" onclick="switchFeedTab('discover')">Sizin İçin</button>
+              <button class="feed-tab" data-tab="following" onclick="switchFeedTab('following')">Takip</button>
+              <button class="feed-tab" data-tab="questions" onclick="switchFeedTab('questions')">Sorular</button>
+              <button class="feed-tab" data-tab="saved" onclick="switchFeedTab('saved')">Kaydedilenler</button>
+            </nav>
+
+            <div class="feed-header-actions">
+              <button id="btnToggleFeedSearch" class="feed-icon-btn" onclick="toggleFeedSearch()" data-tooltip="Ara" aria-label="Ara">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </button>
+              <button onclick="openCreatePostModal()" class="feed-compose-btn" data-tooltip="Yeni Gönderi" aria-label="Paylaş">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="feed-compose-icon"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span class="feed-compose-text">Paylaş</span>
+              </button>
+            </div>
           </div>
-        </div>
+        </header>
 
         <!-- Clean Minimal Search Bar -->
-        <div class="feed-search-bar-wrap" id="feedSearchContainer" style="display:none;">
+        <div class="feed-search-bar-wrap" id="feedSearchContainer" style="display:none; position:relative;">
           <div class="feed-search-input-box">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#888" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="feedSearchInput" placeholder="Soru, matematik, kodlama veya kullanıcı ara..." autocomplete="off" onkeyup="handleFeedSearchInput(event)">
+            <input type="text" id="feedSearchInput" placeholder="Kullanıcı, soru veya konu ara..." autocomplete="off" onkeyup="handleFeedSearchInput(event)" onfocus="handleFeedSearchFocus()" onblur="handleFeedSearchBlur()">
             <button id="btnClearSearch" onclick="clearFeedSearch()" style="display:none; background:none; border:none; color:#888; cursor:pointer; font-size:14px;">✕</button>
           </div>
-        </div>
-
-        <!-- Minimalist Feed Tabs (Twitter Style) -->
-        <div class="feed-tabs" id="feedTabsRow">
-          <button class="feed-tab active" data-tab="discover" onclick="switchFeedTab('discover')">Sizin İçin</button>
-          <button class="feed-tab" data-tab="following" onclick="switchFeedTab('following')">Takip Edilenler</button>
-          <button class="feed-tab" data-tab="questions" onclick="switchFeedTab('questions')">Sorular</button>
-          <button class="feed-tab" data-tab="saved" onclick="switchFeedTab('saved')">Kaydedilenler</button>
+          <!-- Instagram Style User Search Dropdown -->
+          <div id="feedSearchDropdown" class="feed-search-dropdown" style="display:none;"></div>
         </div>
 
         <!-- Twitter-Style Vertical Timeline -->
@@ -1541,7 +1631,7 @@
 
   <!-- ── MESSAGE ACTIONS MODAL (Floating Popover) ── -->
   <div id="messageActionsModal"
-    style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.4);"
+    style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);"
     onclick="closeMessageActionsModal()">
     <div id="messageActionsPopover" class="msg-action-popover" onclick="event.stopPropagation()">
       <!-- Quick Reactions Grid (Pure SVG) -->
@@ -1599,6 +1689,42 @@
           <span>Mesajı Sil</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ── REACTION DETAILS MODAL ── -->
+  <div class="modal-overlay" id="reactionDetailsModal" style="z-index:100001;" onclick="closeReactionDetailsModal()">
+    <div class="modal-sheet" style="max-width:380px; max-height:75dvh;" onclick="event.stopPropagation()">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.08);">
+        <span style="font-size:12px; font-weight:800; letter-spacing:1.5px; color:var(--text-1);">TEPKİLER</span>
+        <button class="modal-close-btn" onclick="closeReactionDetailsModal()" style="background:none; border:none; color:var(--text-3); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="reactionDetailsList" style="padding:16px; display:flex; flex-direction:column; gap:8px; max-height:calc(75dvh - 70px); overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <!-- ── FORWARD MESSAGE MODAL ── -->
+  <div class="modal-overlay" id="forwardMessageModal" style="z-index:100002;" onclick="closeForwardModal()">
+    <div class="modal-sheet forward-modal-sheet" style="max-width:420px; max-height:80dvh;" onclick="event.stopPropagation()">
+      <div class="modal-drag-handle"></div>
+      <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.08);">
+        <span style="font-size:12px; font-weight:800; letter-spacing:1.5px; color:var(--text-1);">MESAJI YÖNLENDİR</span>
+        <button class="modal-close-btn" onclick="closeForwardModal()" style="background:none; border:none; color:var(--text-3); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="padding:14px 18px 6px;">
+        <div style="position:relative; width:100%;">
+          <input type="text" id="forwardSearchInput" class="mono-input" placeholder="Sohbet veya kişi ara..." oninput="filterForwardTargets(this.value)" style="width:100%; padding:10px 14px 10px 36px; border-radius:14px; box-sizing:border-box; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--t-text-primary); font-size:12.5px; outline:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-3); pointer-events:none;">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+      </div>
+      <div id="forwardTargetsList" style="padding:12px 18px 20px; display:flex; flex-direction:column; gap:8px; max-height:calc(80dvh - 130px); overflow-y:auto;"></div>
     </div>
   </div>
 
@@ -1729,7 +1855,7 @@
   </div>
 
   <!-- ── SHARE POST MODAL (Instagram Style) ── -->
-  <div class="modal-overlay" id="sharePostModal" style="z-index:999999 !important;">
+  <div class="modal-overlay" id="sharePostModal" style="z-index:10000005 !important;">
     <div class="modal-sheet share-sheet" style="max-height:85dvh;">
       <div class="modal-drag-handle"></div>
       <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
@@ -2552,11 +2678,12 @@
     </div>
   </div>
 
-  <script src="/js/app.js?v=10.0.5"></script>
+  <script src="/js/app.js?v=10.0.9"></script>
   <script src="/js/activities.js?v=1.0.0"></script>
   <script src="/js/timer.js?v=4.1.1"></script>
   <script src="/js/feed.js?v=3.0.0"></script>
   <script src="/js/postModal.js?v=1.0.0"></script>
+  <script src="/js/userHoverCard.js?v=1.0.0"></script>
   <script src="/js/profile.js?v=3.0.2"></script>
   <script src="/js/party.js?v=3.0.1"></script>
   <script src="/js/room-management.js?v=1.1.0"></script>
@@ -2590,6 +2717,8 @@
 
   // ─── UNIVERSAL MOBILE MODAL BACKDROP & ESCAPE HANDLER ─────────────
   function closeAllActiveModals() {
+    if (typeof window.closeHoverCard === 'function') window.closeHoverCard();
+
     // 1. Class based modals (.open)
     document.querySelectorAll('.modal-overlay.open, .post-modal-overlay.open, .img-fullscreen.open, .register-modal-overlay.active').forEach(modal => {
       modal.classList.remove('open');
@@ -2700,56 +2829,6 @@
       <div style="margin-top:18px;font-size:12.5px;color:#949ba4;cursor:pointer;text-align:center;font-weight:600;" onclick="closeRegisterModal()">
         Zaten bir hesabın var mı? <span style="color:#5865f2;text-decoration:underline;">Giriş Yap</span>
       </div>
-  </div>
-
-  <!-- ── SHARE POST MODAL ── -->
-  <div class="modal-overlay" id="sharePostModal" onclick="if(event.target===this) closeSharePostModal()">
-    <div class="share-modal-card" onclick="event.stopPropagation()">
-      <div class="share-modal-header">
-        <div>
-          <div style="font-size:16px; font-weight:800; color:var(--text-primary, #fff);">Gönderiyi Paylaş</div>
-          <div style="font-size:12px; color:var(--text-muted, #aaa);">Bağlantıyı kopyala veya arkadaşlarına gönder</div>
-        </div>
-        <button class="modal-close-btn" onclick="closeSharePostModal()">✕</button>
-      </div>
-
-      <!-- Quick External Action Buttons -->
-      <div class="share-quick-actions">
-        <button class="share-quick-btn" onclick="copyPostShareLink()">
-          <div class="share-icon-wrap" style="background:rgba(99,102,241,0.15); color:#6366f1;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </div>
-          <span>Kopyala</span>
-        </button>
-
-        <button class="share-quick-btn" onclick="sharePostToWhatsApp()">
-          <div class="share-icon-wrap" style="background:rgba(37,211,102,0.15); color:#25D366;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.15 4.198 4.293-1.127z"/></svg>
-          </div>
-          <span>WhatsApp</span>
-        </button>
-
-        <button class="share-quick-btn" onclick="sharePostToInstagram()">
-          <div class="share-icon-wrap" style="background:rgba(225,48,108,0.15); color:#E1306C;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-          </div>
-          <span>Instagram</span>
-        </button>
-      </div>
-
-      <!-- Direct BLUNK Friends Target Search -->
-      <div style="margin:16px 0 10px 0;">
-        <input type="text" id="sharePostSearchInput" placeholder="Sohbet veya arkadaş ara..." oninput="filterShareTargets(this.value)" class="input-field" style="width:100%; border-radius:12px; font-size:13px; box-sizing:border-box;">
-      </div>
-
-      <div id="sharePostTargetsList" class="share-targets-grid"></div>
-
-      <!-- Message Note & Submit Button -->
-      <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
-        <input type="text" id="sharePostMessageInput" placeholder="Bir not ekle (isteğe bağlı)..." class="input-field" style="flex:1; border-radius:12px; font-size:13px; box-sizing:border-box;">
-        <button id="sharePostSubmitBtn" onclick="submitSharePost()" class="mono-btn-primary" style="padding:10px 20px; font-size:12px; border-radius:12px;">Gönder</button>
-      </div>
-    </div>
   </div>
 
   <!-- 3D Medal Engine Dependencies -->

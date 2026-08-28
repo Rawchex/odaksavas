@@ -8,7 +8,8 @@
  *   const { getRedis, getPubClient, getSubClient, isRedisEnabled } = require('./redis');
  */
 
-const isRedisEnabled = !!process.env.REDIS_URL;
+const redisUrl = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL || process.env.REDISURL;
+const isRedisEnabled = !!redisUrl;
 
 let _client = null;
 let _pub    = null;
@@ -108,15 +109,15 @@ function init() {
       enableReadyCheck: true,
       lazyConnect: false,
     };
-    _client = new Redis(process.env.REDIS_URL, opts);
-    _pub    = new Redis(process.env.REDIS_URL, opts);
-    _sub    = new Redis(process.env.REDIS_URL, opts);
+    _client = new Redis(redisUrl, opts);
+    _pub    = new Redis(redisUrl, opts);
+    _sub    = new Redis(redisUrl, opts);
 
     _client.on('error', (err) => console.error('[Redis] Client error:', err.message));
     _pub.on('error',    (err) => console.error('[Redis] Pub error:',    err.message));
     _sub.on('error',    (err) => console.error('[Redis] Sub error:',    err.message));
 
-    console.log('[Redis] Connected to Redis:', process.env.REDIS_URL.split('@').pop());
+    console.log('[Redis] Connected to Redis:', redisUrl.split('@').pop());
   } else {
     console.log('[Redis] REDIS_URL not set — using in-memory fallback (single-process mode)');
     _client = new InMemoryRedisMock();

@@ -53,6 +53,7 @@ db.serialize(() => {
     `ALTER TABLE sessions ADD COLUMN pomo_state TEXT DEFAULT 'focusing'`,
     `ALTER TABLE sessions ADD COLUMN pomo_round INTEGER DEFAULT 0`,
     `ALTER TABLE sessions ADD COLUMN state_start_time DATETIME`,
+    `ALTER TABLE sessions ADD COLUMN accumulated_duration INTEGER DEFAULT 0`,
   ];
   sessionCols.forEach(sql => db.run(sql, () => {}));
 

@@ -1472,16 +1472,13 @@ function setupUserSpeechAnalyser(username, mediaStream) {
       source.connect(gainNode);
       gainNode.connect(analyser);
       analyser.connect(window._audioContext.destination);
-      // Native element stays muted — WebAudio is the sole playback path
       const audio = window._userAudioElements[username];
       if (audio) {
         audio.muted = true;
         audio.volume = 0;
       }
     } else {
-      gainNode.gain.value = 0; // Never play own voice back
-      source.connect(gainNode);
-      gainNode.connect(analyser);
+      source.connect(analyser);
     }
 
     window._userAudioNodes[username] = { source, analyser, gainNode };
@@ -1502,8 +1499,8 @@ function setupUserSpeechAnalyser(username, mediaStream) {
         }
         const level = Math.min(1, Math.sqrt(power / dataArray.length) * 7);
 
-        const isMutedSelf = username === currentUser?.username && (window._micMuted || window._deafened);
-        const isSpeaking  = level > window._voiceActivityThreshold && !window._deafened && !window._userLocalMuted[username] && !isMutedSelf;
+        const isMutedSelf = username === currentUser?.username && (window._micMuted || window._deafened || window._serverMuted);
+        const isSpeaking  = level > (window._voiceActivityThreshold || 0.035) && !window._deafened && !window._userLocalMuted[username] && !isMutedSelf;
 
         const avatarEls = document.querySelectorAll(`#member-card-${username} .avatar, .avatar-user-${username}, .avatar[data-username="${username}"]`);
         avatarEls.forEach(el => el.classList.toggle('is-speaking', isSpeaking));
@@ -1513,8 +1510,13 @@ function setupUserSpeechAnalyser(username, mediaStream) {
           el.classList.toggle('is-speaking', isSpeaking);
           el.style.setProperty('--voice-level', String(level));
         });
+
+        const memberCard = document.getElementById(`member-card-${username}`);
+        if (memberCard) {
+          memberCard.classList.toggle('is-speaking', isSpeaking);
+        }
       } catch(e){}
-      setTimeout(checkSpeech, 120);
+      setTimeout(checkSpeech, 100);
     };
     checkSpeech();
   } catch(e) { console.warn('[VoiceChat] Speech analyser failed for:', username, e); }
@@ -1548,24 +1550,17 @@ function updateSelfVoiceUI() {
     const isDeaf = window._deafened;
     deafBtn.setAttribute('data-tooltip', isDeaf ? 'Sağırlığı Kaldır' : 'Sağırlaştır');
     deafBtn.setAttribute('title',        isDeaf ? 'Sağırlığı Kaldır' : 'Sağırlaştır');
-    deafBtn.classList.toggle('deafened', isDeaf);
+    deafBtn.classList.toggle('muted', isDeaf);
     deafBtn.innerHTML = isDeaf
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2c0-.58.07-1.14.2-1.68"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 1 2 2h1a2 2 0 0 1 2-2v-3a2 2 0 0 1-2-2H3z"/></svg>`;
   }
 
-  // Screen share button state
-  const ssBtn = document.getElementById('voiceScreenShareBtn');
-  if (ssBtn) {
-    const isSharing = !!window._screenStream;
-    ssBtn.classList.toggle('active', isSharing);
-    ssBtn.setAttribute('data-tooltip', isSharing ? 'Paylaşımı Durdur' : 'Ekran Paylaş');
-    ssBtn.style.color = isSharing ? '#23a55a' : '';
-  }
+  updateLobbyVoiceBadges();
 }
 
 function updateLobbyVoiceBadges() {
-  Object.keys(window._partyVoiceMembers).forEach(username => {
+  Object.keys(window._partyVoiceMembers || {}).forEach(username => {
     const member          = window._partyVoiceMembers[username];
     const badgeContainer  = document.getElementById(`voice-badge-${username}`);
     if (!badgeContainer) return;
@@ -1586,6 +1581,8 @@ function updateLobbyVoiceBadges() {
       iconsHtml += `<span class="voice-badge-icon deafened" title="Kulaklığı Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg></span>`;
     } else if (isMuted) {
       iconsHtml += `<span class="voice-badge-icon muted" title="Susturulmuş"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
+    } else {
+      iconsHtml += `<span class="voice-badge-icon unmuted" title="Mikrofon Açık"><svg viewBox="0 0 24 24" fill="none" stroke="#23a55a" stroke-width="2.5" width="12" height="12"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
     }
     if (badgeContainer.dataset.voiceStatus !== iconsHtml) {
       badgeContainer.innerHTML = iconsHtml;
@@ -1604,6 +1601,8 @@ function updateLobbyVoiceBadges() {
       selfIcons += `<span class="voice-badge-icon deafened" title="Kulaklığınız Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 14c0-4.42-3.58-8-8-8h-2c-1.34 0-2.58.33-3.66.91M4.77 4.77A8 8 0 0 0 3 10v3a5 5 0 0 0 5 5h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5v-2"/><path d="M15 12h4v3a5 5 0 0 1-2.2 4.13"/></svg></span>`;
     } else if (window._micMuted) {
       selfIcons += `<span class="voice-badge-icon muted" title="Mikrofonunuz Kapalı"><svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" width="12" height="12"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
+    } else {
+      selfIcons += `<span class="voice-badge-icon unmuted" id="selfMicLiveIcon" title="Mikrofonunuz Açık"><svg viewBox="0 0 24 24" fill="none" stroke="#23a55a" stroke-width="2.5" width="12" height="12"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></span>`;
     }
     if (selfBadge.dataset.voiceStatus !== selfIcons) {
       selfBadge.innerHTML = selfIcons;
