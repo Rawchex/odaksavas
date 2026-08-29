@@ -157,6 +157,7 @@ window.FeedEngine = {
     }
 
     list.innerHTML = html;
+    observeFeedVideos();
   },
 
   async toggleRepost(postId) {
@@ -245,25 +246,44 @@ window.handleTweetReplyClick = function(postId) {
 };
 
 window.renderTweetCard = function(p, options = {}) {
-  const hasImage = !!p.image;
+  const hasMedia = !!p.image;
+  const isVideo = p.image && /\.(mp4|webm|mov|m4v|ogg)$/i.test(p.image);
   const isThreadView = !!options.isThreadView;
+  const activeUser = typeof currentUser !== 'undefined' ? currentUser : null;
+  const isOwnPost = activeUser && (Number(activeUser.id) === Number(p.user_id) || activeUser.username === p.username);
   
   return `
-    <article class="tweet-card ${isThreadView ? 'thread-root-card' : ''}" data-post-id="${p.id}" ${!isThreadView ? `onclick="if(event.target.closest('.tweet-action-btn') || event.target.closest('a') || event.target.closest('.tweet-media-container') || event.target.closest('.tweet-avatar') || event.target.closest('.tweet-author-name') || event.target.closest('.tweet-author-handle') || event.target.closest('.blunk-hovercard-popover')) return; openGlobalPostModal(${p.id});"` : ''} style="${!isThreadView ? 'cursor:pointer;' : ''}">
+    <article class="tweet-card ${isThreadView ? 'thread-root-card' : ''}" data-post-id="${p.id}" ${!isThreadView ? `onclick="if(event.target.closest('.tweet-action-btn') || event.target.closest('.tweet-delete-btn') || event.target.closest('a') || event.target.closest('.tweet-media-container') || event.target.closest('.tweet-avatar') || event.target.closest('.tweet-author-name') || event.target.closest('.tweet-author-handle') || event.target.closest('.blunk-hovercard-popover')) return; openGlobalPostModal(${p.id});"` : ''} style="${!isThreadView ? 'cursor:pointer;' : ''}">
       <div class="tweet-avatar" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">
         ${renderAvatar({ username: p.username, profile_photo: p.profile_photo }, 'avatar avatar-sm')}
       </div>
       <div class="tweet-content-wrapper">
         <div class="tweet-header">
-          <span class="tweet-author-name" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">${esc(p.username)}</span>
-          <span class="tweet-author-handle" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">@${esc(p.username)}</span>
-          <span class="tweet-dot-separator">·</span>
-          <span class="tweet-time">${fmtPostTime(p.created_at)}</span>
+          <div class="tweet-header-user">
+            <span class="tweet-author-name" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">${esc(p.username)}</span>
+            <span class="tweet-author-handle" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">@${esc(p.username)}</span>
+            <span class="tweet-dot-separator">·</span>
+            <span class="tweet-time">${fmtPostTime(p.created_at)}</span>
+          </div>
+          ${isOwnPost ? `
+            <button class="tweet-delete-btn" onclick="deleteTweetPost(${p.id}); event.stopPropagation();" aria-label="Gönderiyi Sil" title="Gönderiyi Sil">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
+          ` : ''}
         </div>
         
         <div class="tweet-body">
           ${p.content ? `<div class="tweet-text">${formatMathAndMarkdown(p.content)}</div>` : ''}
-          ${hasImage ? `<div class="tweet-media-container" onclick="openMediaLightbox('${p.image}'); event.stopPropagation();"><img src="${p.image}" alt="Gönderi Medyası" class="tweet-media" loading="lazy"></div>` : ''}
+          ${hasMedia ? (
+            isVideo
+              ? `<div class="tweet-media-container tweet-video-wrapper"><video src="${esc(p.image)}" class="tweet-media tweet-video-player" controls playsinline preload="metadata" loop onclick="event.stopPropagation();"></video></div>`
+              : `<div class="tweet-media-container" onclick="openMediaLightbox('${esc(p.image)}'); event.stopPropagation();"><img src="${esc(p.image)}" alt="Gönderi Medyası" class="tweet-media" loading="lazy"></div>`
+          ) : ''}
         </div>
 
         <div class="tweet-actions-bar">
@@ -289,6 +309,31 @@ window.renderTweetCard = function(p, options = {}) {
       </div>
     </article>
   `;
+};
+
+window.deleteTweetPost = async function(postId) {
+  if (window.requireAuth && window.requireAuth()) return;
+  const confirmed = typeof window.showConfirm === 'function'
+    ? await window.showConfirm('Bu gönderiyi silmek istediğinizden emin misiniz?')
+    : confirm('Bu gönderiyi silmek istediğinizden emin misiniz?');
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('Gönderi silindi');
+      if (window.FeedEngine && window.FeedEngine.posts) {
+        window.FeedEngine.posts = window.FeedEngine.posts.filter(p => p.id !== postId);
+      }
+      document.querySelectorAll(`article[data-post-id="${postId}"]`).forEach(card => card.remove());
+      if (typeof closeGlobalPostModal === 'function') closeGlobalPostModal();
+      if (typeof loadMyProfile === 'function') loadMyProfile();
+    } else {
+      showToast('Gönderi silinemedi');
+    }
+  } catch {
+    showToast('Bağlantı hatası');
+  }
 };
 
 async function toggleTweetLike(postId) {
@@ -526,8 +571,9 @@ function closeCreatePostModal() {
 function closePostModal() { closeCreatePostModal(); }
 
 
-// ─── PRO CANVASCROPPER ENGINE ────────────────────────────────
-let _postImageFile = null;
+// ─── PRO MEDIA & CROPPER ENGINE ──────────────────────────────
+let _postMediaFile = null;
+let _postMediaType = null; // 'image' | 'video'
 let _cropState = {
   img: null,
   origW: 0,
@@ -558,14 +604,69 @@ function updatePostModalState() {
   }
   const submitBtn = document.getElementById('postSubmitBtn');
   if (submitBtn) {
-    submitBtn.disabled = (text.trim().length === 0 && !_postImageFile) || count < 0;
+    submitBtn.disabled = (text.trim().length === 0 && !_postMediaFile) || count < 0;
   }
 }
 
-function onPostImageSelected(input) {
+function onPostMediaSelected(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
-  _postImageFile = file;
+
+  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.name);
+
+  if (isVideo) {
+    // 1. File size check (35 MB)
+    if (file.size > 35 * 1024 * 1024) {
+      showToast('Video boyutu maksimum 35 MB olabilir.');
+      input.value = '';
+      return;
+    }
+
+    // 2. Video duration check (60 sec)
+    const tempVideo = document.createElement('video');
+    tempVideo.preload = 'metadata';
+    const tempUrl = URL.createObjectURL(file);
+    tempVideo.src = tempUrl;
+
+    tempVideo.onloadedmetadata = () => {
+      URL.revokeObjectURL(tempUrl);
+      if (tempVideo.duration > 60) {
+        showToast('Video süresi maksimum 60 saniye olabilir.');
+        clearPostMedia();
+        return;
+      }
+
+      _postMediaFile = file;
+      _postMediaType = 'video';
+
+      const cropContainer = document.getElementById('postCropContainer');
+      if (cropContainer) cropContainer.style.display = 'none';
+
+      const videoContainer = document.getElementById('postVideoPreviewContainer');
+      const videoPreview = document.getElementById('postVideoPreview');
+      if (videoPreview) {
+        videoPreview.src = URL.createObjectURL(file);
+      }
+      if (videoContainer) videoContainer.style.display = 'flex';
+
+      updatePostModalState();
+    };
+
+    tempVideo.onerror = () => {
+      showToast('Video formatı okunamadı');
+      clearPostMedia();
+    };
+    return;
+  }
+
+  // Handle Image Upload with Crop Engine
+  _postMediaFile = file;
+  _postMediaType = 'image';
+
+  const videoContainer = document.getElementById('postVideoPreviewContainer');
+  const videoPreview = document.getElementById('postVideoPreview');
+  if (videoContainer) videoContainer.style.display = 'none';
+  if (videoPreview) videoPreview.src = '';
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -585,9 +686,9 @@ function onPostImageSelected(input) {
       if (container) container.style.display = 'flex';
 
       // Measure viewport
-      const rect = viewport ? viewport.getBoundingClientRect() : { width: 340, height: 340 };
-      _cropState.viewportW = rect.width || 340;
-      _cropState.viewportH = rect.height || 340;
+      const rect = viewport ? viewport.getBoundingClientRect() : null;
+      _cropState.viewportW = (rect && rect.width > 0) ? rect.width : (viewport ? (viewport.clientWidth || 340) : 340);
+      _cropState.viewportH = (rect && rect.height > 0) ? rect.height : (viewport ? (viewport.clientHeight || 340) : 340);
 
       // Base scale so image fully covers the square viewport
       _cropState.baseScale = Math.max(
@@ -603,6 +704,8 @@ function onPostImageSelected(input) {
 
       if (cropImg) {
         cropImg.src = e.target.result;
+        cropImg.style.maxWidth = 'none';
+        cropImg.style.maxHeight = 'none';
         cropImg.style.width = `${_cropState.origW}px`;
         cropImg.style.height = `${_cropState.origH}px`;
       }
@@ -616,9 +719,21 @@ function onPostImageSelected(input) {
   reader.readAsDataURL(file);
 }
 
+function onPostImageSelected(input) {
+  onPostMediaSelected(input);
+}
+
+function stepPostCropZoom(delta) {
+  const slider = document.getElementById('postCropZoomSlider');
+  let newZ = (_cropState.zoom || 1) + delta;
+  newZ = Math.min(5, Math.max(1, Math.round(newZ * 100) / 100));
+  if (slider) slider.value = newZ.toString();
+  onPostCropZoom(newZ);
+}
+
 function onPostCropZoom(val) {
-  const newZoom = parseFloat(val) || 1;
-  const oldZoom = _cropState.zoom;
+  const newZoom = Math.min(5, Math.max(1, parseFloat(val) || 1));
+  const oldZoom = _cropState.zoom || 1;
   _cropState.zoom = newZoom;
 
   // Zoom centered relative to viewport
@@ -668,31 +783,68 @@ function initCropInteraction() {
   if (!viewport || viewport._hasCropListener) return;
   viewport._hasCropListener = true;
 
+  const activePointers = new Map();
+  let initialPinchDist = 0;
+  let initialPinchZoom = 1;
+
+  const getPinchDist = (p1, p2) => Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+
   const onPointerDown = (e) => {
     if (!_cropState.img) return;
-    _cropState.isDragging = true;
-    _cropState.startX = e.clientX;
-    _cropState.startY = e.clientY;
-    _cropState.origX = _cropState.x;
-    _cropState.origY = _cropState.y;
+    activePointers.set(e.pointerId, e);
     if (grid) grid.classList.add('active');
+
+    if (activePointers.size === 1) {
+      _cropState.isDragging = true;
+      _cropState.startX = e.clientX;
+      _cropState.startY = e.clientY;
+      _cropState.origX = _cropState.x;
+      _cropState.origY = _cropState.y;
+    } else if (activePointers.size === 2) {
+      _cropState.isDragging = false;
+      const pts = Array.from(activePointers.values());
+      initialPinchDist = getPinchDist(pts[0], pts[1]);
+      initialPinchZoom = _cropState.zoom;
+    }
     viewport.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e) => {
-    if (!_cropState.isDragging) return;
-    const dx = e.clientX - _cropState.startX;
-    const dy = e.clientY - _cropState.startY;
-    _cropState.x = _cropState.origX + dx;
-    _cropState.y = _cropState.origY + dy;
-    clampCropPosition();
-    applyCropTransform();
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, e);
+
+    if (activePointers.size === 2) {
+      const pts = Array.from(activePointers.values());
+      const dist = getPinchDist(pts[0], pts[1]);
+      if (initialPinchDist > 0) {
+        const factor = dist / initialPinchDist;
+        const newZ = Math.min(5, Math.max(1, initialPinchZoom * factor));
+        const slider = document.getElementById('postCropZoomSlider');
+        if (slider) slider.value = newZ.toString();
+        onPostCropZoom(newZ);
+      }
+    } else if (_cropState.isDragging && activePointers.size === 1) {
+      const dx = e.clientX - _cropState.startX;
+      const dy = e.clientY - _cropState.startY;
+      _cropState.x = _cropState.origX + dx;
+      _cropState.y = _cropState.origY + dy;
+      clampCropPosition();
+      applyCropTransform();
+    }
   };
 
   const onPointerUp = (e) => {
-    if (_cropState.isDragging) {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 0) {
       _cropState.isDragging = false;
       if (grid) grid.classList.remove('active');
+    } else if (activePointers.size === 1) {
+      const remaining = Array.from(activePointers.values())[0];
+      _cropState.isDragging = true;
+      _cropState.startX = remaining.clientX;
+      _cropState.startY = remaining.clientY;
+      _cropState.origX = _cropState.x;
+      _cropState.origY = _cropState.y;
     }
   };
 
@@ -705,23 +857,41 @@ function initCropInteraction() {
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
     const slider = document.getElementById('postCropZoomSlider');
-    let newZ = _cropState.zoom + (e.deltaY < 0 ? 0.1 : -0.1);
-    newZ = Math.min(3, Math.max(1, newZ));
+    let newZ = _cropState.zoom + (e.deltaY < 0 ? 0.15 : -0.15);
+    newZ = Math.min(5, Math.max(1, Math.round(newZ * 100) / 100));
     if (slider) slider.value = newZ.toString();
     onPostCropZoom(newZ);
   }, { passive: false });
 }
 
-function clearPostImage() {
-  _postImageFile = null;
+function clearPostMedia() {
+  _postMediaFile = null;
+  _postMediaType = null;
   _cropState.img = null;
+
   const input = document.getElementById('postImageInput');
   if (input) input.value = '';
-  const container = document.getElementById('postCropContainer');
-  if (container) container.style.display = 'none';
+
+  const cropContainer = document.getElementById('postCropContainer');
+  if (cropContainer) cropContainer.style.display = 'none';
+
   const cropImg = document.getElementById('postCropImg');
   if (cropImg) cropImg.src = '';
+
+  const videoContainer = document.getElementById('postVideoPreviewContainer');
+  if (videoContainer) videoContainer.style.display = 'none';
+
+  const videoPreview = document.getElementById('postVideoPreview');
+  if (videoPreview) {
+    videoPreview.pause();
+    videoPreview.src = '';
+  }
+
   updatePostModalState();
+}
+
+function clearPostImage() {
+  clearPostMedia();
 }
 
 // Generate the cropped image blob - strictly sending only the cropped area
@@ -763,8 +933,8 @@ function getCroppedBlob() {
 async function submitPost() {
   const textEl = document.getElementById('postTextarea');
   const content = textEl ? textEl.value.trim() : '';
-  if (!content && !_postImageFile) {
-    showToast('Bir şeyler yaz veya fotoğraf ekle');
+  if (!content && !_postMediaFile) {
+    showToast('Bir şeyler yaz veya medya ekle');
     return;
   }
 
@@ -774,8 +944,12 @@ async function submitPost() {
   const formData = new FormData();
   formData.append('content', content);
 
+  // If a video is selected
+  if (_postMediaType === 'video' && _postMediaFile) {
+    formData.append('image', _postMediaFile, _postMediaFile.name || 'post_video.mp4');
+  } 
   // If an image was cropped, export ONLY the cropped canvas blob
-  if (_postImageFile && _cropState.img) {
+  else if (_postMediaType === 'image' && _postMediaFile && _cropState.img) {
     try {
       const croppedBlob = await getCroppedBlob();
       if (croppedBlob) {
@@ -790,18 +964,35 @@ async function submitPost() {
 
   try {
     const res = await fetch('/api/posts', { method: 'POST', body: formData });
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
       closeCreatePostModal();
       showToast('Gönderi paylaşıldı!');
       if (window.FeedEngine) FeedEngine.loadFeed(true);
     } else {
-      showToast('Paylaşılamadı, tekrar dene');
+      showToast(data.error || 'Paylaşılamadı, tekrar dene');
     }
   } catch {
     showToast('Bağlantı hatası');
   }
 
   if (btn) btn.disabled = false;
+}
+
+function observeFeedVideos() {
+  const videos = document.querySelectorAll('.tweet-video-player');
+  if (!videos.length) return;
+  if (!window._feedVideoObserver) {
+    window._feedVideoObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const video = entry.target;
+        if (!entry.isIntersecting && !video.paused) {
+          video.pause();
+        }
+      });
+    }, { threshold: 0.3 });
+  }
+  videos.forEach(v => window._feedVideoObserver.observe(v));
 }
 
 function loadFeed() { window.FeedEngine.loadFeed(true); }

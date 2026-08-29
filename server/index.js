@@ -43,16 +43,11 @@ webpush.setVapidDetails(
 );
 
 const app = express();
-app.set('trust proxy', 1); // Railway runs behind a proxy
+app.set('trust proxy', 1); // Reverse proxy hop
 
 const db = require('./db');
-
-// Safe DB Schema Migration for BLUNK features
-db.serialize(() => {
-  db.run("ALTER TABLE users ADD COLUMN email TEXT", () => {});
-  db.run("ALTER TABLE sessions ADD COLUMN accumulated_duration INTEGER DEFAULT 0", () => {});
-  db.run("ALTER TABLE notifications ADD COLUMN read_at DATETIME", () => {});
-});
+const { runMigrations } = require('../scripts/migrate');
+runMigrations();
 
 global.partyVoiceStates = {};
 global.partySignals = {};
@@ -65,24 +60,39 @@ const { upload, getFileUrl } = require('./storage');
 // Redis store ensures cluster-wide rate limiting (not per-worker)
 const { getRedis, isRedisEnabled } = require('./redis');
 
-let rateLimitStore;
+let apiRateLimitStore;
+let authRateLimitStore;
 if (isRedisEnabled) {
-  const RedisStore = require('rate-limit-redis');
-  rateLimitStore = new RedisStore({ sendCommand: (...args) => getRedis().call(...args) });
+  const { RedisStore } = require('rate-limit-redis');
+  const redisClient = getRedis();
+  apiRateLimitStore = new RedisStore({
+    prefix: 'rl:api:',
+    sendCommand: (...args) => redisClient.call(...args)
+  });
+  authRateLimitStore = new RedisStore({
+    prefix: 'rl:auth:',
+    sendCommand: (...args) => redisClient.call(...args)
+  });
 }
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20000,
-  store: rateLimitStore, // undefined → in-memory (single-process safe)
+  store: apiRateLimitStore, // undefined → in-memory (single-process safe)
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { error: 'Çok fazla istek gönderdiniz, lütfen daha sonra tekrar deneyin.' }
 });
 
-// Auth specific Rate Limiter
+// Auth specific Rate Limiter (isolated to login/register/google-auth endpoints)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
-  store: rateLimitStore,
+  store: authRateLimitStore,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { error: 'Çok fazla giriş denemesi, lütfen 15 dakika bekleyin.' }
 });
 
@@ -641,8 +651,8 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
         `, [userId, userId]);
       }
       const finishPush = (sender = null) => {
-        const senderName = sender?.username ? `@${sender.username}` : 'Biri';
-        const senderAvatar = (sender?.profile_photo && !sender.profile_photo.includes('default-avatar.png'))
+        const senderName = sender?.username ? `@${sender.username}` : 'BLUNK';
+        const senderAvatar = sender?.profile_photo
           ? sender.profile_photo
           : '/favicon.svg';
 
@@ -682,6 +692,12 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
           title = 'Odaya Yeni Katılımcı';
           body = `${senderName} çalışma odana katıldı.`;
           targetUrl = partyId ? `/?party=${partyId}` : '/';
+        } else if (type === 'party_auto_closed') {
+          title = 'BLUNK';
+          const pName = options.partyName ? `"${options.partyName}"` : 'Çalışma';
+          body = `${pName} odanda hiç kimsecikler aktif olmadığı için odanı kapatmam gerekti... Bunu yapmak zorunda olduğum için üzgünüm.`;
+          targetUrl = '/';
+          tag = `party-closed-${partyId || userId}-${Date.now()}`;
         } else if (type === 'friend_request') {
           title = 'Arkadaşlık İsteği';
           body = `${senderName} sana arkadaşlık isteği gönderdi.`;
@@ -1203,50 +1219,69 @@ app.get('/api/users/:username', auth, (req, res) => {
         `, [req.user.id, user.id], cb);
       };
 
-      getSessions((err, sessions) => {
-        getPosts((err, posts) => {
-          getReposts((err, reposts) => {
-            // Count friends (accepted)
-            // Count followers (people following this user)
-            db.get('SELECT COUNT(*) as follower_count FROM friendships WHERE friend_id = ? AND status = "accepted"', [user.id], (err, c_followers) => {
-              // Count following (people followed by this user)
-              db.get('SELECT COUNT(*) as following_count FROM friendships WHERE user_id = ? AND status = "accepted"', [user.id], (err, c_following) => {
-                // Count posts
-                db.get('SELECT COUNT(*) as post_count FROM posts WHERE user_id = ?', [user.id], (err, c2) => {
-                  // Count reposts
-                  db.get('SELECT COUNT(*) as repost_count FROM reposts WHERE user_id = ?', [user.id], (err, c3) => {
-                    // Count mutual friends
-                    db.get(`
-                      SELECT COUNT(*) as mutual_count FROM friendships f1
-                      JOIN friendships f2 ON f1.friend_id = f2.friend_id
-                      WHERE f1.user_id = ? AND f2.user_id = ? AND f1.status = "accepted" AND f2.status = "accepted"
-                    `, [req.user.id, user.id], (err, c4) => {
-                    
-                    // Hide sensitive info if profile is locked
-                    const finalBio = isLocked ? 'Bu hesap gizli.' : user.bio;
-                    const finalHeight = isLocked ? null : user.height;
-                    const finalWeight = isLocked ? null : user.weight;
-                    const finalCv = isLocked ? null : user.cv;
+      const getActiveSession = (cb) => {
+        db.get(`
+          SELECT s.id, s.start_time, s.mode, s.target_duration, s.break_duration,
+                 s.pomo_state, s.pomo_round, s.state_start_time, s.accumulated_duration,
+                 COALESCE(t.name, s.activity) as activity,
+                 COALESCE(c.name, s.category) as category
+          FROM sessions s
+          LEFT JOIN categories c ON s.category_id = c.id
+          LEFT JOIN tags t ON s.tag_id = t.id
+          WHERE s.user_id = ? AND s.status = 'active'
+          ORDER BY s.start_time DESC LIMIT 1
+        `, [user.id], (err, activeSession) => {
+          cb(null, activeSession || null);
+        });
+      };
 
-                    const { password_hash, ...safeUser } = user;
-                    res.json({
-                      ...safeUser,
-                      bio: finalBio,
-                      height: finalHeight,
-                      weight: finalWeight,
-                      cv: finalCv,
-                      sessions: sessions || [],
-                      posts: posts || [],
-                      reposts: reposts || [],
-                      friend_count: c_following?.following_count || 0,
-                      follower_count: c_followers?.follower_count || 0,
-                      following_count: c_following?.following_count || 0,
-                      post_count: c2?.post_count || 0,
-                      repost_count: c3?.repost_count || 0,
-                      mutual_count: c4?.mutual_count || 0,
-                      friendship,
-                      is_locked: !!isLocked
-                    });
+      getActiveSession((err, activeSession) => {
+        getSessions((err, sessions) => {
+          getPosts((err, posts) => {
+            getReposts((err, reposts) => {
+              // Count friends (accepted)
+              // Count followers (people following this user)
+              db.get('SELECT COUNT(*) as follower_count FROM friendships WHERE friend_id = ? AND status = "accepted"', [user.id], (err, c_followers) => {
+                // Count following (people followed by this user)
+                db.get('SELECT COUNT(*) as following_count FROM friendships WHERE user_id = ? AND status = "accepted"', [user.id], (err, c_following) => {
+                  // Count posts
+                  db.get('SELECT COUNT(*) as post_count FROM posts WHERE user_id = ?', [user.id], (err, c2) => {
+                    // Count reposts
+                    db.get('SELECT COUNT(*) as repost_count FROM reposts WHERE user_id = ?', [user.id], (err, c3) => {
+                      // Count mutual friends
+                      db.get(`
+                        SELECT COUNT(*) as mutual_count FROM friendships f1
+                        JOIN friendships f2 ON f1.friend_id = f2.friend_id
+                        WHERE f1.user_id = ? AND f2.user_id = ? AND f1.status = "accepted" AND f2.status = "accepted"
+                      `, [req.user.id, user.id], (err, c4) => {
+                      
+                      // Hide sensitive info if profile is locked
+                      const finalBio = isLocked ? 'Bu hesap gizli.' : user.bio;
+                      const finalHeight = isLocked ? null : user.height;
+                      const finalWeight = isLocked ? null : user.weight;
+                      const finalCv = isLocked ? null : user.cv;
+
+                      const { password_hash, ...safeUser } = user;
+                      res.json({
+                        ...safeUser,
+                        bio: finalBio,
+                        height: finalHeight,
+                        weight: finalWeight,
+                        cv: finalCv,
+                        sessions: sessions || [],
+                        posts: posts || [],
+                        reposts: reposts || [],
+                        active_session: activeSession || null,
+                        friend_count: c_following?.following_count || 0,
+                        follower_count: c_followers?.follower_count || 0,
+                        following_count: c_following?.following_count || 0,
+                        post_count: c2?.post_count || 0,
+                        repost_count: c3?.repost_count || 0,
+                        mutual_count: c4?.mutual_count || 0,
+                        friendship,
+                        is_locked: !!isLocked
+                      });
+                      });
                     });
                   });
                 });
@@ -2229,21 +2264,28 @@ app.put('/api/parties/:id/name', auth, (req, res) => {
 });
 
 function cleanupEmptyParties() {
-  db.all('SELECT id, owner_id FROM parties', [], (err, parties) => {
+  db.all('SELECT id, owner_id, name FROM parties', [], (err, parties) => {
     if (err || !parties || parties.length === 0) return;
 
     parties.forEach(p => {
       db.all(`
-        SELECT pm.user_id, (u.last_seen > datetime('now', '-45 seconds')) as is_online
+        SELECT pm.user_id, 
+          (u.last_seen IS NOT NULL AND u.last_seen > datetime('now', '-5 minutes')) as is_recent,
+          EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.status = 'active') as is_focusing
         FROM party_members pm
         JOIN users u ON pm.user_id = u.id
         WHERE pm.party_id = ?
       `, [p.id], (err, members) => {
         if (err) return;
-        const onlineCount = (members || []).filter(m => Boolean(m.is_online)).length;
+        const hasActiveMembers = (members || []).some(m => Boolean(m.is_recent) || Boolean(m.is_focusing));
 
-        if (onlineCount === 0) {
-          console.log(`[Party Cleanup] Odak odasında (${p.id}) çevrim içi üye kalmadı. Oda siliniyor.`);
+        if (!hasActiveMembers) {
+          console.log(`[Party Cleanup] Odak odasında (${p.id} - ${p.name}) 5 dakikadır aktif üye kalmadı. Kurucuya bildirim gönderilip oda kapatılıyor.`);
+          
+          if (p.owner_id) {
+            createAndPushNotification(p.owner_id, 'party_auto_closed', 0, { partyId: p.id, partyName: p.name });
+          }
+
           db.run('DELETE FROM party_members WHERE party_id = ?', [p.id]);
           db.run('DELETE FROM party_channels WHERE party_id = ?', [p.id]);
           db.run('DELETE FROM party_messages WHERE party_id = ?', [p.id]);
@@ -2786,6 +2828,53 @@ app.put('/api/parties/:id/members/:targetUserId/voice-mute', auth, (req, res) =>
   });
 });
 
+// Voice session lifecycle: start/stop for tracking active device sessions
+app.post('/api/parties/:id/voice-start', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  const { deviceId, channelId } = req.body || {};
+  if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+
+  db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
+    if (err || !member) return res.status(403).json({ error: 'Yetkisiz' });
+
+    db.serialize(() => {
+      db.run('DELETE FROM voice_sessions WHERE party_id = ? AND user_id = ?', [partyId, req.user.id]);
+      db.run('INSERT INTO voice_sessions (party_id, user_id, device_id, channel_id, started_at, last_seen) VALUES (?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))', [partyId, req.user.id, deviceId, channelId || null], (insErr) => {
+        if (insErr) return res.status(500).json({ error: 'DB error' });
+
+        global.userActiveVoiceSessions = global.userActiveVoiceSessions || {};
+        global.userActiveVoiceSessions[req.user.id] = {
+          partyId,
+          channelId: channelId ? parseInt(channelId) : null,
+          deviceId,
+          lastSeen: Date.now()
+        };
+
+        res.json({ success: true });
+      });
+    });
+  });
+});
+
+app.post('/api/parties/:id/voice-stop', auth, (req, res) => {
+  const partyId = parseInt(req.params.id);
+  const { deviceId } = req.body || {};
+
+  db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
+    if (err || !member) return res.status(403).json({ error: 'Yetkisiz' });
+
+    db.run('DELETE FROM voice_sessions WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], () => {});
+
+    if (global.userActiveVoiceSessions && global.userActiveVoiceSessions[req.user.id]) {
+      if (!deviceId || global.userActiveVoiceSessions[req.user.id].deviceId === deviceId) {
+        delete global.userActiveVoiceSessions[req.user.id];
+      }
+    }
+
+    res.json({ success: true });
+  });
+});
+
 // POST handover: user claims voice chat on current device (disconnects previous device)
 app.post('/api/parties/:id/voice-handover', auth, (req, res) => {
   try {
@@ -2923,13 +3012,15 @@ setInterval(cleanupOldNotifications, 60 * 60 * 1000);
 
 app.get('/api/notifications', auth, (req, res) => {
   db.all(`
-    SELECT n.*, u.username, u.profile_photo,
+    SELECT n.*, 
+      COALESCE(u.username, 'BLUNK') as username, 
+      COALESCE(u.profile_photo, '/favicon.svg') as profile_photo,
       (SELECT content FROM posts WHERE id = n.post_id LIMIT 1) as post_content,
       (SELECT content FROM comments WHERE id = n.comment_id LIMIT 1) as comment_content,
       (SELECT name FROM parties WHERE id = n.party_id LIMIT 1) as party_name,
       (SELECT f.id FROM friendships f WHERE f.user_id = n.from_user_id AND f.friend_id = ? AND f.status = 'pending' LIMIT 1) as friendship_id
     FROM notifications n
-    JOIN users u ON n.from_user_id = u.id
+    LEFT JOIN users u ON n.from_user_id = u.id
     WHERE n.user_id = ?
     ORDER BY n.created_at DESC
     LIMIT 50

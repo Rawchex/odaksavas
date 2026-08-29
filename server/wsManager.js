@@ -28,25 +28,46 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const pub = getPubClient();
 const sub = getSubClient();
 
-// Subscribe to all party broadcast channels using pattern subscribe
-// We handle this by subscribing per-party on first connection.
 const subscribedChannels = new Set();
+
+sub.on('message', (channel, message) => {
+  try {
+    const data = typeof message === 'string' ? JSON.parse(message) : message;
+    const match = String(channel).match(/^party:(\d+):broadcast$/);
+    if (!match) return;
+    const partyId = parseInt(match[1]);
+    const partyConns = global.partyConnections.get(partyId);
+    if (!partyConns) return;
+
+    if (data && data.type === 'rtc_signal' && data.toUsername) {
+      const targetConn = Array.from(partyConns.values()).find(c => c.username && data.toUsername && c.username.toLowerCase() === data.toUsername.toLowerCase());
+      if (targetConn && targetConn.ws.readyState === WebSocket.OPEN) {
+        targetConn.ws.send(typeof message === 'string' ? message : JSON.stringify(message));
+      }
+      return;
+    }
+
+    // Deliver to all local WS clients in this party
+    const payload = typeof message === 'string' ? message : JSON.stringify(message);
+    partyConns.forEach((conn) => {
+      if (conn.ws.readyState === WebSocket.OPEN) {
+        conn.ws.send(payload);
+      }
+    });
+  } catch (e) {
+    console.error('[WS pub/sub message error]', e.message);
+  }
+});
 
 function ensureSubscribed(partyId) {
   const chan = `party:${partyId}:broadcast`;
   if (subscribedChannels.has(chan)) return;
   subscribedChannels.add(chan);
-
-  sub.subscribe(chan, (channel, message) => {
-    // Deliver to all local WS clients in this party
-    const partyConns = global.partyConnections.get(partyId);
-    if (!partyConns) return;
-    partyConns.forEach((conn) => {
-      if (conn.ws.readyState === WebSocket.OPEN) {
-        conn.ws.send(message);
-      }
-    });
-  });
+  try {
+    sub.subscribe(chan);
+  } catch (e) {
+    console.error('[WS ensureSubscribed error]', e.message);
+  }
 }
 
 // ─── Broadcast helpers ───────────────────────────────────────────────────────
@@ -149,6 +170,14 @@ function setupWebSocketServer(wss, db) {
           connections.set(userId, { ws, username });
           let socketDeviceId = null;
 
+          // Send current voice states to newly joined client immediately
+          try {
+            ws.send(JSON.stringify({
+              type: 'voice_state_list',
+              members: getVoiceStates(partyId)
+            }));
+          } catch (e) {}
+
           // ── Message handler ────────────────────────────────────────────────
           ws.on('message', (messageStr) => {
             try {
@@ -200,9 +229,9 @@ function setupWebSocketServer(wss, db) {
                 const { toUsername, signal } = message;
                 const partyConns = global.partyConnections.get(partyId);
                 if (partyConns) {
-                  const targetConn = Array.from(partyConns.values()).find(c => c.username === toUsername);
+                  const targetConn = Array.from(partyConns.values()).find(c => c.username && toUsername && c.username.toLowerCase() === toUsername.toLowerCase());
                   if (targetConn && targetConn.ws.readyState === WebSocket.OPEN) {
-                    targetConn.ws.send(JSON.stringify({ type: 'rtc_signal', fromUsername: username, signal }));
+                    targetConn.ws.send(JSON.stringify({ type: 'rtc_signal', fromUsername: username, toUsername, signal }));
                     return;
                   }
                 }

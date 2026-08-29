@@ -56,12 +56,11 @@ function getMicAudioConstraints(deviceId = window._selectedMicId) {
   const audio = {
     echoCancellation: processing.echoCancellation !== false,
     noiseSuppression: processing.noiseSuppression !== false,
-    autoGainControl: processing.autoGainControl !== false,
-    channelCount: 1,
-    sampleRate: 48000,
-    latency: { ideal: 0.02 }
+    autoGainControl: processing.autoGainControl !== false
   };
-  if (deviceId && deviceId !== 'default') audio.deviceId = { exact: deviceId };
+  if (deviceId && deviceId !== 'default') {
+    audio.deviceId = { ideal: deviceId };
+  }
   return audio;
 }
 
@@ -184,6 +183,7 @@ window._voiceSocket = null;
 
 function connectVoiceWebSocket(partyId) {
   if (window._voiceSocket) {
+    window._voiceSocket.onclose = null; // Prevent erroneous reconnect loop from old socket
     try { window._voiceSocket.close(); } catch(e) {}
     window._voiceSocket = null;
   }
@@ -223,8 +223,10 @@ function connectVoiceWebSocket(partyId) {
       }
       if (data.type === 'voice_state_list') {
         const serverMembers = data.members || {};
-        const ownVoiceState = Object.values(serverMembers).find(member => member.username === currentUser?.username);
+        console.log('[VoiceChat Debug] Received voice_state_list:', serverMembers);
+        
         const wasServerMuted = !!window._serverMuted;
+        const ownVoiceState = Object.values(serverMembers).find(member => member.username === currentUser?.username);
         window._serverMuted = !!ownVoiceState?.serverMuted;
         
         if (window._serverMuted) {
@@ -244,10 +246,21 @@ function connectVoiceWebSocket(partyId) {
             window._partyVoiceMembers[m.username] = m;
           }
         });
+        console.log('[VoiceChat Debug] Processed party members (excluding self):', window._partyVoiceMembers);
         updateLobbyVoiceBadges();
         await maintainPeerConnections();
 
       } else if (data.type === 'rtc_signal') {
+        const myName = (currentUser?.username || '').toLowerCase();
+        console.log('[VoiceChat Debug] Received rtc_signal from:', data.fromUsername, 'to:', data.toUsername, 'type:', data.signal?.type);
+        if (data.fromUsername && data.fromUsername.toLowerCase() === myName) {
+           console.log('[VoiceChat Debug] Dropping signal from self');
+           return;
+        }
+        if (data.toUsername && data.toUsername.toLowerCase() !== myName) {
+           console.log('[VoiceChat Debug] Dropping signal not meant for me. Intended for:', data.toUsername);
+           return;
+        }
         if (data.signal && data.signal._handover) {
           if (data.signal.newDeviceId !== getDeviceSessionId()) {
             handleVoiceHandoverDisconnect();
@@ -364,9 +377,8 @@ function connectVoiceWebSocket(partyId) {
 })();
 
 // ICE connection extra resiliency: try restartIce on transient disconnects
-const _origCreatePeerConnection = createPeerConnection;
 async function createPeerConnection(targetUsername, isInitiator) {
-  await _origCreatePeerConnection(targetUsername, isInitiator);
+  await _baseCreatePeerConnection(targetUsername, isInitiator);
   const pc = window._peerConnections[targetUsername];
   if (!pc) return;
   pc.addEventListener('connectionstatechange', async () => {
@@ -411,14 +423,22 @@ async function initVoiceChat(partyId, { force = false } = {}) {
   console.log('[VoiceChat] Initializing for party:', partyId);
 
   window._currentPartyId = partyId;
-  // Full cleanup without resetting partyId
-  stopVoiceChat(false);
   const initToken = ++window._voiceInitToken;
-  window._currentPartyId = partyId;
   updateVoiceConnectionStatus('connecting');
 
-  await loadRtcConfig();
-  if (initToken !== window._voiceInitToken || window._currentPartyId !== partyId) return;
+  // Start background tasks concurrently
+  loadRtcConfig().catch(() => {});
+  connectVoiceWebSocket(partyId);
+  startScreenShareStatePolling(partyId);
+
+  // Notify server of active voice session in background
+  try {
+    fetch(`/api/parties/${partyId}/voice-start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: getDeviceSessionId(), channelId: window._currentChannelId || null })
+    }).catch(() => {});
+  } catch (e) {}
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     console.warn('[VoiceChat] Insecure context / No mediaDevices API.');
@@ -449,11 +469,15 @@ async function initVoiceChat(partyId, { force = false } = {}) {
       window._localStream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch(e) {
       console.warn('[VoiceChat] Selected mic failed, falling back:', e);
-      window._localStream = await navigator.mediaDevices.getUserMedia({ audio: getMicAudioConstraints('default'), video: false });
+      try {
+        window._localStream = await navigator.mediaDevices.getUserMedia({ audio: getMicAudioConstraints('default'), video: false });
+      } catch (e2) {
+        console.warn('[VoiceChat] Default constraints failed, fallback to audio: true:', e2);
+        window._localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      }
     }
 
     // A newer device/profile/channel change may have started another init
-    // while permission was pending. Never let this stale stream start loops.
     if (initToken !== window._voiceInitToken || window._currentPartyId !== partyId) {
       window._localStream?.getTracks().forEach(t => t.stop());
       window._localStream = null;
@@ -462,12 +486,11 @@ async function initVoiceChat(partyId, { force = false } = {}) {
 
     setMicMuteState(window._micMuted);
 
-    // AudioContext
+    // AudioContext (lazy init)
     try {
-      window._audioContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 48000,
-        latencyHint: 'interactive'
-      });
+      if (!window._audioContext || window._audioContext.state === 'closed') {
+        window._audioContext = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+      }
       if (window._audioContext.state === 'suspended') {
         const resume = () => {
           if (window._audioContext?.state === 'suspended') window._audioContext.resume().catch(() => {});
@@ -477,20 +500,32 @@ async function initVoiceChat(partyId, { force = false } = {}) {
         document.addEventListener('click', resume);
         document.addEventListener('touchstart', resume);
       }
-    } catch(e) { console.warn('[VoiceChat] AudioContext init failed:', e); }
+    } catch(e) {}
 
-    // Build mic input gain pipeline so input volume slider actually works
     createMicGainPipeline(window._localStream);
+    const streamForAnalyser = window._localProcessedStream || window._localStream;
+    if (currentUser?.username) setupUserSpeechAnalyser(currentUser.username, streamForAnalyser);
 
-    if (currentUser?.username) setupUserSpeechAnalyser(currentUser.username, window._localStream);
+    // Add local stream tracks to any peer connections that were already negotiated
+    Object.values(window._peerConnections || {}).forEach(pc => {
+      try {
+        const audioTracks = window._localStream.getAudioTracks();
+        if (!audioTracks.length) return;
+        const track = audioTracks[0];
+        const audioTransceiver = pc.getTransceivers ? pc.getTransceivers().find(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio') : null;
+        if (audioTransceiver && audioTransceiver.sender) {
+          audioTransceiver.direction = 'sendrecv';
+          audioTransceiver.sender.replaceTrack(track).catch(() => {});
+        } else {
+          const senders = pc.getSenders();
+          const hasTrack = senders.some(s => s.track && s.track.kind === 'audio');
+          if (!hasTrack) pc.addTrack(track, window._localStream);
+        }
+      } catch(e) {}
+    });
 
-    connectVoiceWebSocket(partyId);
-    startScreenShareStatePolling(partyId);
-
-    // Notify server this device has started a voice session for handover/visibility
-    try {
-      fetch(`/api/parties/${partyId}/voice-start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: getDeviceSessionId(), channelId: window._currentChannelId || null }) }).catch(() => {});
-    } catch (e) {}
+    triggerVoiceStateUpdate();
+    await maintainPeerConnections();
 
     // Clear manual close flag once we've successfully started connecting
     window._voiceManualClose = false;
@@ -633,9 +668,6 @@ async function switchVoiceChannel(newChannelId) {
 
   // 5. Immediately establish peer connections for members in new channel
   await maintainPeerConnections();
-
-  // 6. Pull signals right away
-  await fetchVoiceSignals();
 
   // If no other members in channel, mark connected
   const sameChannelPeers = Object.keys(window._partyVoiceMembers || {}).filter(u => {
@@ -869,17 +901,30 @@ document.addEventListener('click', (e) => {
 // ─── PEER CONNECTION MANAGEMENT ──────────────────────────────
 async function maintainPeerConnections() {
   const allMembers = window._partyVoiceMembers || {};
+  const currentChan = window._currentChannelId ? parseInt(window._currentChannelId) : null;
+  const myName = (currentUser?.username || '').toLowerCase();
+
+  console.log(`[VoiceChat Debug] Running maintainPeerConnections. My channel: ${currentChan}, All members:`, allMembers);
+
   const sameChannel = Object.keys(allMembers).filter(uname => {
+    if (!uname || uname.toLowerCase() === myName) return false;
     const m = allMembers[uname];
-    if (!window._currentChannelId) return true;
-    return m && parseInt(m.channelId) === parseInt(window._currentChannelId);
+    if (!m) return false;
+    const memberChan = m.channelId ? parseInt(m.channelId) : null;
+    if (currentChan === null || memberChan === null || currentChan === memberChan) {
+      return true;
+    }
+    console.log(`[VoiceChat Debug] Skipping ${uname} because of channel mismatch. Mine: ${currentChan}, Theirs: ${memberChan}`);
+    return false;
   });
+
+  console.log('[VoiceChat Debug] Members in the same channel:', sameChannel);
 
   // Connect to same-channel members
   for (const username of sameChannel) {
     window._peerMissingTicks[username] = 0;
     if (!window._peerConnections[username]) {
-      const isInitiator = currentUser?.username < username;
+      const isInitiator = myName < username.toLowerCase();
       if (isInitiator) {
         console.log('[VoiceChat] Initiating connection to:', username);
         await createPeerConnection(username, true);
@@ -890,7 +935,7 @@ async function maintainPeerConnections() {
       if (pc.iceConnectionState === 'failed' || pc.connectionState === 'failed') {
         console.warn('[VoiceChat] Connection failed with', username, '- recovering...');
         closePeerConnection(username);
-        const isInitiator = currentUser?.username < username;
+        const isInitiator = myName < username.toLowerCase();
         if (isInitiator) await createPeerConnection(username, true);
       }
     }
@@ -911,17 +956,22 @@ async function maintainPeerConnections() {
   });
 }
 
-async function createPeerConnection(targetUsername, isInitiator) {
+async function _baseCreatePeerConnection(targetUsername, isInitiator) {
   if (window._peerConnections[targetUsername]) return;
 
   const pc = new RTCPeerConnection(RTC_CONFIG);
   window._peerConnections[targetUsername] = pc;
-
-  // Send processed stream (with input gain applied) if available,
-  // otherwise fall back to raw mic stream.
-  const streamToSend = window._localProcessedStream || window._localStream;
-  if (streamToSend) {
-    streamToSend.getAudioTracks().forEach(track => pc.addTrack(track, streamToSend));
+  if (window._localStream && window._localStream.getAudioTracks().length > 0) {
+    window._localStream.getAudioTracks().forEach(track => {
+      track.enabled = !window._micMuted && !window._serverMuted;
+      try {
+        pc.addTrack(track, window._localStream);
+      } catch(e) {}
+    });
+  } else {
+    try {
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    } catch(e) {}
   }
 
   // ICE candidates
@@ -994,10 +1044,8 @@ async function createPeerConnection(targetUsername, isInitiator) {
     }
 
     if (audio.srcObject !== remoteStream) audio.srcObject = remoteStream;
-    // Start muted — setupUserSpeechAnalyser will create the WebAudio path,
-    // then applyUserVolume decides the final state (WebAudio or native fallback).
-    audio.muted = true;
-    audio.volume = 0;
+
+    applyUserVolume(targetUsername);
 
     const playPromise = audio.play();
     if (playPromise !== undefined) {
@@ -1014,10 +1062,6 @@ async function createPeerConnection(targetUsername, isInitiator) {
     }
 
     setupUserSpeechAnalyser(targetUsername, remoteStream);
-    // Apply correct volume — if WebAudio nodes were created, they own playback.
-    // If WebAudio failed (no AudioContext), applyUserVolume unmutes native audio
-    // element as fallback so the user can still hear the remote peer.
-    applyUserVolume(targetUsername);
   };
 
   if (isInitiator) {
@@ -1106,22 +1150,34 @@ async function drainIceQueue(username, pc) {
 }
 
 async function handleIncomingSignal(fromUsername, signal) {
+  console.log(`[VoiceChat Debug] Handling incoming signal from ${fromUsername}, type: ${signal.type}`);
   if (!window._peerConnections[fromUsername]) {
+    console.log(`[VoiceChat Debug] No existing PC for ${fromUsername}, creating one...`);
     await createPeerConnection(fromUsername, false);
   }
   const pc = window._peerConnections[fromUsername];
-  if (!pc) return;
+  if (!pc) {
+     console.warn(`[VoiceChat Debug] Failed to create PC for ${fromUsername}`);
+     return;
+  }
 
   if (signal.type === 'offer') {
     try {
+      console.log(`[VoiceChat Debug] Processing offer from ${fromUsername}`);
+      if (pc.signalingState !== 'stable') {
+        console.log(`[VoiceChat Debug] Signaling state is ${pc.signalingState}, rolling back before setting remote offer`);
+        try { await pc.setLocalDescription({ type: 'rollback' }); } catch (_) {}
+      }
       await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
-      const answer = await pc.createAnswer();
+      const answer = await pc.createAnswer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
       await pc.setLocalDescription(answer);
+      console.log(`[VoiceChat Debug] Sending answer to ${fromUsername}`);
       await sendVoiceSignal(fromUsername, { type: 'answer', answer: pc.localDescription });
       await drainIceQueue(fromUsername, pc);
     } catch(e) { console.warn('[VoiceChat] Offer handling failed:', e); }
   } else if (signal.type === 'answer') {
     try {
+      console.log(`[VoiceChat Debug] Processing answer from ${fromUsername}`);
       await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
       await drainIceQueue(fromUsername, pc);
     } catch(e) { console.warn('[VoiceChat] Answer handling failed:', e); }
@@ -1137,27 +1193,18 @@ async function handleIncomingSignal(fromUsername, signal) {
   }
 }
 
-// ─── AUDIO CONTROLS ──────────────────────────────────────────
 function applyUserVolume(username) {
   const isLocallyMuted = !!window._userLocalMuted[username];
   const userPrefVol = window._userVolumes[username] !== undefined ? window._userVolumes[username] : getUserVolume(username);
   const effectiveVol = (isLocallyMuted || window._deafened) ? 0 : userPrefVol * (window._voiceOutputVolume ?? 1);
 
-  const nodes = window._userAudioNodes[username];
   const audio = window._userAudioElements[username];
-
-  if (nodes?.gainNode) {
-    // WebAudio pipeline owns playback — keep native element permanently muted
-    // to prevent double-audio echo when volume changes
-    try { nodes.gainNode.gain.value = effectiveVol; } catch(e){}
-    if (audio) {
-      audio.muted = true;
-      audio.volume = 0;
-    }
-  } else if (audio) {
-    // Fallback: no WebAudio available, use native element directly
+  if (audio) {
     audio.volume = Math.max(0, Math.min(1.0, effectiveVol));
-    audio.muted  = effectiveVol === 0;
+    audio.muted  = (effectiveVol === 0);
+    if (audio.paused && effectiveVol > 0) {
+      audio.play().catch(() => {});
+    }
   }
 }
 
@@ -1462,26 +1509,8 @@ function setupUserSpeechAnalyser(username, mediaStream) {
     const analyser = window._audioContext.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.55;
-    const gainNode = window._audioContext.createGain();
-    const isMe     = currentUser && username === currentUser.username;
-
-    if (!isMe) {
-      const userPrefVol = getUserVolume(username);
-      const effectiveVol = (!!window._userLocalMuted[username] || window._deafened) ? 0 : userPrefVol * (window._voiceOutputVolume ?? 1);
-      gainNode.gain.value = effectiveVol;
-      source.connect(gainNode);
-      gainNode.connect(analyser);
-      analyser.connect(window._audioContext.destination);
-      const audio = window._userAudioElements[username];
-      if (audio) {
-        audio.muted = true;
-        audio.volume = 0;
-      }
-    } else {
-      source.connect(analyser);
-    }
-
-    window._userAudioNodes[username] = { source, analyser, gainNode };
+    source.connect(analyser);
+    window._userAudioNodes[username] = { source, analyser };
 
     const dataArray = new Uint8Array(analyser.fftSize);
     const checkSpeech = () => {
@@ -1612,7 +1641,87 @@ function updateLobbyVoiceBadges() {
   }
 }
 
-async function openUserVoiceModal(username) {
+function getActiveSessionElapsedMinutes(session) {
+  if (!session) return 1;
+  let totalSecs = 0;
+  const now = Date.now();
+  if (session.mode === 'pomodoro') {
+    let currentRoundSecs = 0;
+    if (session.pomo_state === 'focusing' || session.pomo_state === 'overtime' || !session.pomo_state) {
+      if (session.state_start_time) {
+        const stateStart = new Date(String(session.state_start_time).replace(' ', 'T') + 'Z').getTime();
+        if (!isNaN(stateStart)) {
+          currentRoundSecs = Math.max(0, Math.floor((now - stateStart) / 1000));
+        }
+      }
+    }
+    totalSecs = (session.accumulated_duration || 0) + currentRoundSecs;
+  } else {
+    if (session.start_time) {
+      const startTime = new Date(String(session.start_time).replace(' ', 'T') + 'Z').getTime();
+      if (!isNaN(startTime)) {
+        totalSecs = Math.max(0, Math.floor((now - startTime) / 1000));
+      }
+    }
+  }
+  const mins = Math.floor(totalSecs / 60);
+  return mins > 0 ? mins : 1;
+}
+
+function renderUvActiveFocus(activeSession) {
+  const box = document.getElementById('uvActiveFocusBox');
+  const linkEl = document.getElementById('uvFocusActivityLink');
+  const durEl = document.getElementById('uvFocusDuration');
+  const modeEl = document.getElementById('uvFocusMode');
+  if (!box || !linkEl || !durEl || !modeEl) return;
+
+  if (!activeSession) {
+    box.style.display = 'none';
+    window._uvCurrentActiveSession = null;
+    return;
+  }
+
+  window._uvCurrentActiveSession = activeSession;
+  const activityName = (activeSession.activity || activeSession.category || 'Genel');
+  linkEl.textContent = activityName.toLocaleUpperCase('tr-TR');
+  linkEl.setAttribute('data-tooltip', `${activityName} ligine git`);
+
+  const mins = getActiveSessionElapsedMinutes(activeSession);
+  let durStr = mins + 'dk';
+  if (mins >= 60) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    durStr = m > 0 ? `${h}sa ${m}dk` : `${h}sa`;
+  }
+  durEl.textContent = durStr;
+
+  const mode = (activeSession.mode || 'free').toLowerCase();
+  modeEl.textContent = (mode === 'pomodoro') ? 'pomodoro' : 'serbest';
+
+  box.style.display = 'flex';
+}
+
+window.handleUvFocusLeagueClick = function(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const session = window._uvCurrentActiveSession;
+  if (!session) return;
+  const name = session.activity || session.category || 'Genel';
+  const type = session.activity ? 'activity' : (session.category ? 'category' : 'overall');
+  if (typeof closeUserVoiceModal === 'function') {
+    closeUserVoiceModal();
+  }
+  if (typeof window.openSessionLeague === 'function') {
+    window.openSessionLeague(name, type);
+  } else if (window.BLUNK_LEAGUES?.openSpecificLeague) {
+    window.BLUNK_LEAGUES.openSpecificLeague(name, type);
+  }
+};
+
+async function openUserVoiceSettingsModal(username) {
+  if (!username) return;
   try {
     const partyModal = document.getElementById('partyModal');
     if (partyModal && partyModal.classList.contains('open')) {
@@ -1639,6 +1748,7 @@ async function openUserVoiceModal(username) {
     }
 
     const isSelf = currentUser && username === currentUser.username;
+    renderUvActiveFocus(isSelf ? window._activeSession : null);
 
     // ── Latency ──
     const pingEl = document.getElementById('uvLatency');
@@ -1737,6 +1847,9 @@ async function openUserVoiceModal(username) {
       else window._modalFriendStatus = 'pending_received';
     }
 
+    // ── Active Focus Session ──
+    renderUvActiveFocus(user.active_session);
+
     // ── Social row ──
     const socialRow = document.getElementById('uvSocialRow');
     if (socialRow) socialRow.style.display = isSelf ? 'none' : 'flex';
@@ -1820,6 +1933,9 @@ async function openUserVoiceModal(username) {
 function closeUserVoiceModal() {
   const modal = document.getElementById('userVoiceSettingsModal');
   if (modal) modal.classList.remove('open');
+  const focusBox = document.getElementById('uvActiveFocusBox');
+  if (focusBox) focusBox.style.display = 'none';
+  window._uvCurrentActiveSession = null;
   window._modalActiveUser    = null;
   window._modalActiveUserObj = null;
   window._modalFriendStatus  = null;

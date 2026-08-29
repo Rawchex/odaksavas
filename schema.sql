@@ -442,11 +442,20 @@ CREATE TABLE IF NOT EXISTS tags (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS video_upload_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  post_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- ════════════════════════════════════════════════════════════════
 -- PERFORMANCE INDEXES
 -- ════════════════════════════════════════════════════════════════
 CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
+CREATE INDEX IF NOT EXISTS idx_video_upload_logs_user_date ON video_upload_logs(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id);
 CREATE INDEX IF NOT EXISTS idx_likes_user_post ON likes(user_id, post_id);
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
@@ -456,3 +465,4 @@ CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON bookmarks(user_id, post_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
 CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, start_time);
+

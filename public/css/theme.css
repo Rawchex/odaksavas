@@ -1232,6 +1232,19 @@ p, span, div, .ps-toggle-desc, .ps-section-desc, .auth-card-sub {
   color: var(--t-text-muted) !important;
 }
 
+[data-theme="light"] .uvm-active-focus {
+  background: rgba(88, 101, 242, 0.06) !important;
+  border-color: rgba(88, 101, 242, 0.2) !important;
+}
+
+[data-theme="light"] .uvm-focus-duration {
+  color: var(--t-text-primary) !important;
+}
+
+[data-theme="light"] .uvm-focus-mode {
+  color: var(--t-text-secondary) !important;
+}
+
 [data-theme="light"] .uvm-icon-btn {
   background: var(--t-bg-input) !important;
   color: var(--t-text-secondary) !important;

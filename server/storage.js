@@ -35,6 +35,16 @@ if (isR2Enabled) {
     }
   });
 
+  const fileFilter = (req, file, cb) => {
+    const isImage = file.mimetype.startsWith('image/');
+    const isVideo = file.mimetype.startsWith('video/') || /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.originalname);
+    if (isImage || isVideo) {
+      cb(null, true);
+    } else {
+      cb(new Error('Desteklenmeyen dosya formatı. Sadece görsel ve video yüklenebilir.'), false);
+    }
+  };
+
   uploadMiddleware = multer({
     storage: multerS3({
       s3: s3Client,
@@ -51,7 +61,8 @@ if (isR2Enabled) {
         cb(null, `uploads/${uniqueSuffix}${ext}`);
       }
     }),
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+    fileFilter,
+    limits: { fileSize: 35 * 1024 * 1024 } // 35MB limit
   });
 
 } else {
@@ -72,9 +83,20 @@ if (isR2Enabled) {
     }
   });
 
+  const fileFilter = (req, file, cb) => {
+    const isImage = file.mimetype.startsWith('image/');
+    const isVideo = file.mimetype.startsWith('video/') || /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.originalname);
+    if (isImage || isVideo) {
+      cb(null, true);
+    } else {
+      cb(new Error('Desteklenmeyen dosya formatı. Sadece görsel ve video yüklenebilir.'), false);
+    }
+  };
+
   uploadMiddleware = multer({
     storage: diskStorage,
-    limits: { fileSize: 5 * 1024 * 1024 }
+    fileFilter,
+    limits: { fileSize: 35 * 1024 * 1024 } // 35MB limit
   });
 }
 

@@ -21,11 +21,9 @@ const { EventEmitter } = require('events');
 class InMemoryRedisMock extends EventEmitter {
   constructor() {
     super();
-    this._store = new Map();
-    this._subscribers = new Map(); // channel → [callback]
-    // Singleton shared store so pub & sub instances share data
     this._store = InMemoryRedisMock._sharedStore;
     this._subscribers = InMemoryRedisMock._sharedSubs;
+    this._emitter = InMemoryRedisMock._sharedEmitter;
   }
 
   async get(key) {
@@ -77,6 +75,7 @@ class InMemoryRedisMock extends EventEmitter {
 
   // Pub/Sub mock
   async publish(channel, message) {
+    this._emitter.emit('message', channel, message);
     const subs = this._subscribers.get(channel) || [];
     subs.forEach(cb => cb(channel, message));
     return subs.length;
@@ -84,19 +83,27 @@ class InMemoryRedisMock extends EventEmitter {
 
   async subscribe(channel, callback) {
     if (!this._subscribers.has(channel)) this._subscribers.set(channel, []);
-    this._subscribers.get(channel).push(callback);
+    if (typeof callback === 'function') {
+      this._subscribers.get(channel).push(callback);
+    }
+    return 1;
   }
 
   duplicate() {
     return new InMemoryRedisMock();
   }
 
-  on(event, cb) { super.on(event, cb); return this; }
+  on(event, cb) {
+    this._emitter.on(event, cb);
+    return this;
+  }
+
   quit() { return Promise.resolve(); }
 }
 
-InMemoryRedisMock._sharedStore = new Map();
-InMemoryRedisMock._sharedSubs  = new Map();
+InMemoryRedisMock._sharedStore   = new Map();
+InMemoryRedisMock._sharedSubs    = new Map();
+InMemoryRedisMock._sharedEmitter = new EventEmitter();
 
 // ─── Initialise once ────────────────────────────────────────────────────────
 function init() {

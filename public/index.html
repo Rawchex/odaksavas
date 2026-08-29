@@ -674,13 +674,25 @@
 
           <!-- Zoom & Crop Controls -->
           <div class="post-crop-controls">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="crop-zoom-icon min">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
-            </svg>
-            <input type="range" id="postCropZoomSlider" min="1" max="3" step="0.01" value="1" oninput="onPostCropZoom(this.value)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" class="crop-zoom-icon max">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-            </svg>
+            <button type="button" class="crop-zoom-btn" onclick="stepPostCropZoom(-0.25)" title="Uzaklaştır" aria-label="Uzaklaştır">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="crop-zoom-icon min">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
+              </svg>
+            </button>
+            <input type="range" id="postCropZoomSlider" min="1" max="5" step="0.01" value="1" oninput="onPostCropZoom(this.value)" aria-label="Görsel Yakınlaştırma">
+            <button type="button" class="crop-zoom-btn" onclick="stepPostCropZoom(0.25)" title="Yakınlaştır" aria-label="Yakınlaştır">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="crop-zoom-icon max">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Video Preview Viewport -->
+        <div id="postVideoPreviewContainer" class="post-video-preview-container" style="display:none;">
+          <div class="post-video-viewport">
+            <video id="postVideoPreview" class="post-video-preview" controls playsinline preload="metadata"></video>
+            <button type="button" class="post-crop-remove-btn" onclick="clearPostMedia()" data-tooltip="Videoyu Kaldır" aria-label="Videoyu Kaldır">✕</button>
           </div>
         </div>
       </div>
@@ -688,14 +700,14 @@
       <!-- Modal Footer Action Bar -->
       <div class="post-modal-footer">
         <div class="post-modal-tools">
-          <label class="post-tool-btn" for="postImageInput" data-tooltip="Fotoğraf Ekle" aria-label="Fotoğraf Ekle">
+          <label class="post-tool-btn" for="postImageInput" data-tooltip="Medya Ekle (Fotoğraf / Video)" aria-label="Medya Ekle">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="4" />
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
           </label>
-          <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="onPostImageSelected(this)">
+          <input type="file" id="postImageInput" accept="image/*,video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" onchange="onPostMediaSelected(this)">
         </div>
 
         <div class="post-modal-submit-wrap">
@@ -2251,6 +2263,14 @@
             <span class="uvm-dot" style="font-size:11px !important; color:#4e5058 !important;">·</span>
             <span id="uvRoleBadge" class="role-badge member">ÜYE</span>
           </div>
+        </div>
+
+        <!-- Active Focus Session Box -->
+        <div id="uvActiveFocusBox" class="uvm-active-focus" style="display:none;">
+          <span class="uvm-focus-dot"></span>
+          <a href="javascript:void(0)" id="uvFocusActivityLink" class="uvm-focus-league-link" onclick="handleUvFocusLeagueClick(event)" data-tooltip="Lige Git" data-tooltip-pos="top">MİNECRAFT</a>
+          <span id="uvFocusDuration" class="uvm-focus-duration">45dk</span>
+          <span id="uvFocusMode" class="uvm-focus-mode">serbest</span>
         </div>
 
         <!-- Social action icons (visible for non-self) -->

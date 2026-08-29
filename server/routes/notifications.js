@@ -65,13 +65,15 @@ module.exports = function(db, auth, webpush, vapidKeys) {
 
   router.get('/', auth, (req, res) => {
     db.all(`
-      SELECT n.*, u.username, u.profile_photo,
+      SELECT n.*, 
+        COALESCE(u.username, 'BLUNK') as username, 
+        COALESCE(u.profile_photo, '/favicon.svg') as profile_photo,
         (SELECT content FROM posts WHERE id = n.post_id LIMIT 1) as post_content,
         (SELECT content FROM comments WHERE id = n.comment_id LIMIT 1) as comment_content,
         (SELECT name FROM parties WHERE id = n.party_id LIMIT 1) as party_name,
         (SELECT f.id FROM friendships f WHERE f.user_id = n.from_user_id AND f.friend_id = ? AND f.status = 'pending' LIMIT 1) as friendship_id
       FROM notifications n
-      JOIN users u ON n.from_user_id = u.id
+      LEFT JOIN users u ON n.from_user_id = u.id
       WHERE n.user_id = ?
       ORDER BY n.created_at DESC
       LIMIT 100

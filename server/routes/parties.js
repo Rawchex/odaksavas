@@ -268,21 +268,31 @@ module.exports = function(db, auth, checkSpamLimit, createAndPushNotification) {
   });
 
   function cleanupEmptyParties() {
-    db.all('SELECT id, owner_id FROM parties', [], (err, parties) => {
+    db.all('SELECT id, owner_id, name FROM parties', [], (err, parties) => {
       if (err || !parties || parties.length === 0) return;
 
       parties.forEach(p => {
         db.all(`
-          SELECT pm.user_id, (u.last_seen > datetime('now', '-45 seconds')) as is_online
+          SELECT pm.user_id, 
+            (u.last_seen IS NOT NULL AND u.last_seen > datetime('now', '-5 minutes')) as is_recent,
+            EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.status = 'active') as is_focusing
           FROM party_members pm
           JOIN users u ON pm.user_id = u.id
           WHERE pm.party_id = ?
         `, [p.id], (err, members) => {
           if (err) return;
-          const onlineCount = (members || []).filter(m => Boolean(m.is_online)).length;
+          const hasActiveMembers = (members || []).some(m => Boolean(m.is_recent) || Boolean(m.is_focusing));
 
-          if (onlineCount === 0) {
-            console.log(`[Party Cleanup] Odak odasında (${p.id}) çevrim içi üye kalmadı. Oda siliniyor.`);
+          if (!hasActiveMembers) {
+            console.log(`[Party Cleanup] Odak odasında (${p.id} - ${p.name}) 5 dakikadır aktif üye kalmadı. Kurucuya bildirim gönderilip oda kapatılıyor.`);
+            
+            if (p.owner_id) {
+              db.run(
+                'INSERT INTO notifications (user_id, type, from_user_id, party_id) VALUES (?, "party_auto_closed", 0, ?)',
+                [p.owner_id, p.id]
+              );
+            }
+
             db.run('DELETE FROM party_members WHERE party_id = ?', [p.id]);
             db.run('DELETE FROM party_channels WHERE party_id = ?', [p.id]);
             db.run('DELETE FROM party_messages WHERE party_id = ?', [p.id]);

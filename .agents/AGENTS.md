@@ -23,3 +23,7 @@
 - **Strict Tech Stack**: Frontend is purely Vanilla JS & CSS for ultra-fast performance. Backend is Node.js/Express.
 - **High Concurrency First**: This is a competitive platform for hundreds of thousands of users. All live data (leaderboards, active focus sessions, presence) MUST go through Redis (`redis.js`). SQLite is only for persistent/cold storage.
 - **Zero-Experimentation Policy**: Write production-ready code on the first try. No trial-and-error, no hacking around, no intermediate testing scripts. Analyze the existing structure, locate the exact file, and inject the optimal solution directly.
+
+## 6. Deployment Rules
+- **Railway Deployment**: When asked to push or deploy to Railway, always deploy directly to Railway (never confuse with GitHub or other remotes).
+

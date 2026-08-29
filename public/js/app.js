@@ -1176,21 +1176,24 @@ async function rejectFriendFromNotif(e, friendshipId) {
 function notifText(n) {
   const u = `<strong>@${esc(n.username)}</strong>`;
   switch (n.type) {
-    case 'post_like':     return `${u} gönderini beğendi`;
-    case 'post_comment':  return `${u} gönderine yorum yaptı`;
-    case 'post_repost':   return `${u} gönderini yeniden paylaştı`;
-    case 'comment_like':  return `${u} yorumunu beğendi`;
-    case 'friend_request':return `${u} sana arkadaşlık isteği gönderdi`;
-    case 'friend_accept': return `${u} arkadaşlık isteğini kabul etti`;
-    case 'party_invite':  return `${u} seni bir Blunk odasına davet etti`;
-    case 'party_join':    return `${u} çalışma odana katıldı`;
-    case 'message':       return `${u} sana bir mesaj gönderdi`;
-    default:              return `${u} bir işlem gerçekleştirdi`;
+    case 'post_like':         return `${u} gönderini beğendi`;
+    case 'post_comment':      return `${u} gönderine yorum yaptı`;
+    case 'post_repost':       return `${u} gönderini yeniden paylaştı`;
+    case 'comment_like':      return `${u} yorumunu beğendi`;
+    case 'friend_request':    return `${u} sana arkadaşlık isteği gönderdi`;
+    case 'friend_accept':     return `${u} arkadaşlık isteğini kabul etti`;
+    case 'party_invite':      return `${u} seni bir Blunk odasına davet etti`;
+    case 'party_join':        return `${u} çalışma odana katıldı`;
+    case 'party_auto_closed': return `${u}: ${n.party_name ? `"${esc(n.party_name)}"` : 'Çalışma'} odanda hiç kimsecikler aktif olmadığı için odanı kapatmam gerekti... Bunu yapmak zorunda olduğum için üzgünüm.`;
+    case 'message':           return `${u} sana bir mesaj gönderdi`;
+    default:                  return `${u} bir işlem gerçekleştirdi`;
   }
 }
 
 function handleNotifClick(username, type, postId, partyId) {
-  if (type === 'party_invite' && partyId) {
+  if (type === 'party_auto_closed') {
+    return;
+  } else if (type === 'party_invite' && partyId) {
     if (typeof joinParty === 'function') joinParty(partyId);
     else if (typeof openPartyModal === 'function') openPartyModal();
   } else if (type === 'message' && username) {
@@ -1200,8 +1203,8 @@ function handleNotifClick(username, type, postId, partyId) {
     showPage('feed');
     if (typeof openSharedPostInFeed === 'function') openSharedPostInFeed(parseInt(postId));
   } else if (type === 'friend_request' || type === 'friend_accept') {
-    if (username) openUserPage(username);
-  } else if (username) {
+    if (username && username !== 'BLUNK') openUserPage(username);
+  } else if (username && username !== 'BLUNK') {
     openUserPage(username);
   }
 }
@@ -2430,38 +2433,15 @@ function updatePresenceUI() {
   });
 
   let lastTouchTime = 0;
-  let lastTouchedElement = null;
 
   document.addEventListener('touchstart', () => {
     lastTouchTime = Date.now();
   }, { passive: true });
 
   document.addEventListener('click', (e) => {
-    const isTouch = (Date.now() - lastTouchTime < 500);
-    const target = e.target.closest('[data-tooltip], [title]');
-
-    if (isTouch && target) {
-      // First tap: show tooltip and prevent action
-      if (lastTouchedElement !== target) {
-        e.preventDefault();
-        e.stopPropagation();
-        lastTouchedElement = target;
-        showTooltip(target);
-        return;
-      } else {
-        // Second tap: allow action and hide tooltip
-        lastTouchedElement = null;
-        hideTooltip();
-        return;
-      }
-    }
-
-    // Click outside or non-touch click
+    // Hide tooltip immediately on any click
     if (!e.target.closest('#discordTooltip')) {
       hideTooltip();
-      if (isTouch) {
-        lastTouchedElement = null;
-      }
     }
   }, true);
   window.addEventListener('scroll', () => hideTooltip(), { passive: true });
