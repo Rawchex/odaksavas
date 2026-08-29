@@ -157,7 +157,7 @@ window.FeedEngine = {
     }
 
     list.innerHTML = html;
-    observeFeedVideos();
+    initAllBlunkVideoPlayers();
   },
 
   async toggleRepost(postId) {
@@ -253,58 +253,123 @@ window.renderTweetCard = function(p, options = {}) {
   const isOwnPost = activeUser && (Number(activeUser.id) === Number(p.user_id) || activeUser.username === p.username);
   
   return `
-    <article class="tweet-card ${isThreadView ? 'thread-root-card' : ''}" data-post-id="${p.id}" ${!isThreadView ? `onclick="if(event.target.closest('.tweet-action-btn') || event.target.closest('.tweet-delete-btn') || event.target.closest('a') || event.target.closest('.tweet-media-container') || event.target.closest('.tweet-avatar') || event.target.closest('.tweet-author-name') || event.target.closest('.tweet-author-handle') || event.target.closest('.blunk-hovercard-popover')) return; openGlobalPostModal(${p.id});"` : ''} style="${!isThreadView ? 'cursor:pointer;' : ''}">
-      <div class="tweet-avatar" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">
-        ${renderAvatar({ username: p.username, profile_photo: p.profile_photo }, 'avatar avatar-sm')}
-      </div>
-      <div class="tweet-content-wrapper">
-        <div class="tweet-header">
-          <div class="tweet-header-user">
-            <span class="tweet-author-name" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">${esc(p.username)}</span>
-            <span class="tweet-author-handle" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">@${esc(p.username)}</span>
-            <span class="tweet-dot-separator">·</span>
-            <span class="tweet-time">${fmtPostTime(p.created_at)}</span>
+    <article class="tweet-card ${isThreadView ? 'thread-root-card' : ''}" data-post-id="${p.id}" ${!isThreadView ? `onclick="if(event.target.closest('.tweet-action-btn') || event.target.closest('.tweet-delete-btn') || event.target.closest('a') || event.target.closest('.tweet-media-container') || event.target.closest('.tweet-avatar') || event.target.closest('.tweet-author-name') || event.target.closest('.tweet-author-handle') || event.target.closest('.tweet-repost-banner') || event.target.closest('.blunk-hovercard-popover')) return; openGlobalPostModal(${p.id});"` : ''} style="${!isThreadView ? 'cursor:pointer;' : ''}">
+      ${p.reposter_username ? `
+        <div class="tweet-repost-banner">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="tweet-repost-banner-icon">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+          </svg>
+          <span class="tweet-repost-banner-text" onclick="openUserPage('${esc(p.reposter_username)}'); event.stopPropagation();">
+            ${esc(p.reposter_username === (activeUser && activeUser.username) ? 'Sen' : p.reposter_username)} yeniden paylaştı
+          </span>
+        </div>
+      ` : ''}
+      <div class="tweet-main-row">
+        <div class="tweet-avatar" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">
+          ${renderAvatar({ username: p.username, profile_photo: p.profile_photo }, 'avatar avatar-sm')}
+        </div>
+        <div class="tweet-content-wrapper">
+          <div class="tweet-header">
+            <div class="tweet-header-user">
+              <span class="tweet-author-name" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">${esc(p.username)}</span>
+              <span class="tweet-author-handle" data-hovercard-user="${esc(p.username)}" onclick="openUserPage('${esc(p.username)}'); event.stopPropagation();">@${esc(p.username)}</span>
+              <span class="tweet-dot-separator">·</span>
+              <span class="tweet-time">${fmtPostTime(p.created_at)}</span>
+            </div>
+            ${isOwnPost ? `
+              <button class="tweet-delete-btn" onclick="deleteTweetPost(${p.id}); event.stopPropagation();" aria-label="Gönderiyi Sil" title="Gönderiyi Sil">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            ` : ''}
           </div>
-          ${isOwnPost ? `
-            <button class="tweet-delete-btn" onclick="deleteTweetPost(${p.id}); event.stopPropagation();" aria-label="Gönderiyi Sil" title="Gönderiyi Sil">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-              </svg>
-            </button>
-          ` : ''}
-        </div>
-        
-        <div class="tweet-body">
-          ${p.content ? `<div class="tweet-text">${formatMathAndMarkdown(p.content)}</div>` : ''}
-          ${hasMedia ? (
-            isVideo
-              ? `<div class="tweet-media-container tweet-video-wrapper"><video src="${esc(p.image)}" class="tweet-media tweet-video-player" controls playsinline preload="metadata" loop onclick="event.stopPropagation();"></video></div>`
-              : `<div class="tweet-media-container" onclick="openMediaLightbox('${esc(p.image)}'); event.stopPropagation();"><img src="${esc(p.image)}" alt="Gönderi Medyası" class="tweet-media" loading="lazy"></div>`
-          ) : ''}
-        </div>
+          
+          <div class="tweet-body">
+            ${p.content ? `<div class="tweet-text">${formatMathAndMarkdown(p.content)}</div>` : ''}
+            ${hasMedia ? (
+              isVideo
+                ? `<div class="tweet-media-container tweet-video-wrapper">
+                     <div class="blunk-video-player" data-video-src="${esc(p.image)}" onclick="event.stopPropagation();">
+                       <video src="${esc(p.image)}" class="blunk-video-element" playsinline preload="metadata" loop oncontextmenu="return false;" onclick="toggleBlunkVideo(this.closest('.blunk-video-player'));"></video>
+                       
+                       <!-- Center Play/Pause Button -->
+                       <div class="blunk-video-center-btn" onclick="toggleBlunkVideo(this.closest('.blunk-video-player'));" title="Oynat / Durdur">
+                         <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" class="play-icon">
+                           <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                         </svg>
+                         <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" class="pause-icon" style="display:none;">
+                           <rect x="6" y="4" width="4" height="16"></rect>
+                           <rect x="14" y="4" width="4" height="16"></rect>
+                         </svg>
+                       </div>
 
-        <div class="tweet-actions-bar">
-          <button class="tweet-action-btn reply" data-tooltip="Yanıtla" onclick="handleTweetReplyClick(${p.id}); event.stopPropagation();">
-            <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-            <span class="action-count-reply">${p.comment_count || 0}</span>
-          </button>
-          <button class="tweet-action-btn repost ${p.user_reposted ? 'reposted' : ''}" data-tooltip="Repost" onclick="FeedEngine.toggleRepost(${p.id}); event.stopPropagation();">
-            <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="${p.user_reposted ? '#00ba7c' : 'currentColor'}" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></div>
-            <span class="action-count-repost">${p.repost_count || 0}</span>
-          </button>
-          <button class="tweet-action-btn like ${p.user_liked ? 'liked' : ''}" data-tooltip="Beğen" onclick="toggleTweetLike(${p.id}); event.stopPropagation();">
-            <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="${p.user_liked ? '#f91880' : 'none'}" stroke="${p.user_liked ? '#f91880' : 'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
-            <span class="action-count-like">${p.like_count || 0}</span>
-          </button>
-          <button class="tweet-action-btn bookmark ${p.user_bookmarked ? 'bookmarked' : ''}" data-tooltip="Kaydet" onclick="bookmarkTweet(${p.id}); event.stopPropagation();">
-            <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="${p.user_bookmarked ? '#1d9bf0' : 'none'}" stroke="${p.user_bookmarked ? '#1d9bf0' : 'currentColor'}" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
-          </button>
-          <button class="tweet-action-btn share" data-tooltip="Paylaş" onclick="openSharePostModal(${p.id}); event.stopPropagation();">
-            <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div>
-          </button>
+                       <!-- Floating Overlay Layer (Twitter / X Style) -->
+                       <div class="blunk-video-overlay-layer">
+                         <!-- Bottom-Left Duration Pill -->
+                         <div class="blunk-video-time-pill" onclick="toggleBlunkVideo(this.closest('.blunk-video-player'));">
+                           <span class="blunk-video-time">0:00</span>
+                         </div>
+
+                         <!-- Bottom-Right Corner Action Badges -->
+                         <div class="blunk-video-corner-actions">
+                           <button type="button" class="blunk-x-btn" onclick="toggleBlunkVideoMute(this.closest('.blunk-video-player'));" title="Sesi Aç / Kapat" aria-label="Sesi Aç / Kapat">
+                             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ctrl-vol-icon">
+                               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                               <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                             </svg>
+                             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ctrl-mute-icon" style="display:none;">
+                               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                               <line x1="23" y1="9" x2="17" y2="15"></line>
+                               <line x1="17" y1="9" x2="23" y2="15"></line>
+                             </svg>
+                           </button>
+                           <button type="button" class="blunk-x-btn" onclick="toggleBlunkVideoFullscreen(this.closest('.blunk-video-player'));" title="Tam Ekran" aria-label="Tam Ekran">
+                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                               <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                             </svg>
+                           </button>
+                         </div>
+                       </div>
+
+                       <!-- Bottom Edge Progress Line -->
+                       <div class="blunk-video-scrub-bar" onpointerdown="onBlunkVideoScrub(event, this.closest('.blunk-video-player'))">
+                         <div class="blunk-video-progress-buffer"></div>
+                         <div class="blunk-video-progress-fill"></div>
+                         <div class="blunk-video-progress-thumb"></div>
+                       </div>
+                     </div>
+                   </div>`
+                : `<div class="tweet-media-container" onclick="openMediaLightbox('${esc(p.image)}'); event.stopPropagation();"><img src="${esc(p.image)}" alt="Gönderi Medyası" class="tweet-media" loading="lazy" onerror="this.closest('.tweet-media-container').style.display='none'"></div>`
+            ) : ''}
+          </div>
+
+          <div class="tweet-actions-bar">
+            <button class="tweet-action-btn reply" data-tooltip="Yanıtla" onclick="handleTweetReplyClick(${p.id}); event.stopPropagation();">
+              <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+              <span class="action-count-reply">${p.comment_count || 0}</span>
+            </button>
+            <button class="tweet-action-btn repost ${p.user_reposted ? 'reposted' : ''}" data-tooltip="Yeniden Paylaş" onclick="FeedEngine.toggleRepost(${p.id}); event.stopPropagation();">
+              <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="${p.user_reposted ? '#00ba7c' : 'currentColor'}" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></div>
+              <span class="action-count-repost">${p.repost_count || 0}</span>
+            </button>
+            <button class="tweet-action-btn like ${p.user_liked ? 'liked' : ''}" data-tooltip="Beğen" onclick="toggleTweetLike(${p.id}); event.stopPropagation();">
+              <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="${p.user_liked ? '#f91880' : 'none'}" stroke="${p.user_liked ? '#f91880' : 'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+              <span class="action-count-like">${p.like_count || 0}</span>
+            </button>
+            <button class="tweet-action-btn bookmark ${p.user_bookmarked ? 'bookmarked' : ''}" data-tooltip="Kaydet" onclick="bookmarkTweet(${p.id}); event.stopPropagation();">
+              <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="${p.user_bookmarked ? '#1d9bf0' : 'none'}" stroke="${p.user_bookmarked ? '#1d9bf0' : 'currentColor'}" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            </button>
+            <button class="tweet-action-btn share" data-tooltip="Paylaş" onclick="openSharePostModal(${p.id}); event.stopPropagation();">
+              <div class="tweet-icon-wrap"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div>
+            </button>
+          </div>
         </div>
       </div>
     </article>
@@ -979,8 +1044,204 @@ async function submitPost() {
   if (btn) btn.disabled = false;
 }
 
+// ─── BLUNK CUSTOM MODERN VIDEO CONTROLLER ───
+function formatVideoTime(seconds) {
+  if (isNaN(seconds) || seconds < 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function initBlunkVideoPlayer(container) {
+  if (!container || container._blunkInitialized) return;
+  container._blunkInitialized = true;
+
+  const video = container.querySelector('.blunk-video-element');
+  if (!video) return;
+
+  const timeEl = container.querySelector('.blunk-video-time');
+  const fillEl = container.querySelector('.blunk-video-progress-fill');
+  const bufEl = container.querySelector('.blunk-video-progress-buffer');
+  const thumbEl = container.querySelector('.blunk-video-progress-thumb');
+  const playIcon = container.querySelector('.play-icon');
+  const pauseIcon = container.querySelector('.pause-icon');
+  const volIcon = container.querySelector('.ctrl-vol-icon');
+  const muteIcon = container.querySelector('.ctrl-mute-icon');
+
+  const applyAspectRatio = () => {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (vw && vh) {
+      const ratio = vw / vh;
+      if (ratio >= 1.05) {
+        // Landscape (e.g. 16:9, 4:3) - fills snug without letterbox bars
+        container.style.aspectRatio = `${vw} / ${vh}`;
+        container.style.maxHeight = '480px';
+        video.style.objectFit = 'contain';
+      } else if (ratio >= 0.8) {
+        // Square (1:1)
+        container.style.aspectRatio = '1 / 1';
+        container.style.maxHeight = '500px';
+        video.style.objectFit = 'cover';
+      } else {
+        // Portrait (9:16)
+        const clampedRatio = Math.max(0.5625, ratio);
+        container.style.aspectRatio = `${clampedRatio}`;
+        container.style.maxHeight = '540px';
+        video.style.objectFit = 'cover';
+      }
+    }
+  };
+
+  const updateUI = () => {
+    const isPlaying = !video.paused && !video.ended;
+    container.classList.toggle('playing', isPlaying);
+    if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
+    if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+  };
+
+  const updateVolUI = () => {
+    const isMuted = video.muted || video.volume === 0;
+    if (volIcon) volIcon.style.display = isMuted ? 'none' : 'block';
+    if (muteIcon) muteIcon.style.display = isMuted ? 'block' : 'none';
+  };
+
+  video.addEventListener('play', () => {
+    // Pause other videos when one starts playing
+    document.querySelectorAll('.blunk-video-element').forEach(other => {
+      if (other !== video && !other.paused) other.pause();
+    });
+    updateUI();
+  });
+  video.addEventListener('pause', updateUI);
+  video.addEventListener('ended', updateUI);
+
+  video.addEventListener('timeupdate', () => {
+    if (container._isScrubbing) return;
+    const cur = video.currentTime || 0;
+    const dur = video.duration || 0;
+    if (timeEl) timeEl.textContent = formatVideoTime(cur);
+    if (dur > 0) {
+      const pct = (cur / dur) * 100;
+      if (fillEl) fillEl.style.width = `${pct}%`;
+      if (thumbEl) thumbEl.style.left = `${pct}%`;
+    }
+  });
+
+  video.addEventListener('progress', () => {
+    if (video.buffered.length > 0 && video.duration > 0) {
+      const bufEnd = video.buffered.end(video.buffered.length - 1);
+      const bufPct = (bufEnd / video.duration) * 100;
+      if (bufEl) bufEl.style.width = `${bufPct}%`;
+    }
+  });
+
+  video.addEventListener('loadedmetadata', () => {
+    applyAspectRatio();
+    const dur = video.duration || 0;
+    if (timeEl) timeEl.textContent = formatVideoTime(dur);
+  });
+  if (video.readyState >= 1) applyAspectRatio();
+
+  video.addEventListener('volumechange', updateVolUI);
+
+  video.addEventListener('error', () => {
+    container.innerHTML = `
+      <div style="padding: 32px 16px; text-align: center; color: rgba(255,255,255,0.45); font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%;">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>Video yüklenemedi</span>
+      </div>`;
+  });
+}
+
+function initAllBlunkVideoPlayers() {
+  document.querySelectorAll('.blunk-video-player').forEach(initBlunkVideoPlayer);
+  observeFeedVideos();
+}
+
+function toggleBlunkVideo(container) {
+  if (!container) return;
+  initBlunkVideoPlayer(container);
+  const video = container.querySelector('.blunk-video-element');
+  if (!video) return;
+
+  if (video.paused) {
+    video.play().catch(() => {});
+  } else {
+    video.pause();
+  }
+}
+
+function toggleBlunkVideoMute(container) {
+  if (!container) return;
+  initBlunkVideoPlayer(container);
+  const video = container.querySelector('.blunk-video-element');
+  if (!video) return;
+  video.muted = !video.muted;
+}
+
+function toggleBlunkVideoFullscreen(container) {
+  if (!container) return;
+  if (!document.fullscreenElement) {
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    } else if (container.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  }
+}
+
+function onBlunkVideoScrub(e, container) {
+  if (!container) return;
+  e.preventDefault();
+  e.stopPropagation();
+  initBlunkVideoPlayer(container);
+
+  const video = container.querySelector('.blunk-video-element');
+  const wrap = container.querySelector('.blunk-video-scrub-bar');
+  const fillEl = container.querySelector('.blunk-video-progress-fill');
+  const thumbEl = container.querySelector('.blunk-video-progress-thumb');
+  const timeEl = container.querySelector('.blunk-video-time');
+  if (!video || !wrap || !video.duration) return;
+
+  container._isScrubbing = true;
+
+  const seek = (evt) => {
+    const rect = wrap.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, (evt.clientX - rect.left) / rect.width));
+    const targetTime = pos * video.duration;
+    if (fillEl) fillEl.style.width = `${pos * 100}%`;
+    if (thumbEl) thumbEl.style.left = `${pos * 100}%`;
+    if (timeEl) timeEl.textContent = `${formatVideoTime(targetTime)} / ${formatVideoTime(video.duration)}`;
+    video.currentTime = targetTime;
+  };
+
+  seek(e);
+
+  const onPointerMove = (evt) => {
+    seek(evt);
+  };
+
+  const onPointerUp = () => {
+    container._isScrubbing = false;
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+  };
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+}
+
 function observeFeedVideos() {
-  const videos = document.querySelectorAll('.tweet-video-player');
+  const videos = document.querySelectorAll('.blunk-video-element');
   if (!videos.length) return;
   if (!window._feedVideoObserver) {
     window._feedVideoObserver = new IntersectionObserver((entries) => {
@@ -997,7 +1258,7 @@ function observeFeedVideos() {
 
 function loadFeed() { window.FeedEngine.loadFeed(true); }
 
-// Expose compose & media functions globally to window
+// Expose compose, media & video functions globally to window
 window.onPostMediaSelected = onPostMediaSelected;
 window.onPostImageSelected = onPostMediaSelected;
 window.clearPostMedia = clearPostMedia;
@@ -1007,7 +1268,13 @@ window.onPostCropZoom = onPostCropZoom;
 window.submitPost = submitPost;
 window.openCreatePostModal = openCreatePostModal;
 window.closeCreatePostModal = closeCreatePostModal;
+window.initAllBlunkVideoPlayers = initAllBlunkVideoPlayers;
+window.toggleBlunkVideo = toggleBlunkVideo;
+window.toggleBlunkVideoMute = toggleBlunkVideoMute;
+window.toggleBlunkVideoFullscreen = toggleBlunkVideoFullscreen;
+window.onBlunkVideoScrub = onBlunkVideoScrub;
 
 document.addEventListener('DOMContentLoaded', () => {
   window.FeedEngine.init();
+  initAllBlunkVideoPlayers();
 });

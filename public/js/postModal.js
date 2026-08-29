@@ -136,6 +136,10 @@ function renderPostDetailSheet(wrapper, post, isOwn, isRepost) {
     </div>
   `;
 
+  if (window.initAllBlunkVideoPlayers) {
+    window.initAllBlunkVideoPlayers();
+  }
+
   if ((!post.comments || post.comments.length === 0) && post.comment_count > 0) {
     setTimeout(() => {
       loadPdetailComments(post.id);

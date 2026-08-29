@@ -16,14 +16,27 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
 
     if (tab === 'following') {
       query = `
-        SELECT p.*, u.username, u.profile_photo, u.level,
-          (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-          (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-          (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-          (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-          (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted
+        SELECT 
+          COALESCE(orig_p.id, p.id) as id,
+          COALESCE(orig_p.content, p.content) as content,
+          COALESCE(orig_p.image, p.image) as image,
+          COALESCE(orig_p.created_at, p.created_at) as created_at,
+          COALESCE(orig_p.views, p.views) as views,
+          COALESCE(orig_u.username, u.username) as username,
+          COALESCE(orig_u.profile_photo, u.profile_photo) as profile_photo,
+          COALESCE(orig_u.level, u.level) as level,
+          COALESCE(orig_p.user_id, p.user_id) as user_id,
+          CASE WHEN p.repost_of_post_id IS NOT NULL THEN u.username ELSE NULL END as reposter_username,
+          CASE WHEN p.repost_of_post_id IS NOT NULL THEN u.id ELSE NULL END as reposter_id,
+          (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id)) as like_count,
+          (SELECT COUNT(*) FROM comments WHERE post_id = COALESCE(orig_p.id, p.id)) as comment_count,
+          (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id)) as repost_count,
+          (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id) AND user_id = ?) as user_liked,
+          (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id) AND user_id = ?) as user_reposted
         FROM posts p
         JOIN users u ON p.user_id = u.id
+        LEFT JOIN posts orig_p ON p.repost_of_post_id = orig_p.id
+        LEFT JOIN users orig_u ON orig_p.user_id = orig_u.id
         WHERE p.user_id IN (
           SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted'
           UNION SELECT ?
@@ -34,20 +47,33 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
       params = [currentUserId, currentUserId, currentUserId, currentUserId, limit, offset];
     } else if (tab === 'trending') {
       query = `
-        SELECT p.*, u.username, u.profile_photo, u.level,
-          (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-          (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-          (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-          (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-          (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+        SELECT 
+          COALESCE(orig_p.id, p.id) as id,
+          COALESCE(orig_p.content, p.content) as content,
+          COALESCE(orig_p.image, p.image) as image,
+          COALESCE(orig_p.created_at, p.created_at) as created_at,
+          COALESCE(orig_p.views, p.views) as views,
+          COALESCE(orig_u.username, u.username) as username,
+          COALESCE(orig_u.profile_photo, u.profile_photo) as profile_photo,
+          COALESCE(orig_u.level, u.level) as level,
+          COALESCE(orig_p.user_id, p.user_id) as user_id,
+          CASE WHEN p.repost_of_post_id IS NOT NULL THEN u.username ELSE NULL END as reposter_username,
+          CASE WHEN p.repost_of_post_id IS NOT NULL THEN u.id ELSE NULL END as reposter_id,
+          (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id)) as like_count,
+          (SELECT COUNT(*) FROM comments WHERE post_id = COALESCE(orig_p.id, p.id)) as comment_count,
+          (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id)) as repost_count,
+          (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id) AND user_id = ?) as user_liked,
+          (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id) AND user_id = ?) as user_reposted,
           (
-            ((SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 2.0 + 
-             (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 4.0 + 
-             (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 5.0) /
+            ((SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id)) * 2.0 + 
+             (SELECT COUNT(*) FROM comments WHERE post_id = COALESCE(orig_p.id, p.id)) * 4.0 + 
+             (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id)) * 5.0) /
             POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.5)
           ) as rank_score
         FROM posts p
         JOIN users u ON p.user_id = u.id
+        LEFT JOIN posts orig_p ON p.repost_of_post_id = orig_p.id
+        LEFT JOIN users orig_u ON orig_p.user_id = orig_u.id
         WHERE datetime(p.created_at) > datetime('now', '-7 days')
         ORDER BY rank_score DESC, p.created_at DESC
         LIMIT ? OFFSET ?
@@ -55,23 +81,36 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
       params = [currentUserId, currentUserId, limit, offset];
     } else {
       query = `
-        SELECT p.*, u.username, u.profile_photo, u.level,
-          (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-          (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-          (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) as repost_count,
-          (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND user_id = ?) as user_liked,
-          (SELECT COUNT(*) FROM reposts WHERE post_id = p.id AND user_id = ?) as user_reposted,
+        SELECT 
+          COALESCE(orig_p.id, p.id) as id,
+          COALESCE(orig_p.content, p.content) as content,
+          COALESCE(orig_p.image, p.image) as image,
+          COALESCE(orig_p.created_at, p.created_at) as created_at,
+          COALESCE(orig_p.views, p.views) as views,
+          COALESCE(orig_u.username, u.username) as username,
+          COALESCE(orig_u.profile_photo, u.profile_photo) as profile_photo,
+          COALESCE(orig_u.level, u.level) as level,
+          COALESCE(orig_p.user_id, p.user_id) as user_id,
+          CASE WHEN p.repost_of_post_id IS NOT NULL THEN u.username ELSE NULL END as reposter_username,
+          CASE WHEN p.repost_of_post_id IS NOT NULL THEN u.id ELSE NULL END as reposter_id,
+          (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id)) as like_count,
+          (SELECT COUNT(*) FROM comments WHERE post_id = COALESCE(orig_p.id, p.id)) as comment_count,
+          (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id)) as repost_count,
+          (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id) AND user_id = ?) as user_liked,
+          (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id) AND user_id = ?) as user_reposted,
           (
             (
-              (SELECT COUNT(*) FROM likes WHERE post_id = p.id) * 1.5 + 
-              (SELECT COUNT(*) FROM comments WHERE post_id = p.id) * 3.5 + 
-              (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) * 4.5 +
+              (SELECT COUNT(*) FROM likes WHERE post_id = COALESCE(orig_p.id, p.id)) * 1.5 + 
+              (SELECT COUNT(*) FROM comments WHERE post_id = COALESCE(orig_p.id, p.id)) * 3.5 + 
+              (SELECT COUNT(*) FROM reposts WHERE post_id = COALESCE(orig_p.id, p.id)) * 4.5 +
               CASE WHEN p.user_id IN (SELECT friend_id FROM friendships WHERE user_id = ? AND status = 'accepted') THEN 15.0 ELSE 0.0 END
             ) /
             POWER(CAST((julianday('now') - julianday(p.created_at)) * 24.0 + 2.0 AS REAL), 1.3)
           ) as rank_score
         FROM posts p
         JOIN users u ON p.user_id = u.id
+        LEFT JOIN posts orig_p ON p.repost_of_post_id = orig_p.id
+        LEFT JOIN users orig_u ON orig_p.user_id = orig_u.id
         ORDER BY rank_score DESC, p.created_at DESC
         LIMIT ? OFFSET ?
       `;
@@ -215,27 +254,35 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
 
   // POST Repost
   router.post('/posts/:id/repost', auth, (req, res) => {
-    db.run('INSERT INTO reposts (user_id, post_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
-      if (err) {
-        res.status(400).json({ error: 'Zaten repost ettin' });
-      } else {
-        db.get('SELECT * FROM posts WHERE id = ?', [req.params.id], (err, post) => {
-          db.run('INSERT INTO posts (user_id, content, image, repost_of_post_id) VALUES (?, ?, ?, ?)', [req.user.id, `Repost: ${post.content}`, post.image, req.params.id], () => {
-            if (post.user_id !== req.user.id) {
-              createAndPushNotification(post.user_id, 'post_repost', req.user.id, { postId: req.params.id });
-            }
-            res.json({ success: true });
-          });
+    const postId = parseInt(req.params.id);
+    db.get('SELECT * FROM posts WHERE id = ?', [postId], (err, post) => {
+      if (!post) return res.status(404).json({ error: 'Gönderi bulunamadı' });
+      const rootPostId = post.repost_of_post_id || post.id;
+
+      db.run('INSERT INTO reposts (user_id, post_id) VALUES (?, ?)', [req.user.id, rootPostId], (insertErr) => {
+        if (insertErr) {
+          return res.status(400).json({ error: 'Zaten yeniden paylaştınız' });
+        }
+        db.run('INSERT INTO posts (user_id, content, image, repost_of_post_id) VALUES (?, NULL, NULL, ?)', [req.user.id, rootPostId], () => {
+          if (post.user_id !== req.user.id) {
+            createAndPushNotification(post.user_id, 'post_repost', req.user.id, { postId: rootPostId });
+          }
+          res.json({ success: true });
         });
-      }
+      });
     });
   });
 
   // DELETE Repost
   router.delete('/posts/:id/repost', auth, (req, res) => {
-    db.run('DELETE FROM reposts WHERE user_id = ? AND post_id = ?', [req.user.id, req.params.id], (err) => {
-      db.run('DELETE FROM posts WHERE user_id = ? AND repost_of_post_id = ?', [req.user.id, req.params.id]);
-      res.json({ success: true });
+    const postId = parseInt(req.params.id);
+    db.get('SELECT * FROM posts WHERE id = ?', [postId], (err, post) => {
+      const rootPostId = (post && post.repost_of_post_id) || postId;
+      db.run('DELETE FROM reposts WHERE user_id = ? AND post_id = ?', [req.user.id, rootPostId], () => {
+        db.run('DELETE FROM posts WHERE user_id = ? AND repost_of_post_id = ?', [req.user.id, rootPostId], () => {
+          res.json({ success: true });
+        });
+      });
     });
   });
 

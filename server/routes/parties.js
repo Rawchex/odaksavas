@@ -891,26 +891,32 @@ router.post('/parties/:id/screenshare-state', auth, (req, res) => {
 
     // Verify membership
     db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
-      if (!member) return res.status(403).json({ error: 'Yetkisiz' });
+      if (!member) return res.status(403).json({ error: 'Bu odada değilsiniz' });
 
       if (!global.partyScreenShareStates[partyId]) global.partyScreenShareStates[partyId] = {};
 
       if (sharing) {
-        // Check if channel allows screen share (Managers always allowed, or if channel allows/is default)
-        db.get('SELECT allow_screen_share, is_default FROM party_channels WHERE id = ? AND party_id = ?', [channelId, partyId], (err, chan) => {
-          const memberChannelId = parseInt(member.channel_id) || (chan && chan.is_default ? parseInt(channelId) : null);
-          if (!memberChannelId || memberChannelId !== parseInt(channelId)) {
-            return res.status(403).json({ error: 'Yayin yalnizca bulundugunuz alt kanalda acilabilir' });
-          }
-          const isManager = ['owner', 'admin', 'moderator'].includes(member.role);
-          const isAllowed = isManager || (chan && (chan.allow_screen_share || chan.is_default));
-          if (!isAllowed) {
+        const isManager = ['owner', 'admin', 'moderator'].includes(member.role);
+        const targetChanId = channelId ? parseInt(channelId) : (parseInt(member.channel_id) || 0);
+
+        db.get('SELECT allow_screen_share, is_default FROM party_channels WHERE id = ? AND party_id = ?', [targetChanId, partyId], (err, chan) => {
+          if (chan && chan.allow_screen_share === 0 && !isManager) {
             return res.status(403).json({ error: 'Bu kanalda ekran paylaşımı kapalı' });
           }
+
           if (validateOnly) {
             return res.json({ success: true, allowed: true });
           }
-          global.partyScreenShareStates[partyId][username] = { sharing: true, channelId: parseInt(channelId), ts: Date.now() };
+
+          if (targetChanId && targetChanId > 0) {
+            db.run('UPDATE party_members SET channel_id = ? WHERE party_id = ? AND user_id = ?', [targetChanId, partyId, req.user.id]);
+          }
+
+          global.partyScreenShareStates[partyId][username] = { 
+            sharing: true, 
+            channelId: targetChanId, 
+            ts: Date.now() 
+          };
           res.json({ success: true, allowed: true });
         });
       } else {
@@ -928,18 +934,22 @@ router.get('/parties/:id/screenshare-state', auth, (req, res) => {
   const partyId = req.params.id;
   db.get('SELECT * FROM party_members WHERE party_id = ? AND user_id = ?', [partyId, req.user.id], (err, member) => {
     if (!member) return res.status(403).json({ error: 'Yetkisiz' });
-    db.get('SELECT id FROM party_channels WHERE party_id = ? AND is_default = 1 LIMIT 1', [partyId], (channelErr, defaultChannel) => {
-      const ownChannelId = parseInt(member.channel_id) || parseInt(defaultChannel?.id);
-      const states = global.partyScreenShareStates[partyId] || {};
-      const now = Date.now();
-      if (states[req.user.username]) states[req.user.username].ts = now;
-      // Cleanup stale (>30s) and expose only streams in the requester's channel.
-      Object.keys(states).forEach(u => { if (now - states[u].ts > 30000) delete states[u]; });
-      const visibleStates = Object.fromEntries(
-        Object.entries(states).filter(([, state]) => parseInt(state.channelId) === ownChannelId)
-      );
-      res.json(visibleStates);
-    });
+    
+    const ownChannelId = parseInt(member.channel_id) || 0;
+    const states = global.partyScreenShareStates[partyId] || {};
+    const now = Date.now();
+    if (states[req.user.username]) states[req.user.username].ts = now;
+    
+    // Cleanup stale (>30s)
+    Object.keys(states).forEach(u => { if (now - states[u].ts > 30000) delete states[u]; });
+    
+    const visibleStates = Object.fromEntries(
+      Object.entries(states).filter(([, state]) => {
+        if (!ownChannelId || !state.channelId) return true;
+        return parseInt(state.channelId) === ownChannelId;
+      })
+    );
+    res.json(visibleStates);
   });
 });
 

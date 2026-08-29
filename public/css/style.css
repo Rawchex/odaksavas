@@ -2953,6 +2953,7 @@ a {
   position: relative;
   width: 100%;
   max-width: 360px;
+  max-height: 340px !important;
   border-radius: 14px;
   background: #000000;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2964,11 +2965,13 @@ a {
 }
 
 .post-video-preview {
-  width: 100%;
-  max-height: 360px;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: 340px !important;
   display: block;
   object-fit: contain;
   background: #000000;
+  border-radius: 12px;
 }
 
 .post-modal-footer {
@@ -18692,16 +18695,49 @@ a {
 
 .tweet-card {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   padding: 12px 16px;
   border-bottom: 1px solid var(--t-border-subtle);
   background-color: var(--t-bg-app);
   transition: background-color 0.2s ease;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .tweet-card:hover {
   background-color: var(--t-bg-card-hover);
+}
+
+.tweet-repost-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 6px 36px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t-text-muted, #71767b);
+  line-height: 1.2;
+}
+
+.tweet-repost-banner-icon {
+  color: var(--t-text-muted, #71767b);
+  flex-shrink: 0;
+}
+
+.tweet-repost-banner-text {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.tweet-repost-banner-text:hover {
+  text-decoration: underline;
+  color: var(--t-text-primary, #ffffff);
+}
+
+.tweet-main-row {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
 }
 
 .tweet-avatar {
@@ -18841,14 +18877,206 @@ a {
   display: flex;
   justify-content: center;
   align-items: center;
+  border-radius: 16px;
+  overflow: hidden;
+  width: 100%;
 }
 
-.tweet-video-player {
+/* ─── BLUNK CUSTOM TWITTER (X) STYLE VIDEO PLAYER ─── */
+.blunk-video-player {
+  position: relative;
   width: 100%;
-  max-height: 520px;
+  max-width: 100%;
+  max-height: 540px;
+  background: #000000;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  aspect-ratio: 16 / 9;
+  transition: aspect-ratio 0.25s ease, max-height 0.25s ease;
+}
+
+.blunk-video-player .blunk-video-element {
+  width: 100%;
+  height: 100%;
+  max-height: 540px;
   object-fit: contain;
   background: #000000;
-  border-radius: 14px;
+  display: block;
+  cursor: pointer;
+}
+
+/* Center Play/Pause Splash */
+.blunk-video-center-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(15, 20, 25, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  z-index: 4;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.22s ease, background 0.15s ease;
+  pointer-events: auto;
+}
+
+.blunk-video-center-btn:hover {
+  background: rgba(29, 155, 240, 0.85);
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.blunk-video-player.playing .blunk-video-center-btn {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.85);
+}
+
+.blunk-video-player.playing:hover .blunk-video-center-btn {
+  opacity: 0.85;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Floating Overlay Layer (Twitter/X Style) */
+.blunk-video-overlay-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 12px 14px 16px 14px;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.25s ease;
+}
+
+.blunk-video-player.playing:not(:hover) .blunk-video-overlay-layer {
+  opacity: 0;
+}
+
+/* Bottom-Left Time Pill */
+.blunk-video-time-pill {
+  pointer-events: auto;
+  background: rgba(15, 20, 25, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 4px 9px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.blunk-video-time {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+
+/* Bottom-Right Corner Action Buttons */
+.blunk-video-corner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.blunk-x-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(15, 20, 25, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.blunk-x-btn:hover {
+  background: rgba(29, 155, 240, 0.85);
+  transform: scale(1.1);
+  color: #ffffff;
+}
+
+/* Bottom Edge Sleek Progress Scrub Bar */
+.blunk-video-scrub-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  z-index: 6;
+  transition: height 0.15s ease;
+}
+
+.blunk-video-player:hover .blunk-video-scrub-bar,
+.blunk-video-scrub-bar:hover {
+  height: 6px;
+}
+
+.blunk-video-progress-buffer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.35);
+  width: 0%;
+  transition: width 0.2s ease;
+}
+
+.blunk-video-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #1d9bf0, #38bdf8);
+  width: 0%;
+}
+
+.blunk-video-progress-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(29, 155, 240, 0.9), 0 2px 4px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+.blunk-video-scrub-bar:hover .blunk-video-progress-thumb {
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .tweet-actions-bar {

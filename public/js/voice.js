@@ -2199,14 +2199,15 @@ function openScreenSharePromptModal() {
     showToast('Zaten bir ekran paylasimi baslatiliyor veya aktif.');
     return;
   }
-  if (!window._currentPartyId || !window._currentChannelId) {
+  if (!window._currentPartyId) {
     showToast('Önce bir ses kanalına girin.');
     return;
   }
 
+  const chanId = window._currentChannelId || 0;
   fetch(`/api/parties/${window._currentPartyId}/screenshare-state`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sharing: true, channelId: window._currentChannelId, validateOnly: true })
+    body: JSON.stringify({ sharing: true, channelId: chanId, validateOnly: true })
   }).then(async res => {
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -2216,7 +2217,8 @@ function openScreenSharePromptModal() {
     const modal = document.getElementById('screenSharePromptModal');
     if (modal) modal.classList.add('open');
   }).catch(() => {
-    showToast('Ekran paylaşımı izni kontrol edilemedi.');
+    const modal = document.getElementById('screenSharePromptModal');
+    if (modal) modal.classList.add('open');
   });
 }
 
@@ -2257,7 +2259,7 @@ async function toggleScreenShare() {
   if (window._screenStream) {
     stopScreenShare(true);
   } else {
-    if (!window._currentPartyId || !window._currentChannelId) {
+    if (!window._currentPartyId) {
       showToast('Önce bir ses kanalına girin.');
       return;
     }
@@ -2266,47 +2268,58 @@ async function toggleScreenShare() {
 }
 
 async function startScreenShare(preferredSurface = 'monitor') {
-  if (!window._currentPartyId || !window._currentChannelId || window._screenStream) return;
+  if (!window._currentPartyId || window._screenStream) return;
+  const chanId = window._currentChannelId || 0;
 
   try {
     const videoConstraints = {
-      // 30 FPS is the reliable default for a P2P room. It keeps CPU/bandwidth
-      // headroom for voice and avoids a cascading failure on mobile clients.
       frameRate: { ideal: 30, max: 30 },
       cursor: 'always'
     };
     if (preferredSurface) videoConstraints.displaySurface = preferredSurface;
 
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: videoConstraints,
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: false,
-        suppressLocalAudioPlayback: false
-      }
-    }).catch(async () => {
-      return await navigator.mediaDevices.getDisplayMedia({
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
         video: videoConstraints,
-        audio: true
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          suppressLocalAudioPlayback: false
+        }
       });
-    });
+    } catch (errAudio) {
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: videoConstraints,
+          audio: true
+        });
+      } catch (errNoAudioPref) {
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: videoConstraints,
+            audio: false
+          });
+        } catch (errNoConstraints) {
+          stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        }
+      }
+    }
 
     window._screenStream = stream;
 
     stream.getVideoTracks()[0].onended = () => stopScreenShare(true);
 
-    // Only advertise a stream after the user has picked a source. Previously
-    // the selector marked a ghost stream as live before getDisplayMedia ran.
     const announceRes = await fetch(`/api/parties/${window._currentPartyId}/screenshare-state`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sharing: true, channelId: window._currentChannelId })
+      body: JSON.stringify({ sharing: true, channelId: chanId })
     });
     if (!announceRes.ok) {
       const detail = await announceRes.json().catch(() => ({}));
       stream.getTracks().forEach(track => track.stop());
       window._screenStream = null;
-      showToast(detail.error || 'Ekran paylasimi bu kanalda kullanilamiyor.');
+      showToast(detail.error || 'Ekran paylaşımı bu kanalda kullanılamıyor.');
       updateSelfVoiceUI();
       return;
     }
@@ -2316,15 +2329,12 @@ async function startScreenShare(preferredSurface = 'monitor') {
 
     showScreenShareViewer(currentUser?.username || 'Siz', stream, true);
 
-    // A stream is opt-in: peers receive it only after pressing "Yayini Izle".
-    // Do not create connections merely because they happen to be in the channel.
-
   } catch(err) {
     console.warn('[ScreenShare] getDisplayMedia failed:', err);
     try {
       await fetch(`/api/parties/${window._currentPartyId}/screenshare-state`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sharing: false, channelId: window._currentChannelId })
+        body: JSON.stringify({ sharing: false, channelId: chanId })
       });
     } catch(e2){}
     if (err.name !== 'NotAllowedError') showToast('Ekran paylaşımı başlatılamadı.');

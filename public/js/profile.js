@@ -221,6 +221,9 @@ function renderMyProfile(user) {
   if (typeof updateThemeToggleIcons === 'function') {
     updateThemeToggleIcons(currentTheme);
   }
+  if (window.initAllBlunkVideoPlayers) {
+    window.initAllBlunkVideoPlayers();
+  }
 }
 
 // ============================================================

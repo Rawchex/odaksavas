@@ -68,14 +68,23 @@ if (isR2Enabled) {
 } else {
   console.log('[Storage] R2_BUCKET_NAME not set — using local disk fallback');
 
-  const UPLOADS_DIR = path.join(__dirname, '..', 'public', 'uploads');
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  const defaultDir = path.join(__dirname, '..', 'public', 'uploads');
+  const UPLOADS_DIR = process.env.UPLOADS_DIR || defaultDir;
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+  } catch (e) {
+    console.error('[Storage] Error creating UPLOADS_DIR:', e.message);
   }
 
   const diskStorage = multer.diskStorage({
     destination: function (req, file, cb) {
-      cb(null, UPLOADS_DIR);
+      const targetDir = fs.existsSync(UPLOADS_DIR) ? UPLOADS_DIR : defaultDir;
+      if (!fs.existsSync(targetDir)) {
+        try { fs.mkdirSync(targetDir, { recursive: true }); } catch (e) {}
+      }
+      cb(null, targetDir);
     },
     filename: function (req, file, cb) {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

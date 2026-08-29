@@ -1644,6 +1644,9 @@ function renderUserPage(user) {
       <div id="userPageTabContent">${tabHtml}</div>
     `}
   `;
+  if (window.initAllBlunkVideoPlayers) {
+    window.initAllBlunkVideoPlayers();
+  }
 }
 
 // ============================================================
