@@ -18910,6 +18910,45 @@ a {
   cursor: pointer;
 }
 
+/* Fullscreen Mode Optimization */
+.blunk-video-player:fullscreen,
+.blunk-video-player:-webkit-full-screen,
+.blunk-video-player:-moz-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  aspect-ratio: unset !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #000000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.blunk-video-player:fullscreen .blunk-video-element,
+.blunk-video-player:-webkit-full-screen .blunk-video-element,
+.blunk-video-player:-moz-full-screen .blunk-video-element {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  object-fit: contain !important;
+  border-radius: 0 !important;
+}
+
+.blunk-video-player:fullscreen .blunk-video-overlay-layer,
+.blunk-video-player:-webkit-full-screen .blunk-video-overlay-layer,
+.blunk-video-player:-moz-full-screen .blunk-video-overlay-layer {
+  padding: 24px 32px 32px 32px;
+}
+
+.blunk-video-player:fullscreen .blunk-video-scrub-bar,
+.blunk-video-player:-webkit-full-screen .blunk-video-scrub-bar,
+.blunk-video-player:-moz-full-screen .blunk-video-scrub-bar {
+  height: 5px;
+}
+
 /* Center Play/Pause Splash */
 .blunk-video-center-btn {
   position: absolute;
