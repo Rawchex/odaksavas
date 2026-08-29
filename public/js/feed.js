@@ -997,6 +997,17 @@ function observeFeedVideos() {
 
 function loadFeed() { window.FeedEngine.loadFeed(true); }
 
+// Expose compose & media functions globally to window
+window.onPostMediaSelected = onPostMediaSelected;
+window.onPostImageSelected = onPostMediaSelected;
+window.clearPostMedia = clearPostMedia;
+window.clearPostImage = clearPostMedia;
+window.stepPostCropZoom = stepPostCropZoom;
+window.onPostCropZoom = onPostCropZoom;
+window.submitPost = submitPost;
+window.openCreatePostModal = openCreatePostModal;
+window.closeCreatePostModal = closeCreatePostModal;
+
 document.addEventListener('DOMContentLoaded', () => {
   window.FeedEngine.init();
 });
