@@ -1139,7 +1139,7 @@ async function loadNotifications() {
 
     return `
       <div class="notif-item ${n.read ? '' : 'unread'}" style="position:relative;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:12px;margin-bottom:6px;background:var(--t-bg-card);border:1px solid var(--t-border-subtle)">
-        <div style="flex:1;display:flex;align-items:flex-start;gap:12px;cursor:pointer" onclick="handleNotifClick('${esc(n.username)}', '${n.type}', ${n.post_id || null}, ${n.party_id || null})">
+        <div style="flex:1;display:flex;align-items:flex-start;gap:12px;cursor:pointer" onclick="handleNotifClick('${esc(n.username)}', '${n.type}', ${n.post_id || null}, ${n.party_id || null}, ${n.comment_id || null})">
           ${renderAvatar({ username: n.username, profile_photo: n.profile_photo }, 'avatar avatar-sm')}
           <div class="notif-body" style="flex:1;min-width:0;">
             <div class="notif-text" style="font-size:13px;color:var(--t-text-primary);line-height:1.35;">${text}</div>
@@ -1178,8 +1178,9 @@ function notifText(n) {
   switch (n.type) {
     case 'post_like':         return `${u} gönderini beğendi`;
     case 'post_comment':      return `${u} gönderine yorum yaptı`;
+    case 'comment_reply':     return `${u} yorumunu yanıtladı`;
+    case 'comment_like':      return `${u} yaptığın yorumu beğendi`;
     case 'post_repost':       return `${u} gönderini yeniden paylaştı`;
-    case 'comment_like':      return `${u} yorumunu beğendi`;
     case 'friend_request':    return `${u} sana arkadaşlık isteği gönderdi`;
     case 'friend_accept':     return `${u} arkadaşlık isteğini kabul etti`;
     case 'party_invite':      return `${u} seni bir Blunk odasına davet etti`;
@@ -1190,7 +1191,7 @@ function notifText(n) {
   }
 }
 
-function handleNotifClick(username, type, postId, partyId) {
+function handleNotifClick(username, type, postId, partyId, commentId) {
   if (type === 'party_auto_closed') {
     return;
   } else if (type === 'party_invite' && partyId) {
@@ -1199,9 +1200,13 @@ function handleNotifClick(username, type, postId, partyId) {
   } else if (type === 'message' && username) {
     showPage('messages');
     openDirectChat(username);
-  } else if (['post_like', 'post_comment', 'post_repost'].includes(type) && postId && postId !== 'null') {
-    showPage('feed');
-    if (typeof openSharedPostInFeed === 'function') openSharedPostInFeed(parseInt(postId));
+  } else if (['post_like', 'post_comment', 'comment_reply', 'post_repost', 'comment_like'].includes(type) && postId && postId !== 'null') {
+    if (typeof openGlobalPostModal === 'function') {
+      openGlobalPostModal(parseInt(postId));
+    } else if (typeof openSharedPostInFeed === 'function') {
+      showPage('feed');
+      openSharedPostInFeed(parseInt(postId));
+    }
   } else if (type === 'friend_request' || type === 'friend_accept') {
     if (username && username !== 'BLUNK') openUserPage(username);
   } else if (username && username !== 'BLUNK') {

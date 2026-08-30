@@ -218,22 +218,32 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
   // POST Add Comment
   router.post('/posts/:id/comment', auth, (req, res) => {
     const { content, parent_id } = req.body;
+    const commentSnippet = (content || '').trim().slice(0, 80);
     db.run('INSERT INTO comments (user_id, post_id, content, parent_id) VALUES (?, ?, ?, ?)', [req.user.id, req.params.id, content, parent_id || null], function() {
+      const insertedCommentId = this.lastID;
       db.get('SELECT user_id FROM posts WHERE id = ?', [req.params.id], (err, post) => {
         if (parent_id) {
           db.get('SELECT user_id FROM comments WHERE id = ?', [parent_id], (err, parentComment) => {
             if (parentComment && parentComment.user_id !== req.user.id) {
-              createAndPushNotification(parentComment.user_id, 'post_comment', req.user.id, { postId: req.params.id, commentId: this.lastID });
+              createAndPushNotification(parentComment.user_id, 'comment_reply', req.user.id, { 
+                postId: req.params.id, 
+                commentId: insertedCommentId,
+                commentText: commentSnippet
+              });
             }
           });
         } else {
           if (post && post.user_id !== req.user.id) {
-            createAndPushNotification(post.user_id, 'post_comment', req.user.id, { postId: req.params.id, commentId: this.lastID });
-            notifyFriends(req.user.id, 'friend_activity_comment', { postId: req.params.id, commentId: this.lastID });
+            createAndPushNotification(post.user_id, 'post_comment', req.user.id, { 
+              postId: req.params.id, 
+              commentId: insertedCommentId,
+              commentText: commentSnippet
+            });
+            notifyFriends(req.user.id, 'friend_activity_comment', { postId: req.params.id, commentId: insertedCommentId });
           }
         }
       });
-      res.json({ commentId: this.lastID });
+      res.json({ commentId: insertedCommentId });
     });
   });
 

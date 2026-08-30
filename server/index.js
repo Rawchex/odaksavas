@@ -656,36 +656,45 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
       }
       const finishPush = (sender = null) => {
         const senderName = sender?.username ? `@${sender.username}` : 'BLUNK';
-        const senderAvatar = sender?.profile_photo
+        const senderAvatar = sender?.profile_photo && sender.profile_photo !== '/favicon.svg'
           ? sender.profile_photo
           : '/favicon.svg';
 
-        let title = 'Yeni Bildirim';
-        let body = 'Bir gelişme var.';
+        let title = senderName;
+        let body = 'Bir hareket var.';
         let targetUrl = '/';
         let actions = [];
         let tag = `blunk-${type}-${Date.now()}`;
 
         if (type === 'post_like') {
-          title = 'Gönderin Beğenildi';
+          title = `${senderName}`;
           body = `${senderName} gönderini beğendi.`;
-          targetUrl = postId ? `/?post=${postId}` : '/';
+          targetUrl = postId ? `/post/${postId}` : '/';
           tag = `post-like-${postId || userId}`;
         } else if (type === 'post_comment') {
-          title = 'Yeni Yorum';
-          body = `${senderName} gönderine yorum yaptı.`;
-          targetUrl = postId ? `/?post=${postId}` : '/';
+          title = `${senderName}`;
+          const cSnippet = options.commentText ? `: "${options.commentText}"` : '.';
+          body = `${senderName} gönderine yorum yaptı${cSnippet}`;
+          targetUrl = postId ? `/post/${postId}` : '/';
           tag = `post-comment-${postId || userId}`;
+        } else if (type === 'comment_reply') {
+          title = `${senderName}`;
+          const cSnippet = options.commentText ? `: "${options.commentText}"` : '.';
+          body = `${senderName} yorumunu yanıtladı${cSnippet}`;
+          targetUrl = postId ? `/post/${postId}` : '/';
+          tag = `comment-reply-${commentId || postId || userId}`;
         } else if (type === 'post_repost') {
-          title = 'Gönderin Paylaşıldı';
+          title = `${senderName}`;
           body = `${senderName} gönderini yeniden paylaştı.`;
-          targetUrl = postId ? `/?post=${postId}` : '/';
+          targetUrl = postId ? `/post/${postId}` : '/';
+          tag = `post-repost-${postId || userId}`;
         } else if (type === 'comment_like') {
-          title = 'Yorumun Beğenildi';
+          title = `${senderName}`;
           body = `${senderName} yaptığın yorumu beğendi.`;
-          targetUrl = postId ? `/?post=${postId}` : '/';
+          targetUrl = postId ? `/post/${postId}` : '/';
+          tag = `comment-like-${commentId || postId || userId}`;
         } else if (type === 'party_invite') {
-          title = 'Blunk Odası Daveti';
+          title = `${senderName}`;
           body = `${senderName} seni çalışma odasına davet etti!`;
           targetUrl = partyId ? `/?party=${partyId}` : '/';
           tag = `party-invite-${partyId || userId}`;
@@ -693,7 +702,7 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
             { action: 'join_party', title: 'Odaya Katıl' }
           ];
         } else if (type === 'party_join') {
-          title = 'Odaya Yeni Katılımcı';
+          title = `${senderName}`;
           body = `${senderName} çalışma odana katıldı.`;
           targetUrl = partyId ? `/?party=${partyId}` : '/';
         } else if (type === 'party_auto_closed') {
@@ -703,20 +712,20 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
           targetUrl = '/';
           tag = `party-closed-${partyId || userId}-${Date.now()}`;
         } else if (type === 'friend_request') {
-          title = 'Arkadaşlık İsteği';
+          title = `${senderName}`;
           body = `${senderName} sana arkadaşlık isteği gönderdi.`;
-          targetUrl = '/bildirimler';
+          targetUrl = sender?.username ? `/u/${sender.username}` : '/bildirimler';
           tag = `friend-req-${fromUserId || userId}`;
           actions = [
             { action: 'accept_friend', title: 'Kabul Et' }
           ];
         } else if (type === 'friend_accept') {
-          title = 'Arkadaşlık Onaylandı';
+          title = `${senderName}`;
           body = `${senderName} arkadaşlık isteğini kabul etti.`;
-          targetUrl = sender?.username ? `/profil/${sender.username}` : '/bildirimler';
+          targetUrl = sender?.username ? `/u/${sender.username}` : '/bildirimler';
         } else if (type === 'message') {
           title = `${senderName}`;
-          body = options.messagePreview || 'Sana yeni bir mesaj gönderdi.';
+          body = options.messagePreview || `${senderName} sana yeni bir mesaj gönderdi.`;
           targetUrl = sender?.username ? `/mesajlar/${sender.username}` : '/mesajlar';
           tag = `chat-${sender?.username || fromUserId}`;
           actions = [
@@ -1684,22 +1693,32 @@ app.post('/api/posts/:id/like', auth, (req, res) => {
 
 app.post('/api/posts/:id/comment', auth, (req, res) => {
   const { content, parent_id } = req.body;
+  const commentSnippet = (content || '').trim().slice(0, 80);
   db.run('INSERT INTO comments (user_id, post_id, content, parent_id) VALUES (?, ?, ?, ?)', [req.user.id, req.params.id, content, parent_id || null], function() {
+    const insertedCommentId = this.lastID;
     db.get('SELECT user_id FROM posts WHERE id = ?', [req.params.id], (err, post) => {
       if (parent_id) {
         db.get('SELECT user_id FROM comments WHERE id = ?', [parent_id], (err, parentComment) => {
           if (parentComment && parentComment.user_id !== req.user.id) {
-            createAndPushNotification(parentComment.user_id, 'post_comment', req.user.id, { postId: req.params.id, commentId: this.lastID });
+            createAndPushNotification(parentComment.user_id, 'comment_reply', req.user.id, { 
+              postId: req.params.id, 
+              commentId: insertedCommentId,
+              commentText: commentSnippet
+            });
           }
         });
       } else {
         if (post && post.user_id !== req.user.id) {
-          createAndPushNotification(post.user_id, 'post_comment', req.user.id, { postId: req.params.id, commentId: this.lastID });
-          notifyFriends(req.user.id, 'friend_activity_comment', { postId: req.params.id, commentId: this.lastID });
+          createAndPushNotification(post.user_id, 'post_comment', req.user.id, { 
+            postId: req.params.id, 
+            commentId: insertedCommentId,
+            commentText: commentSnippet
+          });
+          notifyFriends(req.user.id, 'friend_activity_comment', { postId: req.params.id, commentId: insertedCommentId });
         }
       }
     });
-    res.json({ commentId: this.lastID });
+    res.json({ commentId: insertedCommentId });
   });
 });
 
