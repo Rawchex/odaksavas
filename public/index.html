@@ -104,8 +104,8 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.0.0">
   <link rel="apple-touch-icon" href="/favicon.svg?v=2.0.0">
   <script src="/js/theme.js?v=1.0.0"></script>
-  <link rel="stylesheet" href="/css/style.css?v=3.7.4">
-  <link rel="stylesheet" href="/css/theme.css?v=3.7.4">
+  <link rel="stylesheet" href="/css/style.css?v=3.7.5">
+  <link rel="stylesheet" href="/css/theme.css?v=3.7.5">
   <link rel="stylesheet" href="/css/leagues.css?v=3.0">
   <link rel="stylesheet" href="/css/seasonPass.css?v=3.0">
   <link rel="stylesheet" href="/css/activity-breakdown.css?v=3.0">
@@ -645,9 +645,14 @@
       <!-- Modal Header -->
       <div class="post-modal-header">
         <div class="post-modal-header-left">
+          <button type="button" class="post-modal-close-btn" onclick="closeCreatePostModal(); event.stopPropagation();" aria-label="Kapat" title="Kapat">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
           <span class="post-modal-title">Yeni Gönderi</span>
         </div>
-        <button class="post-modal-close-btn" onclick="closeCreatePostModal()" aria-label="Kapat">✕</button>
       </div>
 
       <!-- Author Row -->
