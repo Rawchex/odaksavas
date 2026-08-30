@@ -1,5 +1,9 @@
-// Global Post Modal definition
 async function openGlobalPostModal(postId, isOwn, isRepost) {
+  // Immediately pause all background feed videos
+  document.querySelectorAll('.blunk-video-element').forEach(v => {
+    try { if (!v.paused) v.pause(); } catch (e) {}
+  });
+
   // Remove existing modal if any
   const existing = document.getElementById('profilePostPreview');
   if (existing) existing.remove();
@@ -108,9 +112,9 @@ function renderPostDetailSheet(wrapper, post, isOwn, isRepost) {
 
   wrapper.innerHTML = `
     <div class="thread-modal-header">
-      <div class="thread-back-btn" onclick="closeGlobalPostModal()">
+      <button type="button" class="thread-back-btn" onclick="closeGlobalPostModal(); event.stopPropagation();" aria-label="Geri">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-      </div>
+      </button>
       <div class="thread-header-title">Gönderi</div>
     </div>
     
@@ -148,6 +152,14 @@ function renderPostDetailSheet(wrapper, post, isOwn, isRepost) {
 }
 
 function closeGlobalPostModal() {
+  const el = document.getElementById('profilePostPreview');
+  if (el) {
+    // Immediately pause all videos inside modal
+    el.querySelectorAll('.blunk-video-element').forEach(v => {
+      try { if (!v.paused) v.pause(); } catch(e) {}
+    });
+  }
+
   if (window._currentOpenPostId && !window._isPostPopstate) {
     if (history.state && history.state.modal === 'post') {
       history.back();
@@ -168,7 +180,6 @@ function closeGlobalPostModal() {
   window._currentOpenPostId = null;
   window._isPostPopstate = false;
 
-  const el = document.getElementById('profilePostPreview');
   if (el) {
     el.classList.remove('open');
     setTimeout(() => {

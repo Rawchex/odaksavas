@@ -15761,17 +15761,18 @@ a {
   display: flex;
   align-items: center;
   padding: 12px 16px;
+  padding-top: max(12px, env(safe-area-inset-top, 12px));
   border-bottom: 1px solid var(--t-border-subtle, rgba(255, 255, 255, 0.08));
   position: sticky;
   top: 0;
-  background: var(--t-bg-card, rgba(17, 18, 24, 0.92));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  z-index: 10;
+  background: var(--t-bg-card, rgba(17, 18, 24, 0.95));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 100;
 }
 .thread-back-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15779,7 +15780,16 @@ a {
   cursor: pointer;
   transition: background 0.2s ease, opacity 0.2s ease;
   color: var(--t-text-primary, #ffffff);
+  background: transparent;
+  border: none;
+  outline: none;
   margin-right: 14px;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  pointer-events: auto;
+  z-index: 101;
 }
 .thread-back-btn:hover {
   background: var(--t-bg-input, rgba(255, 255, 255, 0.1));
@@ -15908,17 +15918,28 @@ a {
 }
 
 @media (max-width: 600px) {
+  .thread-modal-backdrop {
+    padding: 0;
+  }
   .thread-modal-container {
     padding: 0;
     max-width: 100%;
+    min-height: 100vh;
   }
   .thread-modal-content-wrapper {
     border-radius: 0;
     border: none;
     min-height: 100vh;
+    box-shadow: none;
   }
-.thread-reply-container {
+  .thread-modal-header {
+    padding-top: max(14px, env(safe-area-inset-top, 14px));
+    padding-left: 12px;
+    padding-right: 16px;
+  }
+  .thread-reply-container {
     padding: 10px 14px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
   }
 }
 
