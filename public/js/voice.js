@@ -1733,6 +1733,7 @@ async function openUserVoiceSettingsModal(username) {
     if (!modal) return;
 
     // ⚡ INSTANT OPTIMISTIC OPEN (0ms delay)
+    modal.style.display = 'flex';
     modal.classList.add('open');
 
     // ── Instant initial render with local data ──
@@ -1926,13 +1927,19 @@ async function openUserVoiceSettingsModal(username) {
   } catch(err) {
     console.error('openUserVoiceModal error:', err);
     const modal = document.getElementById('userVoiceSettingsModal');
-    if (modal) modal.classList.add('open');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('open');
+    }
   }
 }
 
 function closeUserVoiceModal() {
   const modal = document.getElementById('userVoiceSettingsModal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  }
   const focusBox = document.getElementById('uvActiveFocusBox');
   if (focusBox) focusBox.style.display = 'none';
   window._uvCurrentActiveSession = null;
@@ -1947,6 +1954,11 @@ function closeUserVoiceModal() {
     }
   }
 }
+
+// Global aliases for room cards & voice UI
+window.openUserVoiceModal = openUserVoiceSettingsModal;
+window.openUserVoiceSettingsModal = openUserVoiceSettingsModal;
+window.closeUserVoiceModal = closeUserVoiceModal;
 
 function handleUvVolumeChange(val) {
   if (!window._modalActiveUser) return;

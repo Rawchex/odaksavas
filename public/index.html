@@ -2242,7 +2242,7 @@
   </div>
 
   <!-- ── USER VOICE & ROLE SETTINGS MODAL ── -->
-  <div class="modal-overlay" id="userVoiceSettingsModal" style="z-index:999999; display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; box-sizing:border-box;">
+  <div class="modal-overlay" id="userVoiceSettingsModal" onclick="if(event.target===this) closeUserVoiceModal()" style="z-index:999999; display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; box-sizing:border-box;">
     <div class="uvm-card" id="uvCard" style="width:320px; max-width:calc(100vw - 32px); background:#18191c !important; border:1px solid rgba(255,255,255,0.08) !important; border-radius:16px !important; overflow:hidden !important; box-shadow:0 16px 40px rgba(0,0,0,0.6) !important; position:relative !important; box-sizing:border-box !important; text-align:left !important; display:block !important;">
       <!-- Header banner + avatar -->
       <div class="uvm-banner" id="uvBanner" style="height:80px !important; background:linear-gradient(135deg, #5865f2 0%, #4752c4 100%) !important; position:relative !important; display:flex !important; align-items:flex-start !important; justify-content:space-between !important; padding:12px !important; box-sizing:border-box !important;">
@@ -2263,11 +2263,15 @@
         <div class="uvm-identity" style="margin-bottom:14px !important;">
           <!-- Username clickable → profile -->
           <div id="uvUsername" class="uvm-username" onclick="handleUvViewProfile()" style="cursor:pointer !important; font-size:18px !important; font-weight:700 !important; color:#f2f3f5 !important; margin-bottom:6px !important; line-height:1.2 !important;" data-tooltip="Profili Görüntüle" data-tooltip-pos="right">Kullanıcı</div>
-          <div class="uvm-meta" style="display:flex !important; align-items:center !important; gap:8px !important;">
+          <div class="uvm-meta" style="display:flex !important; align-items:center !important; gap:8px !important; margin-bottom:8px !important;">
             <span id="uvStatusLabel" class="uvm-status-label" style="font-size:11px !important; font-weight:700 !important; letter-spacing:0.5px !important; color:#949ba4 !important;">Çevrimdışı</span>
             <span class="uvm-dot" style="font-size:11px !important; color:#4e5058 !important;">·</span>
             <span id="uvRoleBadge" class="role-badge member">ÜYE</span>
           </div>
+          <button type="button" class="uvm-profile-btn" onclick="handleUvViewProfile()" style="width:100% !important; height:32px !important; background:rgba(255,255,255,0.06) !important; border:1px solid rgba(255,255,255,0.1) !important; border-radius:8px !important; color:#f2f3f5 !important; font-size:12px !important; font-weight:700 !important; cursor:pointer !important; display:flex !important; align-items:center !important; justify-content:center !important; gap:6px !important; transition:background 0.15s ease !important;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Profili Görüntüle
+          </button>
         </div>
 
         <!-- Active Focus Session Box -->
@@ -2718,7 +2722,7 @@
   <script src="/js/party.js?v=3.0.1"></script>
   <script src="/js/room-management.js?v=1.1.0"></script>
   <script src="/js/messages.js?v=3.0.0"></script>
-  <script src="/js/voice.js?v=9.1.0"></script>
+  <script src="/js/voice.js?v=9.1.1"></script>
   <script src="/js/onboarding.js?v=1.0.0"></script>
   <script src="/js/confetti.js?v=1.0.0"></script>
   <script src="/js/empty-day-quotes.js?v=1.0.0"></script>
