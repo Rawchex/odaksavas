@@ -1069,29 +1069,38 @@ function initBlunkVideoPlayer(container) {
   const muteIcon = container.querySelector('.ctrl-mute-icon');
 
   const applyAspectRatio = () => {
+    const isFs = document.fullscreenElement === container || document.webkitFullscreenElement === container;
+    if (isFs) {
+      container.style.aspectRatio = 'unset';
+      container.style.maxHeight = '100vh';
+      video.style.maxHeight = '100vh';
+      video.style.objectFit = 'contain';
+      return;
+    }
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (vw && vh) {
-      const ratio = vw / vh;
-      if (ratio >= 1.05) {
-        // Landscape (e.g. 16:9, 4:3) - fills snug without letterbox bars
-        container.style.aspectRatio = `${vw} / ${vh}`;
-        container.style.maxHeight = '480px';
-        video.style.objectFit = 'contain';
-      } else if (ratio >= 0.8) {
-        // Square (1:1)
-        container.style.aspectRatio = '1 / 1';
-        container.style.maxHeight = '500px';
-        video.style.objectFit = 'cover';
-      } else {
-        // Portrait (9:16)
-        const clampedRatio = Math.max(0.5625, ratio);
-        container.style.aspectRatio = `${clampedRatio}`;
-        container.style.maxHeight = '540px';
-        video.style.objectFit = 'cover';
-      }
+      container.style.aspectRatio = `${vw} / ${vh}`;
+      container.style.maxHeight = '520px';
+      video.style.maxHeight = '520px';
+      video.style.objectFit = 'contain';
     }
   };
+
+  const onFullscreenChange = () => {
+    const isFs = document.fullscreenElement === container || document.webkitFullscreenElement === container;
+    container.classList.toggle('is-fullscreen', isFs);
+    if (isFs) {
+      container.style.aspectRatio = 'unset';
+      container.style.maxHeight = '100vh';
+      video.style.maxHeight = '100vh';
+      video.style.objectFit = 'contain';
+    } else {
+      applyAspectRatio();
+    }
+  };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
   const updateUI = () => {
     const isPlaying = !video.paused && !video.ended;
