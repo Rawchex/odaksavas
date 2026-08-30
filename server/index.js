@@ -367,7 +367,8 @@ const userMessageHistory = new Map(); // userId -> number[] (timestamps)
 const userSpamMutes = new Map();      // userId -> expireTimestamp
 
 const checkSpamLimit = (req, res, next) => {
-  const userId = req.user.id;
+  const userId = req.user ? req.user.id : 0;
+  if (!userId) return next();
   const now = Date.now();
 
   // 1. Check if user is currently muted for spamming
@@ -402,6 +403,101 @@ const checkSpamLimit = (req, res, next) => {
 
   history.push(now);
   userMessageHistory.set(userId, history);
+  next();
+};
+
+const checkLikeSpamLimit = async (req, res, next) => {
+  const userId = req.user ? req.user.id : 0;
+  if (!userId) return next();
+  const targetId = req.params.id || '0';
+  const redis = getRedis();
+
+  if (redis) {
+    try {
+      const userGlobalLikeKey = `rate:like:global:${userId}`;
+      const userTargetLikeKey = `rate:like:target:${userId}:${targetId}`;
+
+      const [globalCount, targetCount] = await Promise.all([
+        redis.get(userGlobalLikeKey),
+        redis.get(userTargetLikeKey)
+      ]);
+
+      if (parseInt(globalCount || '0') >= 25) {
+        return res.status(429).json({ error: 'Çok hızlı beğeni yapıyorsunuz. Lütfen biraz bekleyin.' });
+      }
+      if (parseInt(targetCount || '0') >= 6) {
+        return res.status(429).json({ error: 'Bu gönderi için çok hızlı işlem yapıyorsunuz. Lütfen biraz bekleyin.' });
+      }
+
+      await Promise.all([
+        redis.setex(userGlobalLikeKey, 10, (parseInt(globalCount || '0') + 1).toString()),
+        redis.setex(userTargetLikeKey, 10, (parseInt(targetCount || '0') + 1).toString())
+      ]);
+    } catch (e) {}
+  }
+  next();
+};
+
+const checkCommentSpamLimit = async (req, res, next) => {
+  const userId = req.user ? req.user.id : 0;
+  if (!userId) return next();
+  const postId = req.params.id || '0';
+  const content = (req.body.content || '').trim();
+  const redis = getRedis();
+
+  if (!content) {
+    return res.status(400).json({ error: 'Yorum metni boş olamaz.' });
+  }
+
+  if (redis) {
+    try {
+      const userCooldownKey = `rate:comment:cd:${userId}`;
+      const userCountKey = `rate:comment:count:${userId}`;
+      const duplicateKey = `rate:comment:dup:${userId}:${postId}:${Buffer.from(content).toString('base64').slice(0, 32)}`;
+
+      const [inCooldown, minuteCount, isDuplicate] = await Promise.all([
+        redis.get(userCooldownKey),
+        redis.get(userCountKey),
+        redis.get(duplicateKey)
+      ]);
+
+      if (inCooldown) {
+        return res.status(429).json({ error: 'Yorum yapmak için lütfen 2 saniye bekleyin.' });
+      }
+      if (parseInt(minuteCount || '0') >= 10) {
+        return res.status(429).json({ error: '1 dakika içinde çok fazla yorum yaptınız. Lütfen biraz bekleyin.' });
+      }
+      if (isDuplicate) {
+        return res.status(429).json({ error: 'Aynı yorumu peş peşe gönderemezsiniz.' });
+      }
+
+      await Promise.all([
+        redis.setex(userCooldownKey, 2, '1'),
+        redis.setex(userCountKey, 60, (parseInt(minuteCount || '0') + 1).toString()),
+        redis.setex(duplicateKey, 45, '1')
+      ]);
+    } catch (e) {}
+  }
+  next();
+};
+
+const checkRepostSpamLimit = async (req, res, next) => {
+  const userId = req.user ? req.user.id : 0;
+  if (!userId) return next();
+  const redis = getRedis();
+
+  if (redis) {
+    try {
+      const repostCountKey = `rate:repost:count:${userId}`;
+      const minuteCount = await redis.get(repostCountKey);
+
+      if (parseInt(minuteCount || '0') >= 6) {
+        return res.status(429).json({ error: 'Çok hızlı yeniden paylaşım yapıyorsunuz. Lütfen biraz bekleyin.' });
+      }
+
+      await redis.setex(repostCountKey, 60, (parseInt(minuteCount || '0') + 1).toString());
+    } catch (e) {}
+  }
   next();
 };
 
@@ -637,148 +733,194 @@ const sendDetailedSessionAbandonedNotification = (userId, pomoRound) => {
 
 const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
   const { postId = null, commentId = null, partyId = null } = options;
-  db.run(
-    'INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, party_id) VALUES (?, ?, ?, ?, ?, ?)',
-    [userId, type, fromUserId, postId, commentId, partyId],
-    function(err) {
-      if (!err && userId) {
-        // Enforce max 50 notifications per user (FIFO: delete oldest beyond 50)
-        db.run(`
-          DELETE FROM notifications 
-          WHERE user_id = ? 
-            AND id NOT IN (
-              SELECT id FROM notifications 
-              WHERE user_id = ? 
-              ORDER BY id DESC 
-              LIMIT 50
-            )
-        `, [userId, userId]);
-      }
-      const finishPush = (sender = null) => {
-        const senderName = sender?.username ? `@${sender.username}` : 'BLUNK';
-        const origin = process.env.APP_URL || 'https://blunk.com.tr';
-        let senderAvatar = `${origin}/favicon.svg`;
-        if (sender?.profile_photo && sender.profile_photo !== '/favicon.svg' && sender.profile_photo !== '/default-avatar.png') {
-          if (sender.profile_photo.startsWith('http://') || sender.profile_photo.startsWith('https://')) {
-            senderAvatar = sender.profile_photo;
+  if (!userId || (fromUserId && userId === fromUserId)) return; // Never notify self
+
+  const redis = getRedis();
+  const cooldownKey = `notif_cd:${type}:${fromUserId || 0}:${userId}:${postId || 0}:${commentId || 0}`;
+  const isDebouncedType = ['post_like', 'comment_like', 'post_repost', 'friend_new_post'].includes(type);
+
+  const executeNotification = async () => {
+    let shouldSendPush = true;
+
+    if (isDebouncedType && redis) {
+      try {
+        const inCooldown = await redis.get(cooldownKey);
+        if (inCooldown) {
+          shouldSendPush = false; // Prevent vibrating device repeatedly for fast toggles
+        } else {
+          // Set 5-minute cooldown for repeated like/unlike/repost pushes
+          await redis.setex(cooldownKey, 300, '1');
+        }
+      } catch (e) {}
+    }
+
+    // Check if an existing notification exists for this event
+    db.get(
+      `SELECT id FROM notifications 
+       WHERE user_id = ? AND type = ? AND from_user_id = ? 
+         AND COALESCE(post_id, 0) = ? AND COALESCE(comment_id, 0) = ? 
+       LIMIT 1`,
+      [userId, type, fromUserId || 0, postId || 0, commentId || 0],
+      (err, existingRow) => {
+        const triggerPush = () => {
+          if (!shouldSendPush) return;
+          const finishPush = (sender = null) => {
+            const senderName = sender?.username ? `@${sender.username}` : 'BLUNK';
+            const origin = process.env.APP_URL || 'https://blunk.com.tr';
+            let senderAvatar = `${origin}/favicon.svg`;
+            if (sender?.profile_photo && sender.profile_photo !== '/favicon.svg' && sender.profile_photo !== '/default-avatar.png') {
+              if (sender.profile_photo.startsWith('http://') || sender.profile_photo.startsWith('https://')) {
+                senderAvatar = sender.profile_photo;
+              } else {
+                const cleanPath = sender.profile_photo.startsWith('/') ? sender.profile_photo : `/${sender.profile_photo}`;
+                senderAvatar = `${origin}${cleanPath}`;
+              }
+            }
+
+            let title = senderName;
+            let body = 'Yeni bir bildiriminiz var.';
+            let targetUrl = '/';
+            let actions = [];
+            let tag = `blunk-${type}-${Date.now()}`;
+
+            if (type === 'post_like') {
+              title = `${senderName}`;
+              body = `${senderName} gönderini beğendi.`;
+              targetUrl = postId ? `/post/${postId}` : '/';
+              tag = `post-like-${postId || userId}`;
+            } else if (type === 'post_comment') {
+              title = `${senderName}`;
+              const cSnippet = options.commentText ? `: "${options.commentText}"` : '.';
+              body = `${senderName} gönderine yorum yaptı${cSnippet}`;
+              targetUrl = postId ? `/post/${postId}` : '/';
+              tag = `post-comment-${postId || userId}`;
+            } else if (type === 'comment_reply') {
+              title = `${senderName}`;
+              const cSnippet = options.commentText ? `: "${options.commentText}"` : '.';
+              body = `${senderName} yorumunu yanıtladı${cSnippet}`;
+              targetUrl = postId ? `/post/${postId}` : '/';
+              tag = `comment-reply-${commentId || postId || userId}`;
+            } else if (type === 'friend_new_post') {
+              title = `${senderName}`;
+              const pSnippet = options.contentSnippet ? `: "${options.contentSnippet}"` : '.';
+              body = `${senderName} yeni bir gönderi paylaştı${pSnippet}`;
+              targetUrl = postId ? `/post/${postId}` : '/';
+              tag = `new-post-${postId || userId}`;
+            } else if (type === 'post_repost') {
+              title = `${senderName}`;
+              body = `${senderName} gönderini yeniden paylaştı.`;
+              targetUrl = postId ? `/post/${postId}` : '/';
+              tag = `post-repost-${postId || userId}`;
+            } else if (type === 'comment_like') {
+              title = `${senderName}`;
+              body = `${senderName} yaptığın yorumu beğendi.`;
+              targetUrl = postId ? `/post/${postId}` : '/';
+              tag = `comment-like-${commentId || postId || userId}`;
+            } else if (type === 'party_invite') {
+              title = `${senderName}`;
+              body = `${senderName} seni çalışma odasına davet etti!`;
+              targetUrl = partyId ? `/?party=${partyId}` : '/';
+              tag = `party-invite-${partyId || userId}`;
+              actions = [
+                { action: 'join_party', title: 'Odaya Katıl' }
+              ];
+            } else if (type === 'party_join') {
+              title = `${senderName}`;
+              body = `${senderName} çalışma odana katıldı.`;
+              targetUrl = partyId ? `/?party=${partyId}` : '/';
+            } else if (type === 'party_auto_closed') {
+              title = 'BLUNK';
+              const pName = options.partyName ? `"${options.partyName}"` : 'Çalışma';
+              body = `${pName} odanda hiç kimsecikler aktif olmadığı için odanı kapatmam gerekti... Bunu yapmak zorunda olduğum için üzgünüm.`;
+              targetUrl = '/';
+              tag = `party-closed-${partyId || userId}-${Date.now()}`;
+            } else if (type === 'friend_request') {
+              title = `${senderName}`;
+              body = `${senderName} sana arkadaşlık isteği gönderdi.`;
+              targetUrl = sender?.username ? `/u/${sender.username}` : '/bildirimler';
+              tag = `friend-req-${fromUserId || userId}`;
+              actions = [
+                { action: 'accept_friend', title: 'Kabul Et' }
+              ];
+            } else if (type === 'friend_accept') {
+              title = `${senderName}`;
+              body = `${senderName} arkadaşlık isteğini kabul etti.`;
+              targetUrl = sender?.username ? `/u/${sender.username}` : '/bildirimler';
+            } else if (type === 'message') {
+              title = `${senderName}`;
+              body = options.messagePreview || `${senderName} sana yeni bir mesaj gönderdi.`;
+              targetUrl = sender?.username ? `/mesajlar/${sender.username}` : '/mesajlar';
+              tag = `chat-${sender?.username || fromUserId}`;
+              actions = [
+                { action: 'open_chat', title: 'Yanıtla' }
+              ];
+            }
+
+            const payload = {
+              title,
+              body,
+              type,
+              icon: senderAvatar,
+              badge: `${origin}/favicon.svg`,
+              tag,
+              renotify: true,
+              vibrate: [100, 50, 100],
+              actions,
+              data: {
+                url: targetUrl,
+                type,
+                partyId,
+                postId,
+                fromUserId,
+                senderUsername: sender?.username || null
+              },
+              ...options
+            };
+
+            sendPushNotification(userId, payload);
+          };
+
+          if (fromUserId && fromUserId > 0) {
+            db.get('SELECT username, profile_photo FROM users WHERE id = ?', [fromUserId], (err, sender) => {
+              finishPush(sender);
+            });
           } else {
-            const cleanPath = sender.profile_photo.startsWith('/') ? sender.profile_photo : `/${sender.profile_photo}`;
-            senderAvatar = `${origin}${cleanPath}`;
+            finishPush(null);
           }
-        }
-
-        let title = senderName;
-        let body = 'Yeni bir bildiriminiz var.';
-        let targetUrl = '/';
-        let actions = [];
-        let tag = `blunk-${type}-${Date.now()}`;
-
-        if (type === 'post_like') {
-          title = `${senderName}`;
-          body = `${senderName} gönderini beğendi.`;
-          targetUrl = postId ? `/post/${postId}` : '/';
-          tag = `post-like-${postId || userId}`;
-        } else if (type === 'post_comment') {
-          title = `${senderName}`;
-          const cSnippet = options.commentText ? `: "${options.commentText}"` : '.';
-          body = `${senderName} gönderine yorum yaptı${cSnippet}`;
-          targetUrl = postId ? `/post/${postId}` : '/';
-          tag = `post-comment-${postId || userId}`;
-        } else if (type === 'comment_reply') {
-          title = `${senderName}`;
-          const cSnippet = options.commentText ? `: "${options.commentText}"` : '.';
-          body = `${senderName} yorumunu yanıtladı${cSnippet}`;
-          targetUrl = postId ? `/post/${postId}` : '/';
-          tag = `comment-reply-${commentId || postId || userId}`;
-        } else if (type === 'friend_new_post') {
-          title = `${senderName}`;
-          const pSnippet = options.contentSnippet ? `: "${options.contentSnippet}"` : '.';
-          body = `${senderName} yeni bir gönderi paylaştı${pSnippet}`;
-          targetUrl = postId ? `/post/${postId}` : '/';
-          tag = `new-post-${postId || userId}`;
-        } else if (type === 'post_repost') {
-          title = `${senderName}`;
-          body = `${senderName} gönderini yeniden paylaştı.`;
-          targetUrl = postId ? `/post/${postId}` : '/';
-          tag = `post-repost-${postId || userId}`;
-        } else if (type === 'comment_like') {
-          title = `${senderName}`;
-          body = `${senderName} yaptığın yorumu beğendi.`;
-          targetUrl = postId ? `/post/${postId}` : '/';
-          tag = `comment-like-${commentId || postId || userId}`;
-        } else if (type === 'party_invite') {
-          title = `${senderName}`;
-          body = `${senderName} seni çalışma odasına davet etti!`;
-          targetUrl = partyId ? `/?party=${partyId}` : '/';
-          tag = `party-invite-${partyId || userId}`;
-          actions = [
-            { action: 'join_party', title: 'Odaya Katıl' }
-          ];
-        } else if (type === 'party_join') {
-          title = `${senderName}`;
-          body = `${senderName} çalışma odana katıldı.`;
-          targetUrl = partyId ? `/?party=${partyId}` : '/';
-        } else if (type === 'party_auto_closed') {
-          title = 'BLUNK';
-          const pName = options.partyName ? `"${options.partyName}"` : 'Çalışma';
-          body = `${pName} odanda hiç kimsecikler aktif olmadığı için odanı kapatmam gerekti... Bunu yapmak zorunda olduğum için üzgünüm.`;
-          targetUrl = '/';
-          tag = `party-closed-${partyId || userId}-${Date.now()}`;
-        } else if (type === 'friend_request') {
-          title = `${senderName}`;
-          body = `${senderName} sana arkadaşlık isteği gönderdi.`;
-          targetUrl = sender?.username ? `/u/${sender.username}` : '/bildirimler';
-          tag = `friend-req-${fromUserId || userId}`;
-          actions = [
-            { action: 'accept_friend', title: 'Kabul Et' }
-          ];
-        } else if (type === 'friend_accept') {
-          title = `${senderName}`;
-          body = `${senderName} arkadaşlık isteğini kabul etti.`;
-          targetUrl = sender?.username ? `/u/${sender.username}` : '/bildirimler';
-        } else if (type === 'message') {
-          title = `${senderName}`;
-          body = options.messagePreview || `${senderName} sana yeni bir mesaj gönderdi.`;
-          targetUrl = sender?.username ? `/mesajlar/${sender.username}` : '/mesajlar';
-          tag = `chat-${sender?.username || fromUserId}`;
-          actions = [
-            { action: 'open_chat', title: 'Yanıtla' }
-          ];
-        }
-
-        const payload = {
-          title,
-          body,
-          type,
-          icon: senderAvatar,
-          badge: `${origin}/favicon.svg`,
-          tag,
-          renotify: true,
-          vibrate: [100, 50, 100],
-          actions,
-          data: {
-            url: targetUrl,
-            type,
-            partyId,
-            postId,
-            fromUserId,
-            senderUsername: sender?.username || null
-          },
-          ...options
         };
 
-        sendPushNotification(userId, payload);
-      };
-
-      if (fromUserId && fromUserId > 0) {
-        db.get('SELECT username, profile_photo FROM users WHERE id = ?', [fromUserId], (err, sender) => {
-          finishPush(sender);
-        });
-      } else {
-        finishPush(null);
+        if (existingRow && isDebouncedType) {
+          // Refresh existing notification timestamp & mark unread instead of polluting DB
+          db.run('UPDATE notifications SET read = 0, created_at = CURRENT_TIMESTAMP WHERE id = ?', [existingRow.id], () => {
+            triggerPush();
+          });
+        } else {
+          db.run(
+            'INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, party_id) VALUES (?, ?, ?, ?, ?, ?)',
+            [userId, type, fromUserId, postId, commentId, partyId],
+            function(insertErr) {
+              if (!insertErr && userId) {
+                // Enforce max 50 notifications per user (FIFO: delete oldest beyond 50)
+                db.run(`
+                  DELETE FROM notifications 
+                  WHERE user_id = ? 
+                    AND id NOT IN (
+                      SELECT id FROM notifications 
+                      WHERE user_id = ? 
+                      ORDER BY id DESC 
+                      LIMIT 50
+                    )
+                `, [userId, userId]);
+              }
+              triggerPush();
+            }
+          );
+        }
       }
-    }
-  );
+    );
+  };
+
+  executeNotification();
 };
 
 const notifyFriends = (fromUserId, type, options = {}) => {
@@ -1690,7 +1832,7 @@ app.post('/api/polls/:pollId/vote', auth, (req, res) => {
 });
 
 
-app.post('/api/posts/:id/like', auth, (req, res) => {
+app.post('/api/posts/:id/like', auth, checkLikeSpamLimit, (req, res) => {
   db.run('INSERT INTO likes (user_id, post_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
     if (err) {
       db.run('DELETE FROM likes WHERE user_id = ? AND post_id = ?', [req.user.id, req.params.id], () => {
@@ -1700,7 +1842,6 @@ app.post('/api/posts/:id/like', auth, (req, res) => {
       db.get('SELECT user_id FROM posts WHERE id = ?', [req.params.id], (err, post) => {
         if (post && post.user_id !== req.user.id) {
           createAndPushNotification(post.user_id, 'post_like', req.user.id, { postId: req.params.id });
-          notifyFriends(req.user.id, 'friend_activity_like', { postId: req.params.id });
         }
       });
       res.json({ success: true });
@@ -1708,7 +1849,7 @@ app.post('/api/posts/:id/like', auth, (req, res) => {
   });
 });
 
-app.post('/api/posts/:id/comment', auth, (req, res) => {
+app.post('/api/posts/:id/comment', auth, checkCommentSpamLimit, (req, res) => {
   const { content, parent_id } = req.body;
   const commentSnippet = (content || '').trim().slice(0, 80);
   db.run('INSERT INTO comments (user_id, post_id, content, parent_id) VALUES (?, ?, ?, ?)', [req.user.id, req.params.id, content, parent_id || null], function() {
@@ -1731,7 +1872,6 @@ app.post('/api/posts/:id/comment', auth, (req, res) => {
             commentId: insertedCommentId,
             commentText: commentSnippet
           });
-          notifyFriends(req.user.id, 'friend_activity_comment', { postId: req.params.id, commentId: insertedCommentId });
         }
       }
     });
@@ -1754,7 +1894,7 @@ app.get('/api/posts/:id/comments', optionalAuth, (req, res) => {
   });
 });
 
-app.post('/api/comments/:id/like', optionalAuth, (req, res) => {
+app.post('/api/comments/:id/like', auth, checkLikeSpamLimit, (req, res) => {
   const userId = req.user ? req.user.id : 0;
   if (!userId) return res.status(401).json({ error: 'Giriş yapmalısınız' });
   db.run('CREATE TABLE IF NOT EXISTS comment_likes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, comment_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, comment_id))', () => {
@@ -1764,13 +1904,18 @@ app.post('/api/comments/:id/like', optionalAuth, (req, res) => {
           res.json({ success: true, unliked: true });
         });
       } else {
+        db.get('SELECT user_id, post_id FROM comments WHERE id = ?', [req.params.id], (cErr, commentRow) => {
+          if (commentRow && commentRow.user_id !== userId) {
+            createAndPushNotification(commentRow.user_id, 'comment_like', userId, { commentId: req.params.id, postId: commentRow.post_id });
+          }
+        });
         res.json({ success: true, liked: true });
       }
     });
   });
 });
 
-app.post('/api/posts/:id/repost', optionalAuth, (req, res) => {
+app.post('/api/posts/:id/repost', auth, checkRepostSpamLimit, (req, res) => {
   const userId = req.user ? req.user.id : 0;
   if (!userId) return res.status(401).json({ error: 'Giriş yapmalısınız' });
   db.run('INSERT INTO reposts (user_id, post_id) VALUES (?, ?)', [userId, req.params.id], (err) => {
@@ -1778,7 +1923,8 @@ app.post('/api/posts/:id/repost', optionalAuth, (req, res) => {
       res.status(400).json({ error: 'Zaten repost ettin' });
     } else {
       db.get('SELECT * FROM posts WHERE id = ?', [req.params.id], (err, post) => {
-        db.run('INSERT INTO posts (user_id, content, image, repost_of_post_id) VALUES (?, ?, ?, ?)', [req.user.id, `Repost: ${post.content}`, post.image, req.params.id], () => {
+        if (!post) return res.status(404).json({ error: 'Post bulunamadı' });
+        db.run('INSERT INTO posts (user_id, content, image, repost_of_post_id) VALUES (?, ?, ?, ?)', [req.user.id, `Repost: ${post.content || ''}`, post.image, req.params.id], () => {
           if (post.user_id !== req.user.id) {
             createAndPushNotification(post.user_id, 'post_repost', req.user.id, { postId: req.params.id });
           }

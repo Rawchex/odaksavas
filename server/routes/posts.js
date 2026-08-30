@@ -201,7 +201,33 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
   });
 
   // POST Like / Unlike Post
-  router.post('/posts/:id/like', auth, (req, res) => {
+  router.post('/posts/:id/like', auth, async (req, res) => {
+    const userId = req.user.id;
+    const targetId = req.params.id;
+    const { getRedis } = require('../redis');
+    const redis = getRedis();
+
+    if (redis) {
+      try {
+        const userGlobalLikeKey = `rate:like:global:${userId}`;
+        const userTargetLikeKey = `rate:like:target:${userId}:${targetId}`;
+        const [globalCount, targetCount] = await Promise.all([
+          redis.get(userGlobalLikeKey),
+          redis.get(userTargetLikeKey)
+        ]);
+        if (parseInt(globalCount || '0') >= 25) {
+          return res.status(429).json({ error: 'Çok hızlı beğeni yapıyorsunuz. Lütfen biraz bekleyin.' });
+        }
+        if (parseInt(targetCount || '0') >= 6) {
+          return res.status(429).json({ error: 'Bu gönderi için çok hızlı işlem yapıyorsunuz. Lütfen biraz bekleyin.' });
+        }
+        await Promise.all([
+          redis.setex(userGlobalLikeKey, 10, (parseInt(globalCount || '0') + 1).toString()),
+          redis.setex(userTargetLikeKey, 10, (parseInt(targetCount || '0') + 1).toString())
+        ]);
+      } catch (e) {}
+    }
+
     db.run('INSERT INTO likes (user_id, post_id) VALUES (?, ?)', [req.user.id, req.params.id], (err) => {
       if (err) {
         db.run('DELETE FROM likes WHERE user_id = ? AND post_id = ?', [req.user.id, req.params.id], () => {
@@ -211,7 +237,6 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
         db.get('SELECT user_id FROM posts WHERE id = ?', [req.params.id], (err, post) => {
           if (post && post.user_id !== req.user.id) {
             createAndPushNotification(post.user_id, 'post_like', req.user.id, { postId: req.params.id });
-            notifyFriends(req.user.id, 'friend_activity_like', { postId: req.params.id });
           }
         });
         res.json({ success: true });
@@ -220,9 +245,49 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
   });
 
   // POST Add Comment
-  router.post('/posts/:id/comment', auth, (req, res) => {
+  router.post('/posts/:id/comment', auth, async (req, res) => {
+    const userId = req.user.id;
+    const postId = req.params.id;
     const { content, parent_id } = req.body;
     const commentSnippet = (content || '').trim().slice(0, 80);
+
+    if (!commentSnippet) {
+      return res.status(400).json({ error: 'Yorum metni boş olamaz.' });
+    }
+
+    const { getRedis } = require('../redis');
+    const redis = getRedis();
+
+    if (redis) {
+      try {
+        const userCooldownKey = `rate:comment:cd:${userId}`;
+        const userCountKey = `rate:comment:count:${userId}`;
+        const duplicateKey = `rate:comment:dup:${userId}:${postId}:${Buffer.from(commentSnippet).toString('base64').slice(0, 32)}`;
+
+        const [inCooldown, minuteCount, isDuplicate] = await Promise.all([
+          redis.get(userCooldownKey),
+          redis.get(userCountKey),
+          redis.get(duplicateKey)
+        ]);
+
+        if (inCooldown) {
+          return res.status(429).json({ error: 'Yorum yapmak için lütfen 2 saniye bekleyin.' });
+        }
+        if (parseInt(minuteCount || '0') >= 10) {
+          return res.status(429).json({ error: '1 dakika içinde çok fazla yorum yaptınız. Lütfen biraz bekleyin.' });
+        }
+        if (isDuplicate) {
+          return res.status(429).json({ error: 'Aynı yorumu peş peşe gönderemezsiniz.' });
+        }
+
+        await Promise.all([
+          redis.setex(userCooldownKey, 2, '1'),
+          redis.setex(userCountKey, 60, (parseInt(minuteCount || '0') + 1).toString()),
+          redis.setex(duplicateKey, 45, '1')
+        ]);
+      } catch (e) {}
+    }
+
     db.run('INSERT INTO comments (user_id, post_id, content, parent_id) VALUES (?, ?, ?, ?)', [req.user.id, req.params.id, content, parent_id || null], function() {
       const insertedCommentId = this.lastID;
       db.get('SELECT user_id FROM posts WHERE id = ?', [req.params.id], (err, post) => {
@@ -243,7 +308,6 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
               commentId: insertedCommentId,
               commentText: commentSnippet
             });
-            notifyFriends(req.user.id, 'friend_activity_comment', { postId: req.params.id, commentId: insertedCommentId });
           }
         }
       });
@@ -267,7 +331,22 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
   });
 
   // POST Repost
-  router.post('/posts/:id/repost', auth, (req, res) => {
+  router.post('/posts/:id/repost', auth, async (req, res) => {
+    const userId = req.user.id;
+    const { getRedis } = require('../redis');
+    const redis = getRedis();
+
+    if (redis) {
+      try {
+        const repostCountKey = `rate:repost:count:${userId}`;
+        const minuteCount = await redis.get(repostCountKey);
+        if (parseInt(minuteCount || '0') >= 6) {
+          return res.status(429).json({ error: 'Çok hızlı yeniden paylaşım yapıyorsunuz. Lütfen biraz bekleyin.' });
+        }
+        await redis.setex(repostCountKey, 60, (parseInt(minuteCount || '0') + 1).toString());
+      } catch (e) {}
+    }
+
     const postId = parseInt(req.params.id);
     db.get('SELECT * FROM posts WHERE id = ?', [postId], (err, post) => {
       if (!post) return res.status(404).json({ error: 'Gönderi bulunamadı' });
