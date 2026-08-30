@@ -1179,6 +1179,7 @@ function notifText(n) {
     case 'post_like':         return `${u} gönderini beğendi`;
     case 'post_comment':      return `${u} gönderine yorum yaptı`;
     case 'comment_reply':     return `${u} yorumunu yanıtladı`;
+    case 'friend_new_post':   return `${u} yeni bir gönderi paylaştı`;
     case 'comment_like':      return `${u} yaptığın yorumu beğendi`;
     case 'post_repost':       return `${u} gönderini yeniden paylaştı`;
     case 'friend_request':    return `${u} sana arkadaşlık isteği gönderdi`;
@@ -1187,7 +1188,7 @@ function notifText(n) {
     case 'party_join':        return `${u} çalışma odana katıldı`;
     case 'party_auto_closed': return `${u}: ${n.party_name ? `"${esc(n.party_name)}"` : 'Çalışma'} odanda hiç kimsecikler aktif olmadığı için odanı kapatmam gerekti... Bunu yapmak zorunda olduğum için üzgünüm.`;
     case 'message':           return `${u} sana bir mesaj gönderdi`;
-    default:                  return `${u} bir işlem gerçekleştirdi`;
+    default:                  return `${u} gönderinle etkileşime geçti`;
   }
 }
 
@@ -1200,7 +1201,7 @@ function handleNotifClick(username, type, postId, partyId, commentId) {
   } else if (type === 'message' && username) {
     showPage('messages');
     openDirectChat(username);
-  } else if (['post_like', 'post_comment', 'comment_reply', 'post_repost', 'comment_like'].includes(type) && postId && postId !== 'null') {
+  } else if (['post_like', 'post_comment', 'comment_reply', 'post_repost', 'comment_like', 'friend_new_post'].includes(type) && postId && postId !== 'null') {
     if (typeof openGlobalPostModal === 'function') {
       openGlobalPostModal(parseInt(postId));
     } else if (typeof openSharedPostInFeed === 'function') {

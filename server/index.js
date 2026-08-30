@@ -656,12 +656,19 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
       }
       const finishPush = (sender = null) => {
         const senderName = sender?.username ? `@${sender.username}` : 'BLUNK';
-        const senderAvatar = sender?.profile_photo && sender.profile_photo !== '/favicon.svg'
-          ? sender.profile_photo
-          : '/favicon.svg';
+        const origin = process.env.APP_URL || 'https://blunk.com.tr';
+        let senderAvatar = `${origin}/favicon.svg`;
+        if (sender?.profile_photo && sender.profile_photo !== '/favicon.svg' && sender.profile_photo !== '/default-avatar.png') {
+          if (sender.profile_photo.startsWith('http://') || sender.profile_photo.startsWith('https://')) {
+            senderAvatar = sender.profile_photo;
+          } else {
+            const cleanPath = sender.profile_photo.startsWith('/') ? sender.profile_photo : `/${sender.profile_photo}`;
+            senderAvatar = `${origin}${cleanPath}`;
+          }
+        }
 
         let title = senderName;
-        let body = 'Bir hareket var.';
+        let body = 'Yeni bir bildiriminiz var.';
         let targetUrl = '/';
         let actions = [];
         let tag = `blunk-${type}-${Date.now()}`;
@@ -683,6 +690,12 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
           body = `${senderName} yorumunu yanıtladı${cSnippet}`;
           targetUrl = postId ? `/post/${postId}` : '/';
           tag = `comment-reply-${commentId || postId || userId}`;
+        } else if (type === 'friend_new_post') {
+          title = `${senderName}`;
+          const pSnippet = options.contentSnippet ? `: "${options.contentSnippet}"` : '.';
+          body = `${senderName} yeni bir gönderi paylaştı${pSnippet}`;
+          targetUrl = postId ? `/post/${postId}` : '/';
+          tag = `new-post-${postId || userId}`;
         } else if (type === 'post_repost') {
           title = `${senderName}`;
           body = `${senderName} gönderini yeniden paylaştı.`;
@@ -738,7 +751,7 @@ const createAndPushNotification = (userId, type, fromUserId, options = {}) => {
           body,
           type,
           icon: senderAvatar,
-          badge: '/favicon.svg',
+          badge: `${origin}/favicon.svg`,
           tag,
           renotify: true,
           vibrate: [100, 50, 100],
@@ -1625,6 +1638,10 @@ app.post('/api/posts', auth, upload.single('image'), (req, res) => {
         });
       }
     }
+
+    // Notify friends / followers of new post
+    const contentSnippet = (content || '').trim().slice(0, 80);
+    notifyFriends(req.user.id, 'friend_new_post', { postId, contentSnippet });
 
     res.json({ postId });
   });

@@ -190,6 +190,10 @@ module.exports = function(db, auth, upload, createAndPushNotification, notifyFri
             if (logErr) console.error('Error logging video upload:', logErr);
           });
 
+          // Notify friends / followers
+          const contentSnippet = (content || '').trim().slice(0, 80);
+          notifyFriends(req.user.id, 'friend_new_post', { postId: newPostId, contentSnippet });
+
           res.json({ postId: newPostId });
         });
       });
